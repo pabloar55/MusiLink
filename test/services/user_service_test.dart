@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/services/user_service.dart';
 
@@ -395,6 +396,32 @@ void main() {
         expect(before?.dailySong, isNull);
         expect(after?.dailySong?.title, 'Bohemian Rhapsody');
         expect(getCalls, 2);
+      });
+    });
+
+    group('anonymizeUser', () {
+      test('no borra rate_limits al anonimizar usuario', () async {
+        final mockUserDocRef = MockDocumentReference();
+        final mockPrivateDocRef = MockDocumentReference();
+        when(() => mockUsersRef.doc('uid123')).thenReturn(mockUserDocRef);
+        when(
+          () => mockPrivateUsersRef.doc('uid123'),
+        ).thenReturn(mockPrivateDocRef);
+        when(() => mockBatch.update(mockUserDocRef, any())).thenReturn(null);
+        when(() => mockBatch.delete(mockPrivateDocRef)).thenReturn(null);
+
+        await userService.anonymizeUser('uid123');
+
+        final publicUpdate = Map<String, dynamic>.from(
+          verify(
+                () => mockBatch.update(mockUserDocRef, captureAny()),
+              ).captured.single
+              as Map,
+        );
+        expect(publicUpdate['displayName'], AppUser.deletedDisplayName);
+        expect(publicUpdate['username'], AppUser.deletedUsername);
+        verify(() => mockBatch.delete(mockPrivateDocRef)).called(1);
+        verifyNever(() => mockFirestore.collection('rate_limits'));
       });
     });
 

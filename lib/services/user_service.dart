@@ -15,9 +15,6 @@ class UserService {
       .collection(FirestoreCollections.users);
   late final CollectionReference<Map<String, dynamic>> _privateUsersRef =
       _firestore.collection(FirestoreCollections.userPrivate);
-  late final CollectionReference<Map<String, dynamic>> _rateLimitsRef =
-      _firestore.collection(FirestoreCollections.rateLimits);
-
   static const int _maxCacheSize = 200;
   static const _userCacheTtl = Duration(minutes: 10);
   final LinkedHashMap<String, ({AppUser user, DateTime cachedAt})> _userCache =
@@ -240,7 +237,6 @@ class UserService {
         'dailySongUpdatedAt': FieldValue.delete(),
       });
       batch.delete(_privateUsersRef.doc(uid));
-      batch.delete(_rateLimitsRef.doc(uid));
       await batch.commit();
       _userCache.remove(uid);
     } catch (e, stack) {
