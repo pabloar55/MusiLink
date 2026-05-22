@@ -17,8 +17,9 @@ void main() {
     mockAuth = MockFirebaseAuth();
     mockUser = MockUser();
     authStream = StreamController<User?>.broadcast();
-    when(() => mockAuth.authStateChanges())
-        .thenAnswer((_) => authStream.stream);
+    when(
+      () => mockAuth.authStateChanges(),
+    ).thenAnswer((_) => authStream.stream);
   });
 
   tearDown(() => authStream.close());
@@ -28,17 +29,18 @@ void main() {
   // ── Estado 1: app no inicializada ──────────────────────────────
 
   group('not initialized', () {
-    test('cualquier ruta → /splash', () {
+    test('sin usuario → /auth', () {
+      when(() => mockAuth.currentUser).thenReturn(null);
       final n = buildNotifier();
-      expect(appRedirect(n, '/'), '/splash');
-      expect(appRedirect(n, '/auth'), '/splash');
-      expect(appRedirect(n, '/main'), '/splash');
+      expect(appRedirect(n, '/'), '/auth');
+      expect(appRedirect(n, '/auth'), isNull);
       n.dispose();
     });
 
-    test('ya en /splash → sin redirect', () {
+    test('con usuario → sin redirect hasta que llegue el bootstrap', () {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
       final n = buildNotifier();
-      expect(appRedirect(n, '/splash'), isNull);
+      expect(appRedirect(n, '/'), isNull);
       n.dispose();
     });
   });
@@ -51,22 +53,23 @@ void main() {
     test('cualquier ruta → /auth', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/'), '/auth');
-      expect(appRedirect(n, '/splash'), '/auth');
       n.dispose();
     });
 
     test('ya en /auth → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/auth'), isNull);
       n.dispose();
     });
@@ -81,10 +84,11 @@ void main() {
     test('cualquier ruta → /onboarding', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/'), '/onboarding');
       expect(appRedirect(n, '/auth'), '/onboarding');
       n.dispose();
@@ -93,10 +97,11 @@ void main() {
     test('ya en /onboarding → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/onboarding'), isNull);
       n.dispose();
     });
@@ -110,10 +115,11 @@ void main() {
     test('cualquier ruta → /username-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/'), '/username-setup');
       expect(appRedirect(n, '/auth'), '/username-setup');
       n.dispose();
@@ -122,10 +128,11 @@ void main() {
     test('ya en /username-setup → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false);
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/username-setup'), isNull);
       n.dispose();
     });
@@ -139,10 +146,11 @@ void main() {
     test('cualquier ruta → /photo-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false);
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/'), '/photo-setup');
       n.dispose();
     });
@@ -150,10 +158,11 @@ void main() {
     test('ya en /photo-setup → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false);
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        );
       expect(appRedirect(n, '/photo-setup'), isNull);
       n.dispose();
     });
@@ -167,10 +176,11 @@ void main() {
     test('cualquier ruta → /artist-select', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: true);
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
       expect(appRedirect(n, '/'), '/artist-select');
       n.dispose();
     });
@@ -178,10 +188,11 @@ void main() {
     test('ya en /artist-select → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: true);
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
       expect(appRedirect(n, '/artist-select'), isNull);
       n.dispose();
     });
@@ -195,11 +206,11 @@ void main() {
     test('pantallas de setup → /', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: true,
-            onboardingDone: true,
-            photoSetupDone: true);
-      expect(appRedirect(n, '/splash'), '/');
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
       expect(appRedirect(n, '/auth'), '/');
       expect(appRedirect(n, '/onboarding'), '/');
       expect(appRedirect(n, '/username-setup'), '/');
@@ -211,10 +222,11 @@ void main() {
     test('pantallas normales → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: true,
-            onboardingDone: true,
-            photoSetupDone: true);
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
       expect(appRedirect(n, '/'), isNull);
       expect(appRedirect(n, '/settings'), isNull);
       expect(appRedirect(n, '/search'), isNull);
@@ -231,10 +243,11 @@ void main() {
     test('setOnboardingDone avanza a /username-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false)
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        )
         ..setOnboardingDone();
       expect(appRedirect(n, '/'), '/username-setup');
       n.dispose();
@@ -243,10 +256,11 @@ void main() {
     test('setUsernameSet avanza a /photo-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false)
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        )
         ..setUsernameSet();
       expect(appRedirect(n, '/'), '/photo-setup');
       n.dispose();
@@ -255,10 +269,11 @@ void main() {
     test('setPhotoSetupDone avanza a /artist-select', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: false)
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: false,
+        )
         ..setPhotoSetupDone();
       expect(appRedirect(n, '/photo-setup'), '/artist-select');
       expect(appRedirect(n, '/artist-select'), isNull);
@@ -268,10 +283,11 @@ void main() {
     test('setArtistsSelected desbloquea la app', () {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: false,
-            onboardingDone: true,
-            photoSetupDone: true)
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: true,
+        )
         ..setArtistsSelected();
       expect(appRedirect(n, '/artist-select'), '/');
       expect(appRedirect(n, '/'), isNull);
@@ -281,10 +297,11 @@ void main() {
     test('sign-out resetea todos los flags de setup', () async {
       final n = buildNotifier()
         ..setInitialized(
-            usernameSet: true,
-            artistsSelected: true,
-            onboardingDone: true,
-            photoSetupDone: true);
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
 
       expect(n.usernameSet, isTrue);
       expect(n.artistsSelected, isTrue);

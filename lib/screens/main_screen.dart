@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/service_providers.dart';
@@ -12,7 +15,27 @@ import 'package:musi_link/screens/stats_screen.dart';
 import 'package:musi_link/screens/friends_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({super.key, this.initialPageIndex = 0});
+
+  final int initialPageIndex;
+
+  static int pageIndexForTab(String? tab) {
+    return switch (tab) {
+      'stats' => 1,
+      'messages' => 2,
+      'friends' => 3,
+      _ => 0,
+    };
+  }
+
+  static String? tabForPageIndex(int index) {
+    return switch (index) {
+      1 => 'stats',
+      2 => 'messages',
+      3 => 'friends',
+      _ => null,
+    };
+  }
 
   @override
   ConsumerState<MainScreen> createState() => _MainScreenState();
@@ -20,8 +43,9 @@ class MainScreen extends ConsumerStatefulWidget {
 
 class _MainScreenState extends ConsumerState<MainScreen>
     with WidgetsBindingObserver {
-  int currentPageIndex = 0;
-  final PageController _pageController = PageController();
+  late int currentPageIndex;
+  late final PageController _pageController;
+  StreamSubscription<RemoteMessage>? _messageOpenedSubscription;
   final List<Widget> screens = [
     const DiscoverScreen(),
     const StatsScreen(),
@@ -32,14 +56,29 @@ class _MainScreenState extends ConsumerState<MainScreen>
   @override
   void initState() {
     super.initState();
+    currentPageIndex = widget.initialPageIndex.clamp(0, screens.length - 1);
+    _pageController = PageController(initialPage: currentPageIndex);
     WidgetsBinding.instance.addObserver(this);
     // Initialize FCM: permisos, token, canal Android, listeners
     ref.read(notificationServiceProvider).initialize();
     // FCM: app abierta desde notificación en background
-    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+    _messageOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((
+      message,
+    ) {
       if (!mounted) return;
       handleNotificationNavigation(message.data, context);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MainScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextIndex = widget.initialPageIndex.clamp(0, screens.length - 1);
+    if (nextIndex == currentPageIndex) return;
+    currentPageIndex = nextIndex;
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(nextIndex);
+    }
   }
 
   @override
@@ -49,9 +88,20 @@ class _MainScreenState extends ConsumerState<MainScreen>
     }
   }
 
+  void _syncLocationToPage(int index) {
+    final tab = MainScreen.tabForPageIndex(index);
+    context.go(
+      Uri(
+        path: '/',
+        queryParameters: tab == null ? null : {'tab': tab},
+      ).toString(),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageOpenedSubscription?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -86,6 +136,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
           setState(() {
             currentPageIndex = index;
           });
+          _syncLocationToPage(index);
         },
         children: screens,
       ),
@@ -130,6 +181,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
             setState(() {
               currentPageIndex = index;
             });
+            _syncLocationToPage(index);
           },
         ),
       ),

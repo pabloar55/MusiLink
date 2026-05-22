@@ -313,6 +313,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  void _leaveChat() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go('/?tab=messages');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -321,43 +330,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final isBlockedByMe =
         relationship.asData?.value.status == RelationshipStatus.blocked;
     _isBlockedByMe = isBlockedByMe;
+    final canPop = GoRouter.of(context).canPop();
 
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 0,
-        title: GestureDetector(
-          onTap: _openOtherUserProfile,
-          child: FutureBuilder<AppUser?>(
-            future: _otherUserFuture,
-            builder: (context, snapshot) {
-              final user = snapshot.data;
-              final name = user?.displayName ?? widget.otherUserName;
-              final photoUrl = user?.photoUrl ?? '';
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _leaveChat();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: canPop ? null : BackButton(onPressed: _leaveChat),
+          centerTitle: false,
+          titleSpacing: 0,
+          title: GestureDetector(
+            onTap: _openOtherUserProfile,
+            child: FutureBuilder<AppUser?>(
+              future: _otherUserFuture,
+              builder: (context, snapshot) {
+                final user = snapshot.data;
+                final name = user?.displayName ?? widget.otherUserName;
+                final photoUrl = user?.photoUrl ?? '';
 
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  UserCircleAvatar(photoUrl: photoUrl, name: name, radius: 16),
-                  const SizedBox(width: 10),
-                  Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-                ],
-              );
-            },
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    UserCircleAvatar(
+                      photoUrl: photoUrl,
+                      name: name,
+                      radius: 16,
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          // Lista de mensajes
-          Expanded(child: _buildMessageList(colorScheme, l10n)),
-          if (_isOtherUserDeleted)
-            _buildDeletedAccountBar(colorScheme, l10n)
-          else if (isBlockedByMe)
-            _buildBlockedChatBar(colorScheme, l10n)
-          else
-            _buildInputBar(colorScheme),
-        ],
+        body: Column(
+          children: [
+            // Lista de mensajes
+            Expanded(child: _buildMessageList(colorScheme, l10n)),
+            if (_isOtherUserDeleted)
+              _buildDeletedAccountBar(colorScheme, l10n)
+            else if (isBlockedByMe)
+              _buildBlockedChatBar(colorScheme, l10n)
+            else
+              _buildInputBar(colorScheme),
+          ],
+        ),
       ),
     );
   }

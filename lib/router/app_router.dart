@@ -3,12 +3,49 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+typedef UserSetupState = ({
+  bool usernameSet,
+  bool artistsSelected,
+  bool onboardingDone,
+  bool photoSetupDone,
+});
+
+typedef FetchUserSetupState = Future<UserSetupState> Function(String uid);
+
+class AppRouterBootstrapState {
+  const AppRouterBootstrapState({
+    required this.usernameSet,
+    required this.artistsSelected,
+    required this.onboardingDone,
+    required this.photoSetupDone,
+  });
+
+  final bool usernameSet;
+  final bool artistsSelected;
+  final bool onboardingDone;
+  final bool photoSetupDone;
+}
+
 /// Notifier que dispara los redirects de GoRouter cuando cambia
 /// el estado de autenticación o cuando la app termina la inicialización.
 class AppRouterNotifier extends ChangeNotifier {
   final FirebaseAuth _auth;
 
-  AppRouterNotifier({required FirebaseAuth auth}) : _auth = auth;
+  AppRouterNotifier({
+    required FirebaseAuth auth,
+    AppRouterBootstrapState? initialState,
+    FetchUserSetupState? fetchUserState,
+  }) : _auth = auth {
+    if (initialState != null) {
+      setInitialized(
+        usernameSet: initialState.usernameSet,
+        artistsSelected: initialState.artistsSelected,
+        onboardingDone: initialState.onboardingDone,
+        photoSetupDone: initialState.photoSetupDone,
+        fetchUserState: fetchUserState,
+      );
+    }
+  }
 
   StreamSubscription<User?>? _sub;
   bool _initialized = false;
@@ -24,31 +61,16 @@ class AppRouterNotifier extends ChangeNotifier {
   bool get onboardingDone => _onboardingDone;
   bool get photoSetupDone => _photoSetupDone;
 
-  Future<
-      ({
-        bool usernameSet,
-        bool artistsSelected,
-        bool onboardingDone,
-        bool photoSetupDone,
-      })>
-      Function(String uid)? _fetchUserState;
+  FetchUserSetupState? _fetchUserState;
 
-  /// Llamar desde el SplashScreen una vez que la app ha terminado de
-  /// inicializarse. Inicia la escucha de authStateChanges y dispara el
-  /// primer redirect.
+  /// Marca el router como inicializado, inicia la escucha de authStateChanges
+  /// y dispara el primer redirect.
   void setInitialized({
     required bool usernameSet,
     required bool artistsSelected,
     required bool onboardingDone,
     required bool photoSetupDone,
-    Future<
-            ({
-              bool usernameSet,
-              bool artistsSelected,
-              bool onboardingDone,
-              bool photoSetupDone,
-            })>
-        Function(String uid)? fetchUserState,
+    FetchUserSetupState? fetchUserState,
   }) {
     _initialized = true;
     _usernameSet = usernameSet;
@@ -56,6 +78,7 @@ class AppRouterNotifier extends ChangeNotifier {
     _onboardingDone = onboardingDone;
     _photoSetupDone = photoSetupDone;
     _fetchUserState = fetchUserState;
+    _sub?.cancel();
     _sub = _auth.authStateChanges().listen((user) async {
       if (user == null) {
         _usernameSet = false;
@@ -117,7 +140,8 @@ class AppRouterNotifier extends ChangeNotifier {
 /// Devuelve la ruta destino o null si no hay que redirigir.
 String? appRedirect(AppRouterNotifier notifier, String location) {
   if (!notifier.isInitialized) {
-    return location == '/splash' ? null : '/splash';
+    if (!notifier.isLoggedIn) return location == '/auth' ? null : '/auth';
+    return null;
   }
   if (!notifier.isLoggedIn) {
     return location == '/auth' ? null : '/auth';
@@ -135,8 +159,7 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
     return location == '/artist-select' ? null : '/artist-select';
   }
   // Usuario listo: evitar que se quede en pantallas de setup
-  if (location == '/splash' ||
-      location == '/auth' ||
+  if (location == '/auth' ||
       location == '/onboarding' ||
       location == '/username-setup' ||
       location == '/photo-setup' ||
