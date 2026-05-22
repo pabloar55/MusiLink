@@ -69,6 +69,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _activeChatNotifier.setChat(widget.chatId);
     });
+    unawaited(
+      ref
+          .read(notificationServiceProvider)
+          .cancelChatNotifications(widget.chatId),
+    );
     _messagesStream = ref.read(chatServiceProvider).getMessages(widget.chatId);
     _otherUserFuture = ref
         .read(userServiceProvider)

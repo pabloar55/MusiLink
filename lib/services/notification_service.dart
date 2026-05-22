@@ -259,6 +259,28 @@ class NotificationService {
     );
   }
 
+  /// Elimina de la bandeja todas las notificaciones asociadas a un chat.
+  /// Cubre tanto las mostradas en foreground (`id = chatId.hashCode`) como
+  /// las que pintó FCM en background/closed (`tag = chatId` / `groupKey = chatId`).
+  ///
+  /// En iOS la cancelación de notificaciones de FCM no es accesible desde el
+  /// plugin (la identidad la asigna APNs), pero `apns-collapse-id` garantiza
+  /// que sólo haya una notificación por chat en la bandeja.
+  Future<void> cancelChatNotifications(String chatId) async {
+    try {
+      await _localNotifications.cancel(id: chatId.hashCode);
+      final active = await _localNotifications.getActiveNotifications();
+      for (final n in active) {
+        if (n.tag != chatId && n.groupKey != chatId) continue;
+        final id = n.id;
+        if (id == null) continue;
+        await _localNotifications.cancel(id: id, tag: n.tag);
+      }
+    } catch (e, stack) {
+      await reportError(e, stack);
+    }
+  }
+
   Future<void> _onLocalNotificationTapped(NotificationResponse response) async {
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
