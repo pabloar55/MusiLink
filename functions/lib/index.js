@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onFriendRequestAccepted = exports.onFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
@@ -50,7 +50,7 @@ const userPrivateCollection = 'user_private';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
 const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationsCollection = 'recommendations';
-const friendRequestNotificationCooldownMs = 24 * 60 * 60 * 1000;
+const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
 const maxRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
 const maxIndexUsersPerToken = 80;
@@ -553,6 +553,32 @@ exports.onFriendRequestAccepted = (0, firestore_1.onDocumentUpdated)({ document:
     }
     catch (error) {
         v2_1.logger.error('onFriendRequestAccepted: unhandled error', { requestId: event.params.requestId, error });
+        throw error;
+    }
+});
+// ── Función 5 — Limpieza del cooldown al borrar una solicitud ─────────────────
+// Cuando una solicitud se elimina (rechazo, cancelación o aceptación), borrar
+// el doc de rate-limit por par (sender, receiver) para que una nueva solicitud
+// legítima vuelva a notificar sin esperar al cooldown.
+exports.onFriendRequestDeleted = (0, firestore_1.onDocumentDeleted)({ document: 'friend_requests/{requestId}', region: 'europe-southwest1' }, async (event) => {
+    try {
+        const request = event.data?.data();
+        if (!request)
+            return;
+        const senderId = request.senderId;
+        const receiverId = request.receiverId;
+        if (!senderId || !receiverId)
+            return;
+        await db
+            .collection(friendRequestNotificationLimitsCollection)
+            .doc(`${senderId}_${receiverId}`)
+            .delete();
+    }
+    catch (error) {
+        v2_1.logger.error('onFriendRequestDeleted: unhandled error', {
+            requestId: event.params.requestId,
+            error,
+        });
         throw error;
     }
 });

@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import {
   onDocumentCreated,
+  onDocumentDeleted,
   onDocumentUpdated,
 } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
@@ -17,7 +18,7 @@ const userPrivateCollection = 'user_private';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
 const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationsCollection = 'recommendations';
-const friendRequestNotificationCooldownMs = 24 * 60 * 60 * 1000;
+const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
 const maxRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
 const maxIndexUsersPerToken = 80;
@@ -694,6 +695,35 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       await db.doc(event.document).delete();
     } catch (error) {
       logger.error('onFriendRequestAccepted: unhandled error', { requestId: event.params.requestId, error });
+      throw error;
+    }
+  },
+);
+
+// ── Función 5 — Limpieza del cooldown al borrar una solicitud ─────────────────
+
+// Cuando una solicitud se elimina (rechazo, cancelación o aceptación), borrar
+// el doc de rate-limit por par (sender, receiver) para que una nueva solicitud
+// legítima vuelva a notificar sin esperar al cooldown.
+export const onFriendRequestDeleted = onDocumentDeleted(
+  { document: 'friend_requests/{requestId}', region: 'europe-southwest1' },
+  async (event) => {
+    try {
+      const request = event.data?.data();
+      if (!request) return;
+      const senderId = request.senderId as string | undefined;
+      const receiverId = request.receiverId as string | undefined;
+      if (!senderId || !receiverId) return;
+
+      await db
+        .collection(friendRequestNotificationLimitsCollection)
+        .doc(`${senderId}_${receiverId}`)
+        .delete();
+    } catch (error) {
+      logger.error('onFriendRequestDeleted: unhandled error', {
+        requestId: event.params.requestId,
+        error,
+      });
       throw error;
     }
   },
