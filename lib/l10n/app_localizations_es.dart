@@ -190,7 +190,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get profileTitle => 'Perfil musical';
 
   @override
-  String get profileStartChat => 'Iniciar chat';
+  String get profileStartChat => 'Chatear';
 
   @override
   String get profileNoData => 'Este usuario aún no tiene datos musicales';

@@ -447,7 +447,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileStartChat.
   ///
   /// In en, this message translates to:
-  /// **'Start chat'**
+  /// **'Chat'**
   String get profileStartChat;
 
   /// No description provided for @profileNoData.

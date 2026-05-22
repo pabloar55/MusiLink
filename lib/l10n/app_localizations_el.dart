@@ -189,7 +189,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get profileTitle => 'Μουσικό προφίλ';
 
   @override
-  String get profileStartChat => 'Έναρξη συνομιλίας';
+  String get profileStartChat => 'Συνομιλία';
 
   @override
   String get profileNoData => 'Αυτός ο χρήστης δεν έχει ακόμη μουσικά δεδομένα';

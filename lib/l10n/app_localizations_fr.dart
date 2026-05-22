@@ -192,7 +192,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get profileTitle => 'Profil musical';
 
   @override
-  String get profileStartChat => 'Démarrer une conversation';
+  String get profileStartChat => 'Discuter';
 
   @override
   String get profileNoData =>
