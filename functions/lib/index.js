@@ -329,13 +329,12 @@ async function refreshRecommendations(uid, profile) {
         .sort((a, b) => b.score - a.score)
         .slice(0, maxStoredRecommendations);
     const recommendationIds = new Set(recommendations.map((recommendation) => recommendation.uid));
-    await commitBatches(recommendations.map((recommendation, index) => (batch) => {
+    await commitBatches(recommendations.map((recommendation) => (batch) => {
         batch.set(db.doc(`users/${uid}/${recommendationsCollection}/${recommendation.uid}`), {
             userId: recommendation.uid,
             score: recommendation.score,
             sharedArtistNames: recommendation.sharedArtistNames,
             sharedGenreNames: recommendation.sharedGenreNames,
-            rank: index + 1,
             generatedAt,
         });
     }));
@@ -397,7 +396,6 @@ async function updateReciprocalRecommendations(uid, profile, candidates) {
             score: recommendation.score,
             sharedArtistNames: recommendation.sharedArtistNames,
             sharedGenreNames: recommendation.sharedGenreNames,
-            rank: 0,
             generatedAt,
         });
     }));
