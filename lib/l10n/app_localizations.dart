@@ -558,12 +558,6 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get chatDeleteCancel;
 
-  /// No description provided for @chatMessagesDeletedBanner.
-  ///
-  /// In en, this message translates to:
-  /// **'Messages before this point were deleted'**
-  String get chatMessagesDeletedBanner;
-
   /// No description provided for @statsTracks.
   ///
   /// In en, this message translates to:

@@ -248,9 +248,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatDeleteCancel => 'Άκυρο';
 
   @override
-  String get chatMessagesDeletedBanner => 'Τα προηγούμενα μηνύματα διαγράφηκαν';
-
-  @override
   String get statsTracks => 'Τραγούδια';
 
   @override

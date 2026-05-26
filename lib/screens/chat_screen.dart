@@ -456,16 +456,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             controller: _scrollController,
             reverse: true,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: _allMessages.length +
-                (_deletedSince != null && !_hasMoreMessages ? 1 : 0),
+            itemCount: _allMessages.length,
             itemBuilder: (context, index) {
-              // Banner de borrado: aparece encima de todos los mensajes (top de la lista invertida).
-              if (_deletedSince != null &&
-                  !_hasMoreMessages &&
-                  index == _allMessages.length) {
-                return _buildDeletedMessagesBanner(colorScheme, l10n);
-              }
-
               final msg = _allMessages[_allMessages.length - 1 - index];
               final isMe = msg.senderId == _currentUid;
 
@@ -552,31 +544,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDeletedMessagesBanner(
-    ColorScheme colorScheme,
-    AppLocalizations l10n,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: colorScheme.onSurface.withAlpha(40))),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              l10n.chatMessagesDeletedBanner,
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withAlpha(120),
-              ),
-            ),
-          ),
-          Expanded(child: Divider(color: colorScheme.onSurface.withAlpha(40))),
-        ],
       ),
     );
   }

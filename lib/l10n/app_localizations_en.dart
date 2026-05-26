@@ -247,10 +247,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatDeleteCancel => 'Cancel';
 
   @override
-  String get chatMessagesDeletedBanner =>
-      'Messages before this point were deleted';
-
-  @override
   String get statsTracks => 'Tracks';
 
   @override

@@ -217,6 +217,25 @@ function fullySoftDeletedChat(data: admin.firestore.DocumentData | undefined): b
   });
 }
 
+function allParticipantsDeletedBefore(
+  data: admin.firestore.DocumentData | undefined,
+): Timestamp | undefined {
+  const participants = chatParticipants(data);
+  if (participants.length !== 2) return undefined;
+
+  const deletedAt = data?.deletedAt as Record<string, unknown> | undefined;
+  if (!deletedAt) return undefined;
+
+  const deletedTimes = participants
+    .map((uid) => timestampValue(deletedAt[uid]))
+    .filter((value): value is Timestamp => value !== undefined);
+  if (deletedTimes.length !== participants.length) return undefined;
+
+  return deletedTimes.reduce((earliest, value) =>
+    value.toMillis() < earliest.toMillis() ? value : earliest,
+  deletedTimes[0]);
+}
+
 async function deleteChatMessages(
   chatRef: admin.firestore.DocumentReference,
 ): Promise<void> {
@@ -238,6 +257,33 @@ async function hardDeleteChat(
 ): Promise<void> {
   await deleteChatMessages(chatRef);
   await chatRef.delete();
+}
+
+async function pruneMessagesDeletedForAllParticipants(
+  chatRef: admin.firestore.DocumentReference,
+  chatData: admin.firestore.DocumentData | undefined,
+): Promise<number> {
+  const pruneBefore = allParticipantsDeletedBefore(chatData);
+  if (!pruneBefore) return 0;
+
+  const messagesRef = chatRef.collection(messagesCollection);
+  let deletedCount = 0;
+
+  while (true) {
+    const snapshot = await messagesRef
+      .where('timestamp', '<=', pruneBefore)
+      .orderBy('timestamp')
+      .limit(chatCleanupBatchSize)
+      .get();
+    if (snapshot.empty) return deletedCount;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    deletedCount += snapshot.size;
+
+    if (snapshot.size < chatCleanupBatchSize) return deletedCount;
+  }
 }
 
 async function latestMessageSnapshot(
@@ -777,20 +823,33 @@ export const onFriendRequestAccepted = onDocumentUpdated(
 
 // ── Funcion 5 - Limpieza segura de chats ─────────────────
 
-// Clientes nuevos solo escriben deletedAt[uid]. Cuando ambos usuarios han
-// borrado su copia y no hay mensajes posteriores a esos timestamps, el backend
-// elimina fisicamente mensajes y documento del chat.
+// Clientes nuevos solo escriben deletedAt[uid]. El backend elimina mensajes
+// que ya estan ocultos para ambos usuarios; si ya no hay mensajes visibles
+// para nadie, elimina fisicamente mensajes y documento del chat.
 export const onChatSoftDeleted = onDocumentUpdated(
   { document: `${chatsCollection}/{chatId}`, region: 'europe-southwest1' },
   async (event) => {
     try {
       const after = event.data?.after.data();
-      if (!fullySoftDeletedChat(after)) return;
+      if (!after) return;
+      if (fullySoftDeletedChat(after)) {
+        await hardDeleteChat(event.data!.after.ref);
+        logger.info('onChatSoftDeleted: hard-deleted fully soft-deleted chat', {
+          chatId: event.params.chatId,
+        });
+        return;
+      }
 
-      await hardDeleteChat(event.data!.after.ref);
-      logger.info('onChatSoftDeleted: hard-deleted fully soft-deleted chat', {
-        chatId: event.params.chatId,
-      });
+      const prunedMessages = await pruneMessagesDeletedForAllParticipants(
+        event.data!.after.ref,
+        after,
+      );
+      if (prunedMessages > 0) {
+        logger.info('onChatSoftDeleted: pruned messages hidden for all participants', {
+          chatId: event.params.chatId,
+          prunedMessages,
+        });
+      }
     } catch (error) {
       logger.error('onChatSoftDeleted: unhandled error', {
         chatId: event.params.chatId,

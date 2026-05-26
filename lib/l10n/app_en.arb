@@ -90,7 +90,6 @@
   "chatDeleteBody": "This conversation will be deleted.",
   "chatDeleteConfirm": "Delete",
   "chatDeleteCancel": "Cancel",
-  "chatMessagesDeletedBanner": "Messages before this point were deleted",
 
   "statsTracks": "Tracks",
   "statsArtists": "Artists",

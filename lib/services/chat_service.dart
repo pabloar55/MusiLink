@@ -215,8 +215,19 @@ class ChatService with AuthenticatedService {
     final messagesRef = chatRef.collection(FirestoreCollections.messages);
 
     await _deleteMessagesSentBy(messagesRef, uid);
-    await _removeUserReactions(messagesRef, uid);
-    await _refreshOrDeleteChat(chatRef, messagesRef, uid);
+    await _ignorePermissionDenied(() => _removeUserReactions(messagesRef, uid));
+    await _ignorePermissionDenied(
+      () => _refreshOrDeleteChat(chatRef, messagesRef, uid),
+    );
+  }
+
+  Future<void> _ignorePermissionDenied(Future<void> Function() action) async {
+    try {
+      await action();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') return;
+      rethrow;
+    }
   }
 
   Future<void> _deleteMessagesSentBy(
