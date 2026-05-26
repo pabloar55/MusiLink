@@ -534,6 +534,36 @@ abstract class AppLocalizations {
   /// **'No results'**
   String get chatNoResults;
 
+  /// No description provided for @chatDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete conversation'**
+  String get chatDeleteTitle;
+
+  /// No description provided for @chatDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation will be deleted.'**
+  String get chatDeleteBody;
+
+  /// No description provided for @chatDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get chatDeleteConfirm;
+
+  /// No description provided for @chatDeleteCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get chatDeleteCancel;
+
+  /// No description provided for @chatMessagesDeletedBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages before this point were deleted'**
+  String get chatMessagesDeletedBanner;
+
   /// No description provided for @statsTracks.
   ///
   /// In en, this message translates to:

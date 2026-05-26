@@ -57,6 +57,42 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
+  Future<void> _confirmDeleteChat(
+    BuildContext context,
+    String chatId,
+    AppLocalizations l10n,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.chatDeleteTitle),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.chatDeleteCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              l10n.chatDeleteConfirm,
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(chatServiceProvider).softDeleteChat(chatId);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.genericError)),
+        );
+      }
+    }
+  }
+
   /// Formatea la hora del último mensaje.
   String _formatTime(DateTime dateTime, AppLocalizations l10n) {
     final now = DateTime.now();
@@ -227,6 +263,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         }).toString(),
                       );
                     },
+                    onLongPress: () =>
+                        _confirmDeleteChat(context, chat.id, l10n),
                   );
                 },
               );

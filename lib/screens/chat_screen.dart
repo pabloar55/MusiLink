@@ -40,11 +40,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController(keepScrollOffset: false);
-  late final Stream<List<Message>> _messagesStream;
   StreamSubscription<List<Message>>? _messagesSubscription;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
   DateTime? _lastSeenTimestamp;
+
+  /// Timestamp de borrado suave derivado del documento del chat en Firestore.
+  /// Se resuelve de forma asíncrona en _initMessagesStream antes de suscribirse.
+  DateTime? _deletedSince;
+
   bool _isOtherUserDeleted = false;
   bool _isBlockedByMe = false;
 
@@ -74,56 +78,84 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .read(notificationServiceProvider)
           .cancelChatNotifications(widget.chatId),
     );
-    _messagesStream = ref.read(chatServiceProvider).getMessages(widget.chatId);
-    _otherUserFuture = ref
-        .read(userServiceProvider)
-        .getUser(widget.otherUserId);
+    _otherUserFuture = ref.read(userServiceProvider).getUser(widget.otherUserId);
     _otherUserFuture.then((user) {
       if (!mounted) return;
       setState(() => _isOtherUserDeleted = user?.isDeleted ?? false);
     });
+    unawaited(_initMessagesStream());
+    _scrollController.addListener(_onScroll);
+  }
 
-    _messagesSubscription = _messagesStream.listen((streamMessages) {
+  /// Lee el chat de Firestore para obtener deletedAt[currentUid] y luego
+  /// arranca la suscripción de mensajes. Al hacerlo aquí (en lugar de tomar
+  /// el valor de la URL), todas las rutas de entrada al chat son correctas:
+  /// lista de mensajes, perfil de usuario y notificaciones.
+  ///
+  /// Si Firestore falla, no arranca el stream sin filtro (lo que mostraría
+  /// mensajes borrados). En cambio muestra genericError y sale del chat.
+  Future<void> _initMessagesStream() async {
+    try {
+      _deletedSince =
+          await ref.read(chatServiceProvider).getDeletedSince(widget.chatId);
+    } catch (_) {
       if (!mounted) return;
-      final isFirst = _isInitialLoading;
-      final latestTimestamp = streamMessages.isEmpty
-          ? null
-          : streamMessages.last.timestamp;
-      final hasNewMessages =
-          latestTimestamp != null &&
-          (_lastSeenTimestamp == null ||
-              latestTimestamp.isAfter(_lastSeenTimestamp!));
-      setState(() {
-        if (streamMessages.isNotEmpty) {
-          // Preservar mensajes más antiguos ya cargados por paginación.
-          final oldestStreamTimestamp = streamMessages.first.timestamp;
-          final preserved = _allMessages
-              .where((m) => m.timestamp.isBefore(oldestStreamTimestamp))
-              .toList();
-          _allMessages = [...preserved, ...streamMessages];
-        } else {
-          _allMessages = [];
-        }
-        _isInitialLoading = false;
-        // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
-        if (isFirst) {
-          _hasMoreMessages =
-              streamMessages.length >= ChatService.messagesPageSize;
-        }
-      });
-      if (hasNewMessages) {
-        _lastSeenTimestamp = latestTimestamp;
-        if (!_isBlockedByMe) {
-          unawaited(
-            ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId),
-          );
-        }
-        // Primera carga: saltar sin animación para no ver el scroll desde arriba.
-        _scrollToBottom(animate: !isFirst);
+      setState(() => _isInitialLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.genericError),
+        ),
+      );
+      _leaveChat();
+      return;
+    }
+    if (!mounted) return;
+
+    final stream = ref.read(chatServiceProvider).getMessages(
+      widget.chatId,
+      since: _deletedSince,
+    );
+    _messagesSubscription = stream.listen(_onMessagesUpdated);
+  }
+
+  void _onMessagesUpdated(List<Message> streamMessages) {
+    if (!mounted) return;
+    final isFirst = _isInitialLoading;
+    final latestTimestamp = streamMessages.isEmpty
+        ? null
+        : streamMessages.last.timestamp;
+    final hasNewMessages =
+        latestTimestamp != null &&
+        (_lastSeenTimestamp == null ||
+            latestTimestamp.isAfter(_lastSeenTimestamp!));
+    setState(() {
+      if (streamMessages.isNotEmpty) {
+        // Preservar mensajes más antiguos ya cargados por paginación.
+        final oldestStreamTimestamp = streamMessages.first.timestamp;
+        final preserved = _allMessages
+            .where((m) => m.timestamp.isBefore(oldestStreamTimestamp))
+            .toList();
+        _allMessages = [...preserved, ...streamMessages];
+      } else {
+        _allMessages = [];
+      }
+      _isInitialLoading = false;
+      // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
+      if (isFirst) {
+        _hasMoreMessages =
+            streamMessages.length >= ChatService.messagesPageSize;
       }
     });
-
-    _scrollController.addListener(_onScroll);
+    if (hasNewMessages) {
+      _lastSeenTimestamp = latestTimestamp;
+      if (!_isBlockedByMe) {
+        unawaited(
+          ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId),
+        );
+      }
+      // Primera carga: saltar sin animación para no ver el scroll desde arriba.
+      _scrollToBottom(animate: !isFirst);
+    }
   }
 
   @override
@@ -174,7 +206,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     try {
       final older = await ref
           .read(chatServiceProvider)
-          .loadOlderMessages(widget.chatId, before: cursor);
+          .loadOlderMessages(
+            widget.chatId,
+            before: cursor,
+            since: _deletedSince,
+          );
 
       if (!mounted) return;
 
@@ -420,8 +456,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             controller: _scrollController,
             reverse: true,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: _allMessages.length,
+            itemCount: _allMessages.length +
+                (_deletedSince != null && !_hasMoreMessages ? 1 : 0),
             itemBuilder: (context, index) {
+              // Banner de borrado: aparece encima de todos los mensajes (top de la lista invertida).
+              if (_deletedSince != null &&
+                  !_hasMoreMessages &&
+                  index == _allMessages.length) {
+                return _buildDeletedMessagesBanner(colorScheme, l10n);
+              }
+
               final msg = _allMessages[_allMessages.length - 1 - index];
               final isMe = msg.senderId == _currentUid;
 
@@ -508,6 +552,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDeletedMessagesBanner(
+    ColorScheme colorScheme,
+    AppLocalizations l10n,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: colorScheme.onSurface.withAlpha(40))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              l10n.chatMessagesDeletedBanner,
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurface.withAlpha(120),
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: colorScheme.onSurface.withAlpha(40))),
+        ],
       ),
     );
   }

@@ -236,6 +236,21 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatNoResults => 'Δεν βρέθηκαν αποτελέσματα';
 
   @override
+  String get chatDeleteTitle => 'Διαγραφή συνομιλίας';
+
+  @override
+  String get chatDeleteBody => 'Αυτή η συνομιλία θα διαγραφεί.';
+
+  @override
+  String get chatDeleteConfirm => 'Διαγραφή';
+
+  @override
+  String get chatDeleteCancel => 'Άκυρο';
+
+  @override
+  String get chatMessagesDeletedBanner => 'Τα προηγούμενα μηνύματα διαγράφηκαν';
+
+  @override
   String get statsTracks => 'Τραγούδια';
 
   @override

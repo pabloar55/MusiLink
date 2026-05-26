@@ -13,6 +13,10 @@ class Chat {
   /// por chat en la lista de conversaciones.
   final Map<String, int> unreadCounts;
 
+  /// Timestamp de borrado suave por UID. Si deletedAt[uid] != null y
+  /// lastMessageTime <= deletedAt[uid], el chat está oculto para ese usuario.
+  final Map<String, DateTime> deletedAt;
+
   const Chat({
     required this.id,
     required this.participants,
@@ -20,11 +24,13 @@ class Chat {
     required this.lastMessageTime,
     required this.createdAt,
     this.unreadCounts = const {},
+    this.deletedAt = const {},
   });
 
   factory Chat.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data()! as Map<String, dynamic>;
     final rawCounts = data['unreadCounts'] as Map<String, dynamic>? ?? {};
+    final rawDeletedAt = data['deletedAt'] as Map<String, dynamic>? ?? {};
     return Chat(
       id: doc.id,
       participants: List<String>.from(data['participants'] ?? []),
@@ -34,6 +40,10 @@ class Chat {
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       unreadCounts: rawCounts.map((k, v) => MapEntry(k, (v as num).toInt())),
+      deletedAt: {
+        for (final e in rawDeletedAt.entries)
+          if (e.value is Timestamp) e.key: (e.value as Timestamp).toDate(),
+      },
     );
   }
 
@@ -44,6 +54,7 @@ class Chat {
       'lastMessageTime': Timestamp.fromDate(lastMessageTime),
       'createdAt': Timestamp.fromDate(createdAt),
       'unreadCounts': unreadCounts,
+      'deletedAt': deletedAt.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
     };
   }
 
@@ -58,6 +69,7 @@ class Chat {
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       createdAt: createdAt,
       unreadCounts: unreadCounts,
+      deletedAt: deletedAt,
     );
   }
 }

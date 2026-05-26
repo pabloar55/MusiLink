@@ -102,16 +102,74 @@ class ChatService with AuthenticatedService {
   }
 
   /// Stream de los chats del usuario actual, ordenados por último mensaje.
+  /// Los chats borrados suavemente (deletedAt[uid] >= lastMessageTime) quedan ocultos.
   Stream<List<Chat>> getChats() {
     return _chatsRef
         .where('participants', arrayContains: currentUid)
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .handleError((e, st) => reportError(e, st).ignore())
-        .map((snapshot) => snapshot.docs.map(Chat.fromFirestore).toList());
+        .map((snapshot) => snapshot.docs
+            .map(Chat.fromFirestore)
+            .where((chat) {
+              final dt = chat.deletedAt[currentUid];
+              return dt == null || chat.lastMessageTime.isAfter(dt);
+            })
+            .toList());
   }
 
   static const int _deleteBatchSize = 499;
+
+  /// Devuelve el timestamp de borrado suave del usuario actual para un chat,
+  /// o null si no ha borrado el chat (incluye chats recién creados).
+  /// Lanza si Firestore falla — el llamador debe decidir cómo recuperarse.
+  Future<DateTime?> getDeletedSince(String chatId) async {
+    try {
+      final snap = await _chatsRef.doc(chatId).get();
+      if (!snap.exists) return null;
+      return Chat.fromFirestore(snap).deletedAt[currentUid];
+    } catch (e, stack) {
+      await reportError(e, stack);
+      rethrow;
+    }
+  }
+
+  /// Borrado suave del chat para el usuario actual (estilo WhatsApp).
+  ///
+  /// Escribe deletedAt[currentUid] = ahora. El chat desaparece de la lista
+  /// hasta que el otro participante envíe un nuevo mensaje.
+  /// Si ambos participantes han borrado y no hay mensajes nuevos tras ninguno
+  /// de los dos timestamps, se ejecuta el hard delete automáticamente.
+  Future<void> softDeleteChat(String chatId) async {
+    try {
+      final chatRef = _chatsRef.doc(chatId);
+
+      await chatRef.update({
+        'deletedAt.$currentUid': FieldValue.serverTimestamp(),
+      });
+
+      final snap = await chatRef.get();
+      if (!snap.exists) return;
+
+      final chat = Chat.fromFirestore(snap);
+      final allDeleted = chat.participants.every(chat.deletedAt.containsKey);
+
+      if (allDeleted) {
+        final noNewMessages = chat.participants.every(
+          (uid) => !chat.lastMessageTime.isAfter(chat.deletedAt[uid]!),
+        );
+        if (noNewMessages) {
+          await deleteChat(chatId);
+          return;
+        }
+      }
+
+      _chatByOtherUid.removeWhere((_, c) => c.id == chatId);
+    } catch (e, stack) {
+      await reportError(e, stack);
+      rethrow;
+    }
+  }
 
   /// Elimina un chat y todos sus mensajes.
   Future<void> deleteChat(String chatId) async {
@@ -347,11 +405,18 @@ class ChatService with AuthenticatedService {
 
   /// Stream de los últimos [messagesPageSize] mensajes de un chat, en tiempo real.
   /// Los resultados se devuelven ordenados cronológicamente (ascendente).
-  Stream<List<Message>> getMessages(String chatId) {
-    return _chatsRef
+  /// Si [since] no es null, solo se devuelven mensajes posteriores a ese timestamp.
+  Stream<List<Message>> getMessages(String chatId, {DateTime? since}) {
+    var query = _chatsRef
         .doc(chatId)
         .collection(FirestoreCollections.messages)
-        .orderBy('timestamp', descending: true)
+        .orderBy('timestamp', descending: true);
+
+    if (since != null) {
+      query = query.where('timestamp', isGreaterThan: Timestamp.fromDate(since));
+    }
+
+    return query
         .limit(messagesPageSize)
         .snapshots()
         .handleError((e, st) => reportError(e, st).ignore())
@@ -365,18 +430,27 @@ class ChatService with AuthenticatedService {
 
   /// Carga mensajes anteriores a [before] para paginación inversa.
   /// Devuelve hasta [messagesPageSize] mensajes en orden cronológico ascendente.
+  /// Si [since] no es null, no carga mensajes anteriores a ese timestamp.
   Future<List<Message>> loadOlderMessages(
     String chatId, {
     required DateTime before,
+    DateTime? since,
   }) async {
     try {
-      final snapshot = await _chatsRef
+      var query = _chatsRef
           .doc(chatId)
           .collection(FirestoreCollections.messages)
           .where('timestamp', isLessThan: Timestamp.fromDate(before))
-          .orderBy('timestamp', descending: true)
-          .limit(messagesPageSize)
-          .get();
+          .orderBy('timestamp', descending: true);
+
+      if (since != null) {
+        query = query.where(
+          'timestamp',
+          isGreaterThan: Timestamp.fromDate(since),
+        );
+      }
+
+      final snapshot = await query.limit(messagesPageSize).get();
 
       return snapshot.docs.reversed
           .map(Message.fromFirestore)

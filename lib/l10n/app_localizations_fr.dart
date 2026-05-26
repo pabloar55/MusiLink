@@ -240,6 +240,22 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatNoResults => 'Aucun résultat';
 
   @override
+  String get chatDeleteTitle => 'Supprimer la conversation';
+
+  @override
+  String get chatDeleteBody => 'Cette conversation sera supprimée.';
+
+  @override
+  String get chatDeleteConfirm => 'Supprimer';
+
+  @override
+  String get chatDeleteCancel => 'Annuler';
+
+  @override
+  String get chatMessagesDeletedBanner =>
+      'Les messages précédents ont été supprimés';
+
+  @override
   String get statsTracks => 'Titres';
 
   @override

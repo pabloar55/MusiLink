@@ -86,6 +86,11 @@
   "chatSendFirst": "Στείλτε το πρώτο μήνυμα",
   "chatTypeToSearch": "Πληκτρολογήστε για αναζήτηση τραγουδιών",
   "chatNoResults": "Δεν βρέθηκαν αποτελέσματα",
+  "chatDeleteTitle": "Διαγραφή συνομιλίας",
+  "chatDeleteBody": "Αυτή η συνομιλία θα διαγραφεί.",
+  "chatDeleteConfirm": "Διαγραφή",
+  "chatDeleteCancel": "Άκυρο",
+  "chatMessagesDeletedBanner": "Τα προηγούμενα μηνύματα διαγράφηκαν",
 
   "statsTracks": "Τραγούδια",
   "statsArtists": "Καλλιτέχνες",

@@ -374,13 +374,32 @@ service cloud.firestore {
           || chatId == request.resource.data.participants[1] + '_' + request.resource.data.participants[0]
         );
 
-      // Solo los participantes pueden actualizar, y únicamente los campos de metadatos del chat
+      // Solo los participantes pueden actualizar el chat.
+      // Dos casos permitidos:
+      //   1. Actualización normal de metadatos (mensajes, contadores): requiere canUsersInteract.
+      //   2. Borrado suave: el participante solo escribe su propio UID en deletedAt.
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participants
-        && canUsersInteract(resource.data.participants[0], resource.data.participants[1])
-        && request.resource.data.diff(resource.data)
-             .affectedKeys()
-             .hasOnly(['lastMessage', 'lastMessageTime', 'unreadCounts']);
+        && (
+          // Caso 1: metadatos de mensajes
+          (
+            canUsersInteract(resource.data.participants[0], resource.data.participants[1])
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['lastMessage', 'lastMessageTime', 'unreadCounts'])
+          )
+          ||
+          // Caso 2: borrado suave — solo cambia deletedAt[request.auth.uid]
+          (
+            request.resource.data.diff(resource.data)
+              .affectedKeys()
+              .hasOnly(['deletedAt'])
+            && request.resource.data.deletedAt
+                 .diff(resource.data.get('deletedAt', {}))
+                 .affectedKeys()
+                 .hasOnly([request.auth.uid])
+          )
+        );
 
       // Solo los participantes pueden eliminar el chat
       allow delete: if request.auth != null

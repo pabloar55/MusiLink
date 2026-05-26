@@ -86,6 +86,11 @@
   "chatSendFirst": "Send the first message",
   "chatTypeToSearch": "Type to search songs",
   "chatNoResults": "No results",
+  "chatDeleteTitle": "Delete conversation",
+  "chatDeleteBody": "This conversation will be deleted.",
+  "chatDeleteConfirm": "Delete",
+  "chatDeleteCancel": "Cancel",
+  "chatMessagesDeletedBanner": "Messages before this point were deleted",
 
   "statsTracks": "Tracks",
   "statsArtists": "Artists",

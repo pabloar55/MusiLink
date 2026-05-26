@@ -235,6 +235,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatNoResults => 'No results';
 
   @override
+  String get chatDeleteTitle => 'Delete conversation';
+
+  @override
+  String get chatDeleteBody => 'This conversation will be deleted.';
+
+  @override
+  String get chatDeleteConfirm => 'Delete';
+
+  @override
+  String get chatDeleteCancel => 'Cancel';
+
+  @override
+  String get chatMessagesDeletedBanner =>
+      'Messages before this point were deleted';
+
+  @override
   String get statsTracks => 'Tracks';
 
   @override
