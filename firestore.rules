@@ -77,6 +77,9 @@ service cloud.firestore {
               && request.resource.data.friends.size() == resource.data.get('friends', []).size() + 1
               && request.resource.data.friends.hasAll([request.auth.uid])
               && !resource.data.get('friends', []).hasAll([request.auth.uid])
+              && isActiveUser(userId)
+              && isActiveUser(request.auth.uid)
+              && canUsersInteract(userId, request.auth.uid)
             )
             ||
             // arrayRemove([request.auth.uid]): eliminar propio UID (solo si estaba)
@@ -138,6 +141,9 @@ service cloud.firestore {
               && request.resource.data.friends.size() == resource.data.get('friends', []).size() + 1
               && request.resource.data.friends.hasAll([request.auth.uid])
               && !resource.data.get('friends', []).hasAll([request.auth.uid])
+              && isActiveUser(userId)
+              && isActiveUser(request.auth.uid)
+              && canUsersInteract(userId, request.auth.uid)
             )
             ||
             (
@@ -215,6 +221,18 @@ service cloud.firestore {
         && reactions.size() <= 2
         && (reactions.size() < 1 || validReactionList(reactions, participants, 0))
         && (reactions.size() < 2 || validReactionList(reactions, participants, 1));
+    }
+
+    function chatDeletedFor(chat, userId) {
+      return chat.get('deletedAt', {}).get(userId, null) is timestamp
+        && chat.lastMessageTime <= chat.get('deletedAt', {}).get(userId, request.time);
+    }
+
+    function fullySoftDeletedChat(chat) {
+      return chat.participants is list
+        && chat.participants.size() == 2
+        && chatDeletedFor(chat, chat.participants[0])
+        && chatDeletedFor(chat, chat.participants[1]);
     }
 
     function messageRateLimitAllows(userId) {
@@ -363,8 +381,29 @@ service cloud.firestore {
       // para el mismo par de usuarios, ya que cualquier ID aleatorio será
       // rechazado por esta regla.
       allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'participants',
+          'lastMessage',
+          'lastMessageTime',
+          'createdAt',
+          'unreadCounts',
+        ])
+        && request.resource.data.keys().hasAll([
+          'participants',
+          'lastMessage',
+          'lastMessageTime',
+          'createdAt',
+          'unreadCounts',
+        ])
         && request.auth.uid in request.resource.data.participants
         && request.resource.data.participants.size() == 2
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.toUtf8().size() <= 2000
+        && request.resource.data.lastMessageTime is timestamp
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.unreadCounts is map
+        && isActiveUser(request.resource.data.participants[0])
+        && isActiveUser(request.resource.data.participants[1])
         && canUsersInteract(
           request.resource.data.participants[0],
           request.resource.data.participants[1]
@@ -401,7 +440,9 @@ service cloud.firestore {
           )
         );
 
-      // Solo los participantes pueden eliminar el chat
+      // Compatibilidad: clientes antiguos pueden intentar borrar el doc del chat
+      // durante limpieza de cuenta o despues de un borrado suave doble. Cloud
+      // Functions restaura chats no vacios que no estaban borrados por ambos.
       allow delete: if request.auth != null
         && request.auth.uid in resource.data.participants;
 
@@ -414,12 +455,41 @@ service cloud.firestore {
         // Solo un participante puede crear un mensaje, y debe ser el remitente
         allow create: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          && request.resource.data.keys().hasOnly([
+            'senderId',
+            'text',
+            'timestamp',
+            'read',
+            'type',
+            'trackData',
+          ])
+          && request.resource.data.keys().hasAll([
+            'senderId',
+            'text',
+            'timestamp',
+            'read',
+            'type',
+          ])
           && canUsersInteract(
             get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
             get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
           )
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.timestamp == request.time
+          && request.resource.data.read == false
+          && request.resource.data.type in ['text', 'track']
+          && (
+            (
+              request.resource.data.type == 'text'
+              && !('trackData' in request.resource.data)
+            )
+            ||
+            (
+              request.resource.data.type == 'track'
+              && 'trackData' in request.resource.data
+              && request.resource.data.trackData is map
+            )
+          )
           && messageRateLimitAllows(request.auth.uid)
           && request.resource.data.text is string
           && request.resource.data.text.toUtf8().size() <= 2000;
@@ -440,9 +510,15 @@ service cloud.firestore {
                 )
               ));
 
-        // Solo los participantes pueden eliminar mensajes
+        // El remitente puede eliminar sus propios mensajes. Si ambos usuarios
+        // borraron el chat, un cliente antiguo tambien puede completar la
+        // limpieza fisica; Cloud Functions hace el mismo trabajo para clientes nuevos.
         allow delete: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          && (
+            resource.data.senderId == request.auth.uid
+            || fullySoftDeletedChat(get(/databases/$(database)/documents/chats/$(chatId)).data)
+          );
       }
     }
   }

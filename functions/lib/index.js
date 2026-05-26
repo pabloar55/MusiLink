@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
@@ -50,12 +50,15 @@ const userPrivateCollection = 'user_private';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
 const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationsCollection = 'recommendations';
+const chatsCollection = 'chats';
+const messagesCollection = 'messages';
 const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
 const maxRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
 const maxIndexUsersPerToken = 80;
 const maxStoredRecommendations = 100;
 const maxReciprocalRecommendationUsers = 100;
+const chatCleanupBatchSize = 400;
 const artistScoreWeight = 70;
 const genreScoreWeight = 30;
 const artistEvidenceTarget = 7;
@@ -173,6 +176,65 @@ function musicProfileChanged(before, after) {
 }
 function timestampMillis(value) {
     return value instanceof firestore_2.Timestamp ? value.toMillis() : undefined;
+}
+function timestampValue(value) {
+    return value instanceof firestore_2.Timestamp ? value : undefined;
+}
+function chatParticipants(data) {
+    if (!Array.isArray(data?.participants))
+        return [];
+    return data.participants.filter((value) => typeof value === 'string');
+}
+function fullySoftDeletedChat(data) {
+    const participants = chatParticipants(data);
+    if (participants.length !== 2)
+        return false;
+    const lastMessageTime = timestampValue(data?.lastMessageTime);
+    const deletedAt = data?.deletedAt;
+    if (!lastMessageTime || !deletedAt)
+        return false;
+    return participants.every((uid) => {
+        const deletedTime = timestampValue(deletedAt[uid]);
+        return deletedTime !== undefined && lastMessageTime.toMillis() <= deletedTime.toMillis();
+    });
+}
+async function deleteChatMessages(chatRef) {
+    const messagesRef = chatRef.collection(messagesCollection);
+    while (true) {
+        const snapshot = await messagesRef.limit(chatCleanupBatchSize).get();
+        if (snapshot.empty)
+            return;
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+        if (snapshot.size < chatCleanupBatchSize)
+            return;
+    }
+}
+async function hardDeleteChat(chatRef) {
+    await deleteChatMessages(chatRef);
+    await chatRef.delete();
+}
+async function latestMessageSnapshot(chatRef) {
+    const snapshot = await chatRef
+        .collection(messagesCollection)
+        .orderBy('timestamp', 'desc')
+        .limit(1)
+        .get();
+    return snapshot.docs[0];
+}
+async function refreshChatSummaryFromLatestMessage(chatRef) {
+    const latest = await latestMessageSnapshot(chatRef);
+    if (!latest) {
+        await chatRef.delete();
+        return false;
+    }
+    const latestData = latest.data();
+    await chatRef.update({
+        lastMessage: latestData.text ?? '',
+        lastMessageTime: timestampValue(latestData.timestamp) ?? firestore_2.FieldValue.serverTimestamp(),
+    });
+    return true;
 }
 function recommendationRefreshRequested(before, after) {
     const beforeMillis = timestampMillis(before?.recommendationsRefreshRequestedAt);
@@ -554,7 +616,97 @@ exports.onFriendRequestAccepted = (0, firestore_1.onDocumentUpdated)({ document:
         throw error;
     }
 });
-// ── Función 5 — Limpieza del cooldown al borrar una solicitud ─────────────────
+// ── Funcion 5 - Limpieza segura de chats ─────────────────
+// Clientes nuevos solo escriben deletedAt[uid]. Cuando ambos usuarios han
+// borrado su copia y no hay mensajes posteriores a esos timestamps, el backend
+// elimina fisicamente mensajes y documento del chat.
+exports.onChatSoftDeleted = (0, firestore_1.onDocumentUpdated)({ document: `${chatsCollection}/{chatId}`, region: 'europe-southwest1' }, async (event) => {
+    try {
+        const after = event.data?.after.data();
+        if (!fullySoftDeletedChat(after))
+            return;
+        await hardDeleteChat(event.data.after.ref);
+        v2_1.logger.info('onChatSoftDeleted: hard-deleted fully soft-deleted chat', {
+            chatId: event.params.chatId,
+        });
+    }
+    catch (error) {
+        v2_1.logger.error('onChatSoftDeleted: unhandled error', {
+            chatId: event.params.chatId,
+            error,
+        });
+        throw error;
+    }
+});
+// Si un cliente antiguo borra el documento del chat directamente, no rompemos
+// la app: si ya no quedan mensajes o ambos lo habian borrado, dejamos que
+// desaparezca; si aun quedan mensajes y no habia borrado suave doble, se
+// restaura el doc del chat para que la conversacion siga disponible.
+exports.onChatDeleted = (0, firestore_1.onDocumentDeleted)({ document: `${chatsCollection}/{chatId}`, region: 'europe-southwest1' }, async (event) => {
+    try {
+        const chatData = event.data?.data();
+        if (!chatData || fullySoftDeletedChat(chatData))
+            return;
+        const chatRef = db.doc(event.document);
+        const latest = await latestMessageSnapshot(chatRef);
+        if (!latest)
+            return;
+        const latestData = latest.data();
+        await chatRef.set({
+            ...chatData,
+            lastMessage: latestData.text ?? '',
+            lastMessageTime: timestampValue(latestData.timestamp) ??
+                timestampValue(chatData.lastMessageTime) ??
+                firestore_2.FieldValue.serverTimestamp(),
+        });
+        v2_1.logger.warn('onChatDeleted: restored non-empty chat deleted by client', {
+            chatId: event.params.chatId,
+        });
+    }
+    catch (error) {
+        v2_1.logger.error('onChatDeleted: unhandled error', {
+            chatId: event.params.chatId,
+            error,
+        });
+        throw error;
+    }
+});
+// Cuando se borran mensajes (por limpieza de cuenta o por un cliente antiguo),
+// el resumen del chat se mantiene coherente. Si el chat queda vacio, el backend
+// elimina el documento padre.
+exports.onChatMessageDeleted = (0, firestore_1.onDocumentDeleted)({ document: `${chatsCollection}/{chatId}/${messagesCollection}/{messageId}`, region: 'europe-southwest1' }, async (event) => {
+    try {
+        const deletedMessage = event.data?.data();
+        if (!deletedMessage)
+            return;
+        const chatRef = db.doc(`${chatsCollection}/${event.params.chatId}`);
+        const chatSnap = await chatRef.get();
+        if (!chatSnap.exists)
+            return;
+        const currentLastMessageTime = timestampValue(chatSnap.data()?.lastMessageTime);
+        const deletedMessageTime = timestampValue(deletedMessage.timestamp);
+        if (currentLastMessageTime &&
+            deletedMessageTime &&
+            deletedMessageTime.toMillis() < currentLastMessageTime.toMillis()) {
+            return;
+        }
+        const stillExists = await refreshChatSummaryFromLatestMessage(chatRef);
+        v2_1.logger.info('onChatMessageDeleted: refreshed chat after message delete', {
+            chatId: event.params.chatId,
+            messageId: event.params.messageId,
+            stillExists,
+        });
+    }
+    catch (error) {
+        v2_1.logger.error('onChatMessageDeleted: unhandled error', {
+            chatId: event.params.chatId,
+            messageId: event.params.messageId,
+            error,
+        });
+        throw error;
+    }
+});
+// ── Funcion 6 - Limpieza del cooldown al borrar una solicitud ─────────────────
 // Cuando una solicitud se elimina (rechazo, cancelación o aceptación), borrar
 // el doc de rate-limit por par (sender, receiver) para que una nueva solicitud
 // legítima vuelva a notificar sin esperar al cooldown.

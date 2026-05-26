@@ -262,6 +262,26 @@ void main() {
       });
     });
 
+    group('softDeleteChat', () {
+      test('solo marca deletedAt del usuario actual', () async {
+        final mockChatDocRef = MockDocumentReference();
+
+        when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
+        when(() => mockChatDocRef.update(any())).thenAnswer((_) async {});
+
+        await chatService.softDeleteChat('chat_123');
+
+        final update = Map<String, dynamic>.from(
+          verify(() => mockChatDocRef.update(captureAny())).captured.single
+              as Map,
+        );
+        expect(update.keys.toList(), ['deletedAt.current_uid']);
+        expect(update['deletedAt.current_uid'], isA<FieldValue>());
+        verifyNever(() => mockChatDocRef.get());
+        verifyNever(() => mockChatDocRef.delete());
+      });
+    });
+
     group('deleteChat', () {
       test('elimina todos los mensajes y el documento del chat', () async {
         final mockChatDocRef = MockDocumentReference();
@@ -440,85 +460,80 @@ void main() {
         },
       );
 
-      test(
-        'borra el chat si no quedan mensajes tras eliminar los propios',
-        () async {
-          const uid = 'deleted_uid';
-          final mockChatsQuery = MockQuery();
-          final mockChatsSnapshot = MockQuerySnapshot();
-          final mockChatDoc = MockQueryDocumentSnapshot();
-          final mockChatDocRef = MockDocumentReference();
-          final mockMessagesCol = MockMessagesCollectionRef();
+      test('deja la limpieza del chat vacío al backend', () async {
+        const uid = 'deleted_uid';
+        final mockChatsQuery = MockQuery();
+        final mockChatsSnapshot = MockQuerySnapshot();
+        final mockChatDoc = MockQueryDocumentSnapshot();
+        final mockChatDocRef = MockDocumentReference();
+        final mockMessagesCol = MockMessagesCollectionRef();
 
-          final mockSentQuery = MockQuery();
-          final mockSentLimitQuery = MockQuery();
-          final mockSentSnapshot = MockQuerySnapshot();
-          final mockSentMsgDoc = MockQueryDocumentSnapshot();
-          final mockSentMsgRef = MockDocumentReference();
+        final mockSentQuery = MockQuery();
+        final mockSentLimitQuery = MockQuery();
+        final mockSentSnapshot = MockQuerySnapshot();
+        final mockSentMsgDoc = MockQueryDocumentSnapshot();
+        final mockSentMsgRef = MockDocumentReference();
 
-          final mockReactionQuery = MockQuery();
-          final mockReactionLimitQuery = MockQuery();
-          final mockReactionSnapshot = MockQuerySnapshot();
+        final mockReactionQuery = MockQuery();
+        final mockReactionLimitQuery = MockQuery();
+        final mockReactionSnapshot = MockQuerySnapshot();
 
-          final mockLatestQuery = MockQuery();
-          final mockLatestLimitQuery = MockQuery();
-          final mockLatestSnapshot = MockQuerySnapshot();
-          final mockBatch = MockWriteBatch();
+        final mockLatestQuery = MockQuery();
+        final mockLatestLimitQuery = MockQuery();
+        final mockLatestSnapshot = MockQuerySnapshot();
+        final mockBatch = MockWriteBatch();
 
-          when(
-            () => mockChatsRef.where('participants', arrayContains: uid),
-          ).thenReturn(mockChatsQuery);
-          when(
-            () => mockChatsQuery.get(),
-          ).thenAnswer((_) async => mockChatsSnapshot);
-          when(() => mockChatsSnapshot.docs).thenReturn([mockChatDoc]);
-          when(() => mockChatDoc.reference).thenReturn(mockChatDocRef);
-          when(
-            () => mockChatDocRef.collection('messages'),
-          ).thenReturn(mockMessagesCol);
+        when(
+          () => mockChatsRef.where('participants', arrayContains: uid),
+        ).thenReturn(mockChatsQuery);
+        when(
+          () => mockChatsQuery.get(),
+        ).thenAnswer((_) async => mockChatsSnapshot);
+        when(() => mockChatsSnapshot.docs).thenReturn([mockChatDoc]);
+        when(() => mockChatDoc.reference).thenReturn(mockChatDocRef);
+        when(
+          () => mockChatDocRef.collection('messages'),
+        ).thenReturn(mockMessagesCol);
 
-          when(
-            () => mockMessagesCol.where('senderId', isEqualTo: uid),
-          ).thenReturn(mockSentQuery);
-          when(() => mockSentQuery.limit(499)).thenReturn(mockSentLimitQuery);
-          when(
-            () => mockSentLimitQuery.get(),
-          ).thenAnswer((_) async => mockSentSnapshot);
-          when(() => mockSentSnapshot.docs).thenReturn([mockSentMsgDoc]);
-          when(() => mockSentMsgDoc.reference).thenReturn(mockSentMsgRef);
+        when(
+          () => mockMessagesCol.where('senderId', isEqualTo: uid),
+        ).thenReturn(mockSentQuery);
+        when(() => mockSentQuery.limit(499)).thenReturn(mockSentLimitQuery);
+        when(
+          () => mockSentLimitQuery.get(),
+        ).thenAnswer((_) async => mockSentSnapshot);
+        when(() => mockSentSnapshot.docs).thenReturn([mockSentMsgDoc]);
+        when(() => mockSentMsgDoc.reference).thenReturn(mockSentMsgRef);
 
-          when(
-            () => mockMessagesCol.orderBy(FieldPath.documentId),
-          ).thenReturn(mockReactionQuery);
-          when(
-            () => mockReactionQuery.limit(499),
-          ).thenReturn(mockReactionLimitQuery);
-          when(
-            () => mockReactionLimitQuery.get(),
-          ).thenAnswer((_) async => mockReactionSnapshot);
-          when(() => mockReactionSnapshot.docs).thenReturn([]);
+        when(
+          () => mockMessagesCol.orderBy(FieldPath.documentId),
+        ).thenReturn(mockReactionQuery);
+        when(
+          () => mockReactionQuery.limit(499),
+        ).thenReturn(mockReactionLimitQuery);
+        when(
+          () => mockReactionLimitQuery.get(),
+        ).thenAnswer((_) async => mockReactionSnapshot);
+        when(() => mockReactionSnapshot.docs).thenReturn([]);
 
-          when(
-            () => mockMessagesCol.orderBy('timestamp', descending: true),
-          ).thenReturn(mockLatestQuery);
-          when(() => mockLatestQuery.limit(1)).thenReturn(mockLatestLimitQuery);
-          when(
-            () => mockLatestLimitQuery.get(),
-          ).thenAnswer((_) async => mockLatestSnapshot);
-          when(() => mockLatestSnapshot.docs).thenReturn([]);
+        when(
+          () => mockMessagesCol.orderBy('timestamp', descending: true),
+        ).thenReturn(mockLatestQuery);
+        when(() => mockLatestQuery.limit(1)).thenReturn(mockLatestLimitQuery);
+        when(
+          () => mockLatestLimitQuery.get(),
+        ).thenAnswer((_) async => mockLatestSnapshot);
+        when(() => mockLatestSnapshot.docs).thenReturn([]);
 
-          when(() => mockFirestore.batch()).thenReturn(mockBatch);
-          when(() => mockBatch.delete(any())).thenReturn(null);
-          when(() => mockBatch.commit()).thenAnswer((_) async {});
-          when(() => mockChatDocRef.delete()).thenAnswer((_) async {});
+        when(() => mockFirestore.batch()).thenReturn(mockBatch);
+        when(() => mockBatch.delete(any())).thenReturn(null);
+        when(() => mockBatch.commit()).thenAnswer((_) async {});
+        await chatService.deleteAllUserChatData(uid);
 
-          await chatService.deleteAllUserChatData(uid);
-
-          verify(() => mockBatch.delete(mockSentMsgRef)).called(1);
-          verify(() => mockChatDocRef.delete()).called(1);
-          verifyNever(() => mockChatDocRef.update(any()));
-        },
-      );
+        verify(() => mockBatch.delete(mockSentMsgRef)).called(1);
+        verifyNever(() => mockChatDocRef.delete());
+        verifyNever(() => mockChatDocRef.update(any()));
+      });
     });
 
     group('markMessagesAsRead', () {

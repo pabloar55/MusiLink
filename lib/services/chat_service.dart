@@ -109,13 +109,12 @@ class ChatService with AuthenticatedService {
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .handleError((e, st) => reportError(e, st).ignore())
-        .map((snapshot) => snapshot.docs
-            .map(Chat.fromFirestore)
-            .where((chat) {
-              final dt = chat.deletedAt[currentUid];
-              return dt == null || chat.lastMessageTime.isAfter(dt);
-            })
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs.map(Chat.fromFirestore).where((chat) {
+            final dt = chat.deletedAt[currentUid];
+            return dt == null || chat.lastMessageTime.isAfter(dt);
+          }).toList(),
+        );
   }
 
   static const int _deleteBatchSize = 499;
@@ -137,9 +136,9 @@ class ChatService with AuthenticatedService {
   /// Borrado suave del chat para el usuario actual (estilo WhatsApp).
   ///
   /// Escribe deletedAt[currentUid] = ahora. El chat desaparece de la lista
-  /// hasta que el otro participante envíe un nuevo mensaje.
-  /// Si ambos participantes han borrado y no hay mensajes nuevos tras ninguno
-  /// de los dos timestamps, se ejecuta el hard delete automáticamente.
+  /// hasta que el otro participante envie un nuevo mensaje.
+  /// La limpieza fisica del chat, cuando corresponda, la hace Cloud Functions
+  /// con Admin SDK. El cliente no intenta borrar mensajes ajenos ni el chat.
   Future<void> softDeleteChat(String chatId) async {
     try {
       final chatRef = _chatsRef.doc(chatId);
@@ -147,22 +146,6 @@ class ChatService with AuthenticatedService {
       await chatRef.update({
         'deletedAt.$currentUid': FieldValue.serverTimestamp(),
       });
-
-      final snap = await chatRef.get();
-      if (!snap.exists) return;
-
-      final chat = Chat.fromFirestore(snap);
-      final allDeleted = chat.participants.every(chat.deletedAt.containsKey);
-
-      if (allDeleted) {
-        final noNewMessages = chat.participants.every(
-          (uid) => !chat.lastMessageTime.isAfter(chat.deletedAt[uid]!),
-        );
-        if (noNewMessages) {
-          await deleteChat(chatId);
-          return;
-        }
-      }
 
       _chatByOtherUid.removeWhere((_, c) => c.id == chatId);
     } catch (e, stack) {
@@ -172,6 +155,10 @@ class ChatService with AuthenticatedService {
   }
 
   /// Elimina un chat y todos sus mensajes.
+  ///
+  /// Se conserva solo para compatibilidad interna/tests y clientes antiguos.
+  /// Los flujos nuevos deben usar [softDeleteChat]; el backend hace la
+  /// limpieza definitiva cuando sea seguro.
   Future<void> deleteChat(String chatId) async {
     try {
       final messagesRef = _chatsRef
@@ -307,10 +294,7 @@ class ChatService with AuthenticatedService {
         .limit(1)
         .get();
 
-    if (latestSnapshot.docs.isEmpty) {
-      await chatRef.delete();
-      return;
-    }
+    if (latestSnapshot.docs.isEmpty) return;
 
     final latest = latestSnapshot.docs.first.data();
     await chatRef.update({
@@ -413,7 +397,10 @@ class ChatService with AuthenticatedService {
         .orderBy('timestamp', descending: true);
 
     if (since != null) {
-      query = query.where('timestamp', isGreaterThan: Timestamp.fromDate(since));
+      query = query.where(
+        'timestamp',
+        isGreaterThan: Timestamp.fromDate(since),
+      );
     }
 
     return query
