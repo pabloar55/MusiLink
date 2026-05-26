@@ -93,13 +93,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         },
         builder: (context, state) {
           final extra = state.extra;
+          final fromChat =
+              state.uri.queryParameters['fromChat'] == 'true';
           if (extra is DiscoveryResult) {
             return UserProfileScreen(
               user: extra.user,
               initialCompatibility: extra,
+              fromChat: fromChat,
             );
           }
-          return UserProfileScreen(user: extra! as AppUser);
+          return UserProfileScreen(
+            user: extra! as AppUser,
+            fromChat: fromChat,
+          );
         },
       ),
       GoRoute(

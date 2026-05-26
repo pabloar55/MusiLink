@@ -350,7 +350,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final nav = GoRouter.of(context);
     final user = await _otherUserFuture;
     if (user != null && !user.isDeleted && mounted) {
-      unawaited(nav.push('/profile', extra: user));
+      unawaited(nav.push('/profile?fromChat=true', extra: user));
     }
   }
 

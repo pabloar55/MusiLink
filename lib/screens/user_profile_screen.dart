@@ -25,11 +25,13 @@ enum _ProfileMenuAction { block, unblock }
 class UserProfileScreen extends ConsumerStatefulWidget {
   final AppUser user;
   final DiscoveryResult? initialCompatibility;
+  final bool fromChat;
 
   const UserProfileScreen({
     super.key,
     required this.user,
     this.initialCompatibility,
+    this.fromChat = false,
   });
 
   @override
@@ -47,6 +49,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   Future<void> _startChat() async {
     if (widget.user.isDeleted) return;
+    if (widget.fromChat && context.canPop()) {
+      context.pop();
+      return;
+    }
     final chat = await ref
         .read(chatServiceProvider)
         .getOrCreateChat(widget.user.uid);
