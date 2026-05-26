@@ -43,12 +43,6 @@ service cloud.firestore {
           'username',
           'photoUrl',
         ]);
-      // El propio usuario puede actualizar cualquier campo.
-      // Escritura cruzada (otro usuario): solo se permite añadir o eliminar el propio UID
-      // del campo 'friends'.  Cubre tres casos legítimos:
-      //   • acceptRequest  → arrayUnion([request.auth.uid]) en el doc del remitente
-      //   • removeFriend   → arrayRemove([request.auth.uid]) en el doc del ex-amigo
-      //   • deleteAllUserFriendData → arrayRemove([request.auth.uid]) en cada amigo
       allow update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -64,34 +58,7 @@ service cloud.firestore {
           'dailySong',
           'dailySongUpdatedAt',
           'recommendationsRefreshRequestedAt',
-        ])
-        && (
-        request.auth.uid == userId
-        ||
-        (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends'])
-          && (
-            // arrayUnion([request.auth.uid]): añadir propio UID (solo si aún no estaba)
-            (
-              request.resource.data.friends.hasAll(resource.data.get('friends', []))
-              && request.resource.data.friends.size() == resource.data.get('friends', []).size() + 1
-              && request.resource.data.friends.hasAll([request.auth.uid])
-              && !resource.data.get('friends', []).hasAll([request.auth.uid])
-              && isActiveUser(userId)
-              && isActiveUser(request.auth.uid)
-              && canUsersInteract(userId, request.auth.uid)
-            )
-            ||
-            // arrayRemove([request.auth.uid]): eliminar propio UID (solo si estaba)
-            (
-              resource.data.get('friends', []).hasAll(request.resource.data.friends)
-              && request.resource.data.friends.size() == resource.data.get('friends', []).size() - 1
-              && !request.resource.data.friends.hasAll([request.auth.uid])
-              && resource.data.get('friends', []).hasAll([request.auth.uid])
-            )
-          )
-        )
-      );
+        ]);
       allow delete: if false;
 
       match /recommendations/{recommendationId} {
