@@ -323,7 +323,6 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex--;
       final item = _selected.removeAt(oldIndex);
       _selected.insert(newIndex, item);
     });
@@ -602,7 +601,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     return ReorderableListView.builder(
       buildDefaultDragHandles: false,
       itemCount: _selected.length,
-      onReorder: _onReorder,
+      onReorderItem: _onReorder,
       itemBuilder: (_, i) => _buildRankedItem(_selected[i], i),
     );
   }
@@ -669,7 +668,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       child: SizeTransition(
         sizeFactor: animation,
         axis: Axis.horizontal,
-        axisAlignment: -1,
+        alignment: Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ActionChip(

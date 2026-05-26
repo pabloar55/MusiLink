@@ -7,19 +7,19 @@ environment:
   sdk: ^3.11.5
 
 dependencies:
-  firebase_core: ^4.6.0
-  firebase_analytics: ^12.3.0
-  firebase_auth: ^6.4.0
-  cloud_firestore: ^6.3.0
+  firebase_core: ^4.9.0
+  firebase_analytics: ^12.4.1
+  firebase_auth: ^6.5.1
+  cloud_firestore: ^6.4.1
   google_sign_in: ^7.2.0
-  firebase_crashlytics: ^5.2.0
-  firebase_messaging: ^16.2.0
+  firebase_crashlytics: ^5.2.2
+  firebase_messaging: ^16.2.2
   flutter_local_notifications: ^21.0.0
   http: ^1.2.0  # Para llamadas a la API
-  flutter_secure_storage: ^10.0.0 # Para guardar el token de forma segura
-  cloud_functions: ^6.2.0
+  flutter_secure_storage: ^10.3.0 # Para guardar el token de forma segura
+  cloud_functions: ^6.3.1
   font_awesome_flutter: ^11.0.0 # Para iconos
-  lucide_icons_flutter: ^3.1.13
+  lucide_icons_flutter: ^3.1.14+2
   url_launcher: ^6.3.2
   shared_preferences: ^2.5.5
   flutter_riverpod: ^3.3.1
@@ -32,7 +32,7 @@ dependencies:
     sdk: flutter
   cached_network_image: ^3.4.1
   image_picker: ^1.2.2
-  firebase_storage: ^13.3.0
+  firebase_storage: ^13.4.1
 
 
 dev_dependencies:
