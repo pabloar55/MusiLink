@@ -48,6 +48,8 @@ class NotificationService {
   static const kVibrationKey = 'notification_vibration';
   static const kSoundKey = 'notification_sound';
   static const _permissionDialogShownKey = 'notification_pre_dialog_shown';
+  static const _apnsTokenRetries = 5;
+  static const _apnsTokenRetryDelay = Duration(milliseconds: 300);
 
   Future<void> initialize() async {
     // 1. iOS foreground presentation options
@@ -157,12 +159,36 @@ class NotificationService {
   Future<void> _saveToken() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    final token = await _messaging.getToken();
+
+    if (_requiresApnsToken && await _waitForApnsToken() == null) return;
+
+    final String? token;
+    try {
+      token = await _messaging.getToken();
+    } on FirebaseException catch (e, stack) {
+      if (e.code == 'apns-token-not-set') return;
+      await reportError(e, stack);
+      rethrow;
+    }
     if (token == null) return;
     await _firestore.collection(FirestoreCollections.userPrivate).doc(uid).set({
       'fcmToken': token,
       'preferredLocale': _preferredLocale(),
     }, SetOptions(merge: true));
+  }
+
+  bool get _requiresApnsToken =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+
+  Future<String?> _waitForApnsToken() async {
+    for (var attempt = 0; attempt < _apnsTokenRetries; attempt++) {
+      final token = await _messaging.getAPNSToken();
+      if (token != null) return token;
+      await Future<void>.delayed(_apnsTokenRetryDelay);
+    }
+    return null;
   }
 
   String _preferredLocale() {

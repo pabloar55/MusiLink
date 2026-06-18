@@ -10,6 +10,7 @@ analyzer:
   # Relax style-only rules in test/ — mocktail patterns require closures
   # and test constructors often pass explicit defaults for readability.
   exclude:
+    - "build/**"
     - "**/*.g.dart"
     - "**/*.freezed.dart"
 

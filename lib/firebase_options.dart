@@ -59,11 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBez2oorhb-9d_eRSUHVKSaQYoFjuWf1Co',
-    appId: '1:701824546350:ios:3bcd5c5a35aa3f5c1691bf',
+    appId: '1:701824546350:ios:c86b1f00c0da1f701691bf',
     messagingSenderId: '701824546350',
     projectId: 'musi-link-e7759',
     storageBucket: 'musi-link-e7759.firebasestorage.app',
-    iosBundleId: 'com.example.musiLink',
+    iosBundleId: 'app.musilink',
   );
-
 }
