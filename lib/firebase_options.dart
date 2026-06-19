@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAYg90AayN-DcpaT98oNykHijMczanhZg8',
-    appId: '1:701824546350:android:d2fa12aa5d1b8e101691bf',
+    appId: '1:701824546350:android:4f63c964c25d52fa1691bf',
     messagingSenderId: '701824546350',
     projectId: 'musi-link-e7759',
     storageBucket: 'musi-link-e7759.firebasestorage.app',

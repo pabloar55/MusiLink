@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/services/auth_service.dart';
@@ -20,6 +22,7 @@ void main() {
   });
 
   setUp(() {
+    debugDefaultTargetPlatformOverride = null;
     mockAuth = MockFirebaseAuth();
     mockGoogleSignIn = MockGoogleSignIn();
     mockUserService = MockUserService();
@@ -276,6 +279,10 @@ void main() {
           final result = await authService.signInWithGoogle();
 
           expect(result, mockUser);
+          verify(
+            () => mockGoogleSignIn.attemptLightweightAuthentication(),
+          ).called(1);
+          verifyNever(() => mockGoogleSignIn.authenticate());
           verifyNever(
             () => mockUserService.createUserProfile(
               uid: any(named: 'uid'),
@@ -283,6 +290,46 @@ void main() {
               displayName: any(named: 'displayName'),
               username: any(named: 'username'),
             ),
+          );
+        },
+      );
+
+      test(
+        'usa authenticate en iOS para mostrar el flujo interactivo',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+          final mockGoogleUser = MockGoogleSignInAccount();
+          final mockGoogleAuth = MockGoogleSignInAuthentication();
+          final mockUser = MockUser();
+          final mockCredential = MockUserCredential();
+
+          when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(true);
+          when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+          when(
+            () => mockGoogleSignIn.authenticate(),
+          ).thenAnswer((_) async => mockGoogleUser);
+          when(() => mockGoogleUser.authentication).thenReturn(mockGoogleAuth);
+          when(() => mockGoogleAuth.idToken).thenReturn('id_token_123');
+          when(
+            () => mockAuth.signInWithCredential(any()),
+          ).thenAnswer((_) async => mockCredential);
+          when(() => mockCredential.user).thenReturn(mockUser);
+          when(() => mockUser.uid).thenReturn('google_uid');
+          when(() => mockUser.email).thenReturn('google@test.com');
+          when(() => mockUser.displayName).thenReturn('Google User');
+          when(
+            () => mockUserService.userExists(any()),
+          ).thenAnswer((_) async => true);
+          when(
+            () => mockUserService.updateLastLogin(any()),
+          ).thenAnswer((_) async {});
+
+          final result = await authService.signInWithGoogle();
+
+          expect(result, mockUser);
+          verify(() => mockGoogleSignIn.authenticate()).called(1);
+          verifyNever(
+            () => mockGoogleSignIn.attemptLightweightAuthentication(),
           );
         },
       );

@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:musi_link/services/notification_service.dart';
@@ -98,13 +100,11 @@ class AuthService {
     try {
       await _ensureGoogleInitialized();
 
-      final lightweightAttempt = _googleSignIn
-          .attemptLightweightAuthentication();
       final googleUser =
-          await lightweightAttempt ??
-          (_googleSignIn.supportsAuthenticate()
-              ? await _googleSignIn.authenticate()
-              : null);
+          defaultTargetPlatform == TargetPlatform.iOS &&
+              _googleSignIn.supportsAuthenticate()
+          ? await _googleSignIn.authenticate()
+          : await _googleSignIn.attemptLightweightAuthentication();
 
       if (googleUser == null) return null; // Usuario canceló
 

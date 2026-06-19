@@ -14,6 +14,46 @@
       },
       "oauth_client": [
         {
+          "client_id": "701824546350-1r6tefol2psgdn38bs59e9jtjm27fu93.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.musilink",
+            "certificate_hash": "29cf847622598f46221d6e860a464d58bb379d6b"
+          }
+        },
+        {
+          "client_id": "701824546350-fao20t7gq2ov15j32r3h00tcl27nqjik.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.musilink",
+            "certificate_hash": "4cb09ac57a7434749678734c2cba9220f5d3668f"
+          }
+        },
+        {
+          "client_id": "701824546350-ljits7lhbd153jf6v5mod063c0n1rgrj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.musilink",
+            "certificate_hash": "b59abe051348f88a950868d274b5aced17f27897"
+          }
+        },
+        {
+          "client_id": "701824546350-ra605r294ppo6mnqk1q30affrnld2q6q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.musilink",
+            "certificate_hash": "0b621b063573513d65d60663a36943661180c4a7"
+          }
+        },
+        {
+          "client_id": "701824546350-ttt66vh7biga2q4qs9gdj5ipeigh8egu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.musilink",
+            "certificate_hash": "da7684c52a4b37ca8146b92d0f1fb95774b90b89"
+          }
+        },
+        {
           "client_id": "701824546350-1tkqdr8bl7eosggab56c79u097ragkhn.apps.googleusercontent.com",
           "client_type": 3
         }
