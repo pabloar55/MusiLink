@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
@@ -98,6 +100,19 @@ class _MainScreenState extends ConsumerState<MainScreen>
     );
   }
 
+  void _selectPage(int index) {
+    _pageController.jumpToPage(index);
+    setState(() {
+      currentPageIndex = index;
+    });
+    _syncLocationToPage(index);
+  }
+
+  bool get _usesCupertinoTabBar {
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -141,50 +156,116 @@ class _MainScreenState extends ConsumerState<MainScreen>
         children: screens,
       ),
 
-      bottomNavigationBar: TooltipVisibility(
-        visible: false,
-        child: NavigationBar(
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(LucideIcons.compass500),
-              label: l10n.navDiscover,
-            ),
-            NavigationDestination(
-              icon: const Icon(LucideIcons.crown),
-              label: l10n.navStats,
-            ),
-            NavigationDestination(
-              icon: Badge(
-                isLabelVisible: unreadChats > 0,
-                label: unreadChats > 9
-                    ? const Text('9+')
-                    : Text('$unreadChats'),
-                child: const Icon(LucideIcons.messageCircle500),
+      bottomNavigationBar: _usesCupertinoTabBar
+          ? _CupertinoMainTabBar(
+              currentIndex: currentPageIndex,
+              unreadChats: unreadChats,
+              pendingCount: pendingCount,
+              onTap: _selectPage,
+              discoverLabel: l10n.navDiscover,
+              statsLabel: l10n.navStats,
+              messagesLabel: l10n.navMessages,
+              friendsLabel: l10n.navFriends,
+            )
+          : TooltipVisibility(
+              visible: false,
+              child: NavigationBar(
+                destinations: [
+                  NavigationDestination(
+                    icon: const Icon(LucideIcons.compass500),
+                    label: l10n.navDiscover,
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(LucideIcons.crown),
+                    label: l10n.navStats,
+                  ),
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: unreadChats > 0,
+                      label: unreadChats > 9
+                          ? const Text('9+')
+                          : Text('$unreadChats'),
+                      child: const Icon(LucideIcons.messageCircle500),
+                    ),
+                    label: l10n.navMessages,
+                  ),
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: pendingCount > 0,
+                      label: pendingCount > 9
+                          ? const Text('9+')
+                          : Text('$pendingCount'),
+                      child: const Icon(LucideIcons.users500),
+                    ),
+                    label: l10n.navFriends,
+                  ),
+                ],
+                selectedIndex: currentPageIndex,
+                onDestinationSelected: _selectPage,
               ),
-              label: l10n.navMessages,
             ),
-            NavigationDestination(
-              icon: Badge(
-                isLabelVisible: pendingCount > 0,
-                label: pendingCount > 9
-                    ? const Text('9+')
-                    : Text('$pendingCount'),
-                child: const Icon(LucideIcons.users500),
-              ),
-              label: l10n.navFriends,
-            ),
-          ],
-          selectedIndex: currentPageIndex,
+    );
+  }
+}
 
-          onDestinationSelected: (int index) {
-            _pageController.jumpToPage(index);
-            setState(() {
-              currentPageIndex = index;
-            });
-            _syncLocationToPage(index);
-          },
+class _CupertinoMainTabBar extends StatelessWidget {
+  const _CupertinoMainTabBar({
+    required this.currentIndex,
+    required this.unreadChats,
+    required this.pendingCount,
+    required this.onTap,
+    required this.discoverLabel,
+    required this.statsLabel,
+    required this.messagesLabel,
+    required this.friendsLabel,
+  });
+
+  final int currentIndex;
+  final int unreadChats;
+  final int pendingCount;
+  final ValueChanged<int> onTap;
+  final String discoverLabel;
+  final String statsLabel;
+  final String messagesLabel;
+  final String friendsLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return CupertinoTabBar(
+      currentIndex: currentIndex,
+      onTap: onTap,
+      activeColor: cs.primary,
+      inactiveColor: cs.onSurfaceVariant,
+      backgroundColor: cs.surface,
+      border: Border(top: BorderSide(color: cs.outlineVariant)),
+      items: [
+        BottomNavigationBarItem(
+          icon: const Icon(LucideIcons.compass500),
+          label: discoverLabel,
         ),
-      ),
+        BottomNavigationBarItem(
+          icon: const Icon(LucideIcons.crown),
+          label: statsLabel,
+        ),
+        BottomNavigationBarItem(
+          icon: Badge(
+            isLabelVisible: unreadChats > 0,
+            label: unreadChats > 9 ? const Text('9+') : Text('$unreadChats'),
+            child: const Icon(LucideIcons.messageCircle500),
+          ),
+          label: messagesLabel,
+        ),
+        BottomNavigationBarItem(
+          icon: Badge(
+            isLabelVisible: pendingCount > 0,
+            label: pendingCount > 9 ? const Text('9+') : Text('$pendingCount'),
+            child: const Icon(LucideIcons.users500),
+          ),
+          label: friendsLabel,
+        ),
+      ],
     );
   }
 }

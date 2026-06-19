@@ -16,6 +16,7 @@ import 'package:musi_link/widgets/profile/friendship_buttons.dart';
 import 'package:musi_link/widgets/profile/music_taste_section.dart';
 import 'package:musi_link/widgets/profile/profile_daily_song_card.dart';
 import 'package:musi_link/widgets/profile/profile_header.dart';
+import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 import 'package:musi_link/widgets/remove_friend_dialog.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,25 +119,13 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   Future<void> _blockUser() async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAdaptiveConfirmationDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.blockUserBlockConfirmTitle(widget.user.displayName)),
-        content: Text(l10n.blockUserBlockConfirmBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.friendsCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              l10n.blockUserBlockConfirm,
-              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-            ),
-          ),
-        ],
-      ),
+      title: l10n.blockUserBlockConfirmTitle(widget.user.displayName),
+      content: l10n.blockUserBlockConfirmBody,
+      cancelLabel: l10n.friendsCancel,
+      confirmLabel: l10n.blockUserBlockConfirm,
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
     try {

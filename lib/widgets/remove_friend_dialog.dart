@@ -1,28 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 
 /// Muestra un diálogo de confirmación para eliminar un amigo.
 /// Devuelve `true` si el usuario confirma, `false` o `null` si cancela.
 Future<bool?> showRemoveFriendDialog(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
-  return showDialog<bool>(
+  return showAdaptiveConfirmationDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(l10n.friendsRemove),
-      content: Text(l10n.friendsRemoveBody),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l10n.friendsCancel),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(
-            l10n.friendsRemove,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ),
-      ],
-    ),
+    title: l10n.friendsRemove,
+    content: l10n.friendsRemoveBody,
+    cancelLabel: l10n.friendsCancel,
+    confirmLabel: l10n.friendsRemove,
+    destructive: true,
   );
 }
