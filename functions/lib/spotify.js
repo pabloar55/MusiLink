@@ -11,6 +11,7 @@ const defaultSpotifyMarket = 'ES';
 const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
+const spotifyRetryStatuses = new Set([429, 502, 503, 504]);
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -18,6 +19,10 @@ async function getSpotifyToken(clientId, clientSecret) {
     const now = Date.now();
     if (cachedToken && now < tokenExpiresAt - 60_000)
         return cachedToken;
+    if (!clientId.trim() || !clientSecret.trim()) {
+        v2_1.logger.error('Spotify credentials are not configured');
+        throw new https_1.HttpsError('failed-precondition', 'Spotify credentials are not configured');
+    }
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const res = await fetch('https://accounts.spotify.com/api/token', {
         method: 'POST',
@@ -28,13 +33,45 @@ async function getSpotifyToken(clientId, clientSecret) {
         body: 'grant_type=client_credentials',
     });
     if (!res.ok) {
-        v2_1.logger.error('Spotify token request failed', { status: res.status });
-        throw new https_1.HttpsError('internal', 'Failed to obtain Spotify token');
+        const errorBody = await readResponseSnippet(res);
+        v2_1.logger.error('Spotify token request failed', { status: res.status, errorBody });
+        throw new https_1.HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
     }
     const data = await res.json();
     cachedToken = data.access_token;
     tokenExpiresAt = now + data.expires_in * 1000;
     return cachedToken;
+}
+async function readResponseSnippet(res) {
+    try {
+        return (await res.text()).slice(0, 500);
+    }
+    catch {
+        return '';
+    }
+}
+async function sleep(ms) {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+}
+function retryDelayMs(res, attempt) {
+    const retryAfter = Number(res.headers.get('retry-after'));
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        return Math.min(retryAfter * 1000, 3000);
+    }
+    return 300 * (attempt + 1);
+}
+async function fetchSpotifyWithRetry(url, token) {
+    let lastResponse = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!spotifyRetryStatuses.has(res.status) || attempt === 2)
+            return res;
+        lastResponse = res;
+        await sleep(retryDelayMs(res, attempt));
+    }
+    return lastResponse;
 }
 function sanitizeSpotifyMarket(value) {
     if (typeof value !== 'string')
@@ -370,30 +407,44 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({ region: 'europe-southwest1'
 });
 // ── Function 2 — Search tracks ────────────────────────────────────────────────
 exports.searchSpotifyTracks = (0, https_1.onCall)({ region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret] }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError('unauthenticated', 'Login required');
-    const query = request.data.query?.trim() ?? '';
-    const limit = Math.min(Number(request.data.limit) || 20, 50);
-    if (!query)
-        return [];
-    const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
-    const url = new URL('https://api.spotify.com/v1/search');
-    url.searchParams.set('q', query);
-    url.searchParams.set('type', 'track');
-    url.searchParams.set('limit', String(limit));
-    const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-        v2_1.logger.error('Spotify searchTracks failed', { status: res.status, query });
-        throw new https_1.HttpsError('internal', 'Spotify search failed');
+    try {
+        if (!request.auth)
+            throw new https_1.HttpsError('unauthenticated', 'Login required');
+        const query = request.data.query?.trim() ?? '';
+        const limit = Math.min(Number(request.data.limit) || 20, 50);
+        if (!query)
+            return [];
+        const market = sanitizeSpotifyMarket(request.data.market);
+        const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
+        const url = new URL('https://api.spotify.com/v1/search');
+        url.searchParams.set('q', query);
+        url.searchParams.set('type', 'track');
+        url.searchParams.set('market', market);
+        url.searchParams.set('limit', String(limit));
+        const res = await fetchSpotifyWithRetry(url.toString(), token);
+        if (!res.ok) {
+            const errorBody = await readResponseSnippet(res);
+            v2_1.logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });
+            throw new https_1.HttpsError('unavailable', 'Spotify search failed', { status: res.status });
+        }
+        const data = await res.json();
+        const items = data.tracks?.items;
+        if (!Array.isArray(items)) {
+            v2_1.logger.error('Spotify searchTracks returned malformed response', { query });
+            throw new https_1.HttpsError('internal', 'Spotify search returned malformed response');
+        }
+        return items.map((item) => ({
+            title: item.name ?? 'Unknown',
+            artist: item.artists?.[0]?.name ?? 'Unknown Artist',
+            imageUrl: item.album?.images?.[0]?.url ?? '',
+            spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
+        }));
     }
-    const data = await res.json();
-    return data.tracks.items.map((item) => ({
-        title: item.name ?? 'Unknown',
-        artist: item.artists?.[0]?.name ?? 'Unknown Artist',
-        imageUrl: item.album?.images?.[0]?.url ?? '',
-        spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
-    }));
+    catch (error) {
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        v2_1.logger.error('Spotify searchTracks crashed', { error });
+        throw new https_1.HttpsError('internal', 'Spotify search crashed');
+    }
 });
 //# sourceMappingURL=spotify.js.map

@@ -1,9 +1,15 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 
 /// Reports a non-fatal error to Firebase Crashlytics.
 /// Silently ignores failures when Crashlytics is unavailable (e.g., in tests).
 Future<void> reportError(Object error, StackTrace stack) async {
+  if (kDebugMode) {
+    debugPrint('Reported error: $error');
+    debugPrintStack(stackTrace: stack);
+  }
+
   if (isNetworkError(error)) return;
 
   try {

@@ -43,8 +43,17 @@ class SpotifyCloudService {
         );
       }).toList();
     } catch (e, stack) {
-      await reportError(e, stack);
+      await reportError(_spotifySearchError('searchSpotifyTracks', e), stack);
       return [];
     }
   }
+}
+
+Object _spotifySearchError(String operation, Object error) {
+  if (error is! FirebaseFunctionsException) return error;
+
+  return StateError(
+    '$operation failed: code=${error.code}, '
+    'message=${error.message ?? ''}, details=${error.details ?? ''}',
+  );
 }

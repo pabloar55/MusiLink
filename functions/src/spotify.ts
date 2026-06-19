@@ -18,6 +18,11 @@ async function getSpotifyToken(clientId: string, clientSecret: string): Promise<
   const now = Date.now();
   if (cachedToken && now < tokenExpiresAt - 60_000) return cachedToken;
 
+  if (!clientId.trim() || !clientSecret.trim()) {
+    logger.error('Spotify credentials are not configured');
+    throw new HttpsError('failed-precondition', 'Spotify credentials are not configured');
+  }
+
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
@@ -29,14 +34,23 @@ async function getSpotifyToken(clientId: string, clientSecret: string): Promise<
   });
 
   if (!res.ok) {
-    logger.error('Spotify token request failed', { status: res.status });
-    throw new HttpsError('internal', 'Failed to obtain Spotify token');
+    const errorBody = await readResponseSnippet(res);
+    logger.error('Spotify token request failed', { status: res.status, errorBody });
+    throw new HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
   }
 
   const data = await res.json() as { access_token: string; expires_in: number };
   cachedToken = data.access_token;
   tokenExpiresAt = now + data.expires_in * 1000;
   return cachedToken;
+}
+
+async function readResponseSnippet(res: Response): Promise<string> {
+  try {
+    return (await res.text()).slice(0, 500);
+  } catch {
+    return '';
+  }
 }
 
 function sanitizeSpotifyMarket(value: unknown): string {
@@ -416,44 +430,57 @@ export const searchSpotifyArtists = onCall(
 export const searchSpotifyTracks = onCall(
   { region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret] },
   async (request): Promise<TrackResult[]> => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+    try {
+      if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
-    const query = (request.data.query as string | undefined)?.trim() ?? '';
-    const limit = Math.min(Number(request.data.limit) || 20, 50);
-    if (!query) return [];
+      const query = (request.data.query as string | undefined)?.trim() ?? '';
+      const limit = Math.min(Number(request.data.limit) || 20, 50);
+      if (!query) return [];
 
-    const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
+      const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 
-    const url = new URL('https://api.spotify.com/v1/search');
-    url.searchParams.set('q', query);
-    url.searchParams.set('type', 'track');
-    url.searchParams.set('limit', String(limit));
+      const url = new URL('https://api.spotify.com/v1/search');
+      url.searchParams.set('q', query);
+      url.searchParams.set('type', 'track');
+      url.searchParams.set('limit', String(limit));
 
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (!res.ok) {
-      logger.error('Spotify searchTracks failed', { status: res.status, query });
-      throw new HttpsError('internal', 'Spotify search failed');
-    }
+      if (!res.ok) {
+        const errorBody = await readResponseSnippet(res);
+        logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });
+        throw new HttpsError('unavailable', 'Spotify search failed', { status: res.status });
+      }
 
-    const data = await res.json() as {
-      tracks: {
-        items: Array<{
-          id: string;
-          name: string;
-          artists: Array<{ name: string }>;
-          album: { images: Array<{ url: string }> };
-        }>;
+      const data = await res.json() as {
+        tracks?: {
+          items?: Array<{
+            id?: string;
+            name?: string;
+            artists?: Array<{ name?: string }>;
+            album?: { images?: Array<{ url?: string }> };
+          }>;
+        };
       };
-    };
 
-    return data.tracks.items.map((item) => ({
-      title: item.name ?? 'Unknown',
-      artist: item.artists?.[0]?.name ?? 'Unknown Artist',
-      imageUrl: item.album?.images?.[0]?.url ?? '',
-      spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
-    }));
+      const items = data.tracks?.items;
+      if (!Array.isArray(items)) {
+        logger.error('Spotify searchTracks returned malformed response', { query });
+        throw new HttpsError('internal', 'Spotify search returned malformed response');
+      }
+
+      return items.map((item) => ({
+        title: item.name ?? 'Unknown',
+        artist: item.artists?.[0]?.name ?? 'Unknown Artist',
+        imageUrl: item.album?.images?.[0]?.url ?? '',
+        spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
+      }));
+    } catch (error: unknown) {
+      if (error instanceof HttpsError) throw error;
+      logger.error('Spotify searchTracks crashed', { error });
+      throw new HttpsError('internal', 'Spotify search crashed');
+    }
   },
 );
