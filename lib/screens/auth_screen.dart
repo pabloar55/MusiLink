@@ -239,8 +239,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword
-                                  ? LucideIcons.eyeOff
-                                  : LucideIcons.eye,
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                             ),
                             onPressed: () => setState(
                               () => _obscurePassword = !_obscurePassword,
