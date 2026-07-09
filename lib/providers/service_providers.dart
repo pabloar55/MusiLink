@@ -84,12 +84,14 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
 });
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService(
+  final service = AuthService(
     ref.watch(userServiceProvider),
     auth: ref.watch(firebaseAuthProvider),
     googleSignIn: ref.watch(googleSignInProvider),
     notificationService: ref.watch(notificationServiceProvider),
   );
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
 final Provider<SpotifyCloudService> spotifyClientServiceProvider =

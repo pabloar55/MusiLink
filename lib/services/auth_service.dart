@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:musi_link/services/notification_service.dart';
@@ -29,11 +29,19 @@ class AuthService {
   final GoogleSignIn _googleSignIn;
   final NotificationService _notificationService;
   static Future<void>? _googleInitialization;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _googleAuthSubscription;
 
   Future<void> _ensureGoogleInitialized() async {
     _googleInitialization ??= _googleSignIn.initialize();
     await _googleInitialization;
+    _googleAuthSubscription ??= _googleSignIn.authenticationEvents.listen(
+      (event) => unawaited(_handleGoogleAuthenticationEvent(event)),
+      onError: (Object error, StackTrace stack) =>
+          unawaited(reportError(error, stack)),
+    );
   }
+
+  Future<void> initializeGoogleSignIn() => _ensureGoogleInitialized();
 
   /// Usuario actual de Firebase
   User? get currentUser => _auth.currentUser;
@@ -100,31 +108,15 @@ class AuthService {
     try {
       await _ensureGoogleInitialized();
 
-      final googleUser =
-          defaultTargetPlatform == TargetPlatform.iOS &&
-              _googleSignIn.supportsAuthenticate()
+      if (kIsWeb) return null;
+
+      final googleUser = _googleSignIn.supportsAuthenticate()
           ? await _googleSignIn.authenticate()
           : await _googleSignIn.attemptLightweightAuthentication();
 
       if (googleUser == null) return null; // Usuario canceló
 
-      final googleAuth = googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-      );
-
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
-
-      if (user != null) {
-        final exists = await _userService.userExists(user.uid);
-        if (exists) {
-          await _userService.updateLastLogin(user.uid);
-        }
-        // New Google users: no profile created here.
-        // UsernameSetupScreen handles profile creation after they pick a username.
-      }
-      return user;
+      return _signInToFirebaseWithGoogleAccount(googleUser);
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
       rethrow;
@@ -138,6 +130,39 @@ class AuthService {
     }
   }
 
+  Future<void> _handleGoogleAuthenticationEvent(
+    GoogleSignInAuthenticationEvent event,
+  ) async {
+    if (event is! GoogleSignInAuthenticationEventSignIn) return;
+    try {
+      await _signInToFirebaseWithGoogleAccount(event.user);
+    } catch (e, stack) {
+      await reportError(e, stack);
+    }
+  }
+
+  Future<User?> _signInToFirebaseWithGoogleAccount(
+    GoogleSignInAccount googleUser,
+  ) async {
+    final googleAuth = googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+    );
+
+    final userCredential = await _auth.signInWithCredential(credential);
+    final user = userCredential.user;
+
+    if (user != null) {
+      final exists = await _userService.userExists(user.uid);
+      if (exists) {
+        await _userService.updateLastLogin(user.uid);
+      }
+      // New Google users: no profile created here.
+      // UsernameSetupScreen handles profile creation after they pick a username.
+    }
+    return user;
+  }
+
   /// Cierra sesión de Firebase y Google.
   /// Limpia el FCM token antes de cerrar sesión.
   Future<void> signOut() async {
@@ -149,6 +174,10 @@ class AuthService {
     }
     await _googleSignIn.signOut();
     await _auth.signOut();
+  }
+
+  Future<void> dispose() async {
+    await _googleAuthSubscription?.cancel();
   }
 
   /// Re-autentica con Google. Devuelve `false` si el usuario cancela

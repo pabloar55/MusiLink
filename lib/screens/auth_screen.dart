@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -6,6 +9,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/widgets/google_sign_in_web_button.dart';
 
 /// Pantalla de autenticación con Firebase.
 /// Permite login/registro con email+contraseña y Google Sign-In.
@@ -31,6 +35,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _obscurePassword = true;
 
   bool get _isLoading => _isEmailLoading || _isGoogleLoading;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      unawaited(ref.read(authServiceProvider).initializeGoogleSignIn());
+    }
+  }
 
   @override
   void dispose() {
@@ -169,209 +181,219 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset('assets/images/logo.png', width: 250),
-                const SizedBox(height: 12),
-                Text(
-                  l10n.authTagline,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 14,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset('assets/images/logo.png', width: 250),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.authTagline,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-                // Formulario
-                Form(
-                  key:
-                      _formKey, // Asociamos el formulario a la clave para hacer referencia desde fuera de la clase
-                  child: Column(
-                    children: [
-                      // Nombre (solo en registro)
-                      if (!_isLogin)
+                  // Formulario
+                  Form(
+                    key:
+                        _formKey, // Asociamos el formulario a la clave para hacer referencia desde fuera de la clase
+                    child: Column(
+                      children: [
+                        // Nombre (solo en registro)
+                        if (!_isLogin)
+                          TextFormField(
+                            controller: _nameController,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              labelText: l10n.authName,
+                              prefixIcon: const Icon(LucideIcons.circleUser),
+                            ),
+                            validator: (value) {
+                              if (!_isLogin &&
+                                  (value == null || value.trim().isEmpty)) {
+                                return l10n.authEnterName;
+                              }
+                              return null;
+                            },
+                          ),
+                        if (!_isLogin) const SizedBox(height: 16),
+
+                        // Email
                         TextFormField(
-                          controller: _nameController,
-                          textCapitalization: TextCapitalization.words,
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
                           decoration: InputDecoration(
-                            labelText: l10n.authName,
-                            prefixIcon: const Icon(LucideIcons.circleUser),
+                            labelText: l10n.authEmail,
+                            prefixIcon: const Icon(LucideIcons.mail),
                           ),
                           validator: (value) {
-                            if (!_isLogin &&
-                                (value == null || value.trim().isEmpty)) {
-                              return l10n.authEnterName;
+                            final email = value?.trim() ?? '';
+                            if (email.isEmpty) return l10n.authEnterEmail;
+                            if (!_emailRegex.hasMatch(email)) {
+                              return l10n.authInvalidEmail;
                             }
                             return null;
                           },
                         ),
-                      if (!_isLogin) const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // Email
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        autocorrect: false,
-                        decoration: InputDecoration(
-                          labelText: l10n.authEmail,
-                          prefixIcon: const Icon(LucideIcons.mail),
-                        ),
-                        validator: (value) {
-                          final email = value?.trim() ?? '';
-                          if (email.isEmpty) return l10n.authEnterEmail;
-                          if (!_emailRegex.hasMatch(email)) {
-                            return l10n.authInvalidEmail;
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Contraseña
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: l10n.authPassword,
-                          prefixIcon: const Icon(LucideIcons.lock),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
+                        // Contraseña
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: l10n.authPassword,
+                            prefixIcon: const Icon(LucideIcons.lock),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
                             ),
                           ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return l10n.authEnterPassword;
+                            }
+                            if (!_isLogin && value.length < 6) {
+                              return l10n.authMinChars;
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return l10n.authEnterPassword;
-                          }
-                          if (!_isLogin && value.length < 6) {
-                            return l10n.authMinChars;
-                          }
-                          return null;
-                        },
-                      ),
-                      if (_isLogin) ...[
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _isLoading
-                                ? null
-                                : _sendPasswordResetEmail,
-                            child: Text(l10n.authForgotPassword),
+                        if (_isLogin) ...[
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _isLoading
+                                  ? null
+                                  : _sendPasswordResetEmail,
+                              child: Text(l10n.authForgotPassword),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                      ] else
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 8),
+                        ] else
+                          const SizedBox(height: 24),
 
-                      // Botón principal
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: FilledButton(
-                          onPressed: _isLoading ? null : _submitEmailForm,
-                          child: _isEmailLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
+                        // Botón principal
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: _isLoading ? null : _submitEmailForm,
+                            child: _isEmailLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    _isLogin
+                                        ? l10n.authSignIn
+                                        : l10n.authCreateAccount,
                                   ),
-                                )
-                              : Text(
-                                  _isLogin
-                                      ? l10n.authSignIn
-                                      : l10n.authCreateAccount,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Divider
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          l10n.authOr,
+                          style: TextStyle(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Google Sign-In
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: kIsWeb
+                        ? const GoogleSignInWebButton()
+                        : OutlinedButton(
+                            onPressed: _isLoading ? null : _signInWithGoogle,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const FaIcon(
+                                      FontAwesomeIcons.google,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.authContinueGoogle),
+                                  ],
                                 ),
+                                if (_isGoogleLoading)
+                                  Positioned(
+                                    right: 0,
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Toggle login/registro
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _isLogin ? l10n.authNoAccount : l10n.authHaveAccount,
+                      ),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                setState(() => _isLogin = !_isLogin);
+                                _formKey.currentState?.reset();
+                              },
+                        child: Text(
+                          _isLogin ? l10n.authRegister : l10n.authLogin,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Divider
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        l10n.authOr,
-                        style: TextStyle(color: colorScheme.onSurfaceVariant),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Google Sign-In
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(l10n.authContinueGoogle),
-                          ],
-                        ),
-                        if (_isGoogleLoading)
-                          Positioned(
-                            right: 0,
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Toggle login/registro
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(_isLogin ? l10n.authNoAccount : l10n.authHaveAccount),
-                    TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () {
-                              setState(() => _isLogin = !_isLogin);
-                              _formKey.currentState?.reset();
-                            },
-                      child: Text(
-                        _isLogin ? l10n.authRegister : l10n.authLogin,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

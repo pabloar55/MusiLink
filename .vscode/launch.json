@@ -4,19 +4,31 @@
         {
             "name": "musi_link (debug)",
             "request": "launch",
-            "type": "dart"
+            "type": "dart",
+            "args": [
+                "--web-port",
+                "5002"
+            ]
         },
         {
             "name": "musi_link (profile)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile"
+            "flutterMode": "profile",
+            "args": [
+                "--web-port",
+                "5002"
+            ]
         },
         {
             "name": "musi_link (release)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "release"
+            "flutterMode": "release",
+            "args": [
+                "--web-port",
+                "5002"
+            ]
         }
     ]
 }

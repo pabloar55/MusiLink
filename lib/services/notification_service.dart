@@ -52,6 +52,8 @@ class NotificationService {
   static const _apnsTokenRetryDelay = Duration(milliseconds: 300);
 
   Future<void> initialize() async {
+    if (kIsWeb) return;
+
     // 1. iOS foreground presentation options
     await _messaging.setForegroundNotificationPresentationOptions(
       alert: true,
@@ -137,6 +139,8 @@ class NotificationService {
   Future<void> saveTokenIfGranted() async => _saveTokenIfGranted();
 
   Future<void> _saveTokenIfGranted() async {
+    if (kIsWeb) return;
+
     final settings = await _messaging.getNotificationSettings();
     final granted =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
@@ -145,6 +149,8 @@ class NotificationService {
   }
 
   Future<void> _requestPermissionAndSaveToken() async {
+    if (kIsWeb) return;
+
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -157,6 +163,8 @@ class NotificationService {
   }
 
   Future<void> _saveToken() async {
+    if (kIsWeb) return;
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
@@ -201,6 +209,8 @@ class NotificationService {
   }
 
   Future<void> clearToken() async {
+    if (kIsWeb) return;
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
