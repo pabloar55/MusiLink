@@ -14,7 +14,11 @@ class MockUser extends Mock implements User {}
 class MockUserCredential extends Mock implements UserCredential {}
 
 // ── Google Sign-In ───────────────────────────────────────────
-class MockGoogleSignIn extends Mock implements GoogleSignIn {}
+class MockGoogleSignIn extends Mock implements GoogleSignIn {
+  @override
+  Stream<GoogleSignInAuthenticationEvent> get authenticationEvents =>
+      const Stream.empty();
+}
 
 class MockGoogleSignInAccount extends Mock implements GoogleSignInAccount {}
 

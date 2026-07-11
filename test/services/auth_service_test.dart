@@ -257,7 +257,7 @@ void main() {
           final mockUser = MockUser();
           final mockCredential = MockUserCredential();
 
-          when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(true);
+          when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(false);
           when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
           when(
             () => mockGoogleSignIn.attemptLightweightAuthentication(),
@@ -340,7 +340,7 @@ void main() {
         final mockUser = MockUser();
         final mockCredential = MockUserCredential();
 
-        when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(true);
+        when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(false);
         when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
         when(
           () => mockGoogleSignIn.attemptLightweightAuthentication(),

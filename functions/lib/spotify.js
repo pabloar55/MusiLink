@@ -11,7 +11,6 @@ const defaultSpotifyMarket = 'ES';
 const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
-const spotifyRetryStatuses = new Set([429, 502, 503, 504]);
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -49,29 +48,6 @@ async function readResponseSnippet(res) {
     catch {
         return '';
     }
-}
-async function sleep(ms) {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-}
-function retryDelayMs(res, attempt) {
-    const retryAfter = Number(res.headers.get('retry-after'));
-    if (Number.isFinite(retryAfter) && retryAfter > 0) {
-        return Math.min(retryAfter * 1000, 3000);
-    }
-    return 300 * (attempt + 1);
-}
-async function fetchSpotifyWithRetry(url, token) {
-    let lastResponse = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!spotifyRetryStatuses.has(res.status) || attempt === 2)
-            return res;
-        lastResponse = res;
-        await sleep(retryDelayMs(res, attempt));
-    }
-    return lastResponse;
 }
 function sanitizeSpotifyMarket(value) {
     if (typeof value !== 'string')
@@ -414,14 +390,14 @@ exports.searchSpotifyTracks = (0, https_1.onCall)({ region: 'europe-southwest1',
         const limit = Math.min(Number(request.data.limit) || 20, 50);
         if (!query)
             return [];
-        const market = sanitizeSpotifyMarket(request.data.market);
         const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
         const url = new URL('https://api.spotify.com/v1/search');
         url.searchParams.set('q', query);
         url.searchParams.set('type', 'track');
-        url.searchParams.set('market', market);
         url.searchParams.set('limit', String(limit));
-        const res = await fetchSpotifyWithRetry(url.toString(), token);
+        const res = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) {
             const errorBody = await readResponseSnippet(res);
             v2_1.logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });

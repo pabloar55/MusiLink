@@ -17,6 +17,7 @@ import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
+import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
@@ -24,6 +25,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (message.data['type'] == 'new_message') {
+    await NotificationService.showBackgroundChatNotification(message.data);
+  }
   if (kDebugMode) debugPrint('FCM background: ${message.messageId}');
 }
 

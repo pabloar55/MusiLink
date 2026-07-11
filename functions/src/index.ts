@@ -95,10 +95,14 @@ async function sendNotification(
   const sound = recipientPrivateData?.notifSound !== false;
   const vibration = recipientPrivateData?.notifVibration !== false;
   const channelId = notifChannelId(sound, vibration);
+  const isChatMessage = data.type === 'new_message';
   try {
     await messaging.send({
       token,
-      notification,
+      // A top-level `notification` is rendered by Android's FCM SDK before
+      // Flutter can process it. Chat messages must instead be data-only on
+      // Android so the client can update one MessagingStyle notification.
+      ...(!isChatMessage ? { notification } : {}),
       data,
       android: {
         priority: 'high',
@@ -109,7 +113,14 @@ async function sendNotification(
       },
       apns: {
         ...(tag ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } } : {}),
-        payload: { aps: { ...(sound ? { sound: 'default' } : {}) } },
+        payload: {
+          aps: {
+            // iOS cannot build Android's MessagingStyle notification, so it
+            // keeps its native grouped alert per conversation.
+            ...(isChatMessage ? { alert: notification } : {}),
+            ...(sound ? { sound: 'default' } : {}),
+          },
+        },
       },
     });
   } catch (error: unknown) {
@@ -673,6 +684,9 @@ export const onNewMessage = onDocumentCreated(
       const senderName = senderSnap.data()?.displayName as string | undefined;
       if (!fcmToken || !senderName) return;
 
+      // Android receives this as a data-only message so the app can render a
+      // single MessagingStyle notification containing the recent messages of
+      // this conversation. iOS still receives a regular APNs alert below.
       await sendNotification(
         recipientId,
         recipientSnap.data(),
@@ -683,6 +697,7 @@ export const onNewMessage = onDocumentCreated(
           chatId,
           otherUserId: senderId,
           otherUserName: senderName,
+          messageText: (message.text as string | undefined) ?? '📎',
         },
         chatId,
       );

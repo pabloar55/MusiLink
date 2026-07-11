@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -50,6 +51,8 @@ class NotificationService {
   static const _permissionDialogShownKey = 'notification_pre_dialog_shown';
   static const _apnsTokenRetries = 5;
   static const _apnsTokenRetryDelay = Duration(milliseconds: 300);
+  static const _chatHistoryKey = 'chat_notification_history';
+  static const _maxMessagesPerChat = 5;
 
   Future<void> initialize() async {
     if (kIsWeb) return;
@@ -64,46 +67,7 @@ class NotificationService {
     // 2. Create Android notification channels.
     // On Android 8+ vibration is channel-scoped, so we need two channels:
     // one with vibration and one without.
-    final androidPlugin = _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: true,
-      ),
-    );
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelNoVibrationId,
-        _channelNoVibrationName,
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: false,
-      ),
-    );
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelNoSoundId,
-        _channelNoSoundName,
-        importance: Importance.high,
-        playSound: false,
-        enableVibration: true,
-      ),
-    );
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelSilentId,
-        _channelSilentName,
-        importance: Importance.high,
-        playSound: false,
-        enableVibration: false,
-      ),
-    );
+    await _createAndroidChannels(_localNotifications);
 
     // 3. Initialize local notifications plugin
     await _localNotifications.initialize(
@@ -113,6 +77,12 @@ class NotificationService {
       ),
       onDidReceiveNotificationResponse: _onLocalNotificationTapped,
     );
+    final launchDetails = await _localNotifications
+        .getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      final response = launchDetails?.notificationResponse;
+      if (response != null) await _onLocalNotificationTapped(response);
+    }
 
     // 4. Retry any FCM token clear that failed during a previous sign-out.
     await _retryPendingTokenClear();
@@ -255,10 +225,25 @@ class NotificationService {
   }
 
   void _onForegroundMessage(RemoteMessage message) {
+    final chatId = message.data['chatId'] as String?;
+    if (message.data['type'] == 'new_message' && chatId != null) {
+      if (chatId == _getActiveChatId()) return;
+      // Chat pushes are data-only on Android. Updating a local
+      // MessagingStyle notification keeps their recent messages together.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        unawaited(
+          _showChatNotification(
+            localNotifications: _localNotifications,
+            prefs: _prefs,
+            data: message.data,
+          ),
+        );
+      }
+      return;
+    }
+
     final n = message.notification;
     if (n == null) return;
-    final chatId = message.data['chatId'] as String?;
-    if (chatId != null && chatId == _getActiveChatId()) return;
     final vibrate = _prefs.getBool(kVibrationKey) ?? true;
     final sound = _prefs.getBool(kSoundKey) ?? true;
     final channelId = switch ((sound, vibrate)) {
@@ -295,16 +280,171 @@ class NotificationService {
     );
   }
 
+  /// Handles an Android data-only chat push while the app is in the
+  /// background or terminated. It must not depend on FirebaseAuth or UI state.
+  @pragma('vm:entry-point')
+  static Future<void> showBackgroundChatNotification(
+    Map<String, dynamic> data,
+  ) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final prefs = await SharedPreferences.getInstance();
+    final localNotifications = FlutterLocalNotificationsPlugin();
+    await _createAndroidChannels(localNotifications);
+    await localNotifications.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
+      ),
+    );
+    await _showChatNotification(
+      localNotifications: localNotifications,
+      prefs: prefs,
+      data: data,
+    );
+  }
+
+  static Future<void> _showChatNotification({
+    required FlutterLocalNotificationsPlugin localNotifications,
+    required SharedPreferences prefs,
+    required Map<String, dynamic> data,
+  }) async {
+    final chatId = data['chatId'] as String?;
+    final senderName = data['otherUserName'] as String?;
+    final messageText = data['messageText'] as String?;
+    if (chatId == null || senderName == null || messageText == null) return;
+
+    final messages = await _appendChatMessage(
+      prefs: prefs,
+      chatId: chatId,
+      senderName: senderName,
+      text: messageText,
+    );
+    final vibrate = prefs.getBool(kVibrationKey) ?? true;
+    final sound = prefs.getBool(kSoundKey) ?? true;
+    final channelId = switch ((sound, vibrate)) {
+      (true, true) => _channelId,
+      (true, false) => _channelNoVibrationId,
+      (false, true) => _channelNoSoundId,
+      (false, false) => _channelSilentId,
+    };
+    final channelName = switch ((sound, vibrate)) {
+      (true, true) => _channelName,
+      (true, false) => _channelNoVibrationName,
+      (false, true) => _channelNoSoundName,
+      (false, false) => _channelSilentName,
+    };
+    final styleMessages = messages
+        .map(
+          (message) => Message(
+            message['text']! as String,
+            DateTime.fromMillisecondsSinceEpoch(message['timestamp']! as int),
+            Person(name: message['senderName']! as String),
+          ),
+        )
+        .toList();
+    await localNotifications.show(
+      id: chatId.hashCode,
+      title: senderName,
+      body: messageText,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@drawable/ic_notification',
+          category: AndroidNotificationCategory.message,
+          groupKey: chatId,
+          styleInformation: MessagingStyleInformation(
+            const Person(name: 'Tú'),
+            conversationTitle: senderName,
+            groupConversation: false,
+            messages: styleMessages,
+          ),
+        ),
+      ),
+      payload: jsonEncode(data),
+    );
+  }
+
+  static Future<List<Map<String, Object>>> _appendChatMessage({
+    required SharedPreferences prefs,
+    required String chatId,
+    required String senderName,
+    required String text,
+  }) async {
+    final rawHistory = prefs.getString(_chatHistoryKey);
+    final history = rawHistory == null
+        ? <String, dynamic>{}
+        : jsonDecode(rawHistory) as Map<String, dynamic>;
+    final messages = (history[chatId] as List<dynamic>? ?? <dynamic>[])
+        .map((item) => Map<String, Object>.from(item as Map))
+        .toList();
+    messages.add({
+      'senderName': senderName,
+      'text': text,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    if (messages.length > _maxMessagesPerChat) {
+      messages.removeRange(0, messages.length - _maxMessagesPerChat);
+    }
+    history[chatId] = messages;
+    await prefs.setString(_chatHistoryKey, jsonEncode(history));
+    return messages;
+  }
+
+  static Future<void> _createAndroidChannels(
+    FlutterLocalNotificationsPlugin localNotifications,
+  ) async {
+    final androidPlugin = localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    for (final channel in const [
+      AndroidNotificationChannel(
+        _channelId,
+        _channelName,
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      ),
+      AndroidNotificationChannel(
+        _channelNoVibrationId,
+        _channelNoVibrationName,
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: false,
+      ),
+      AndroidNotificationChannel(
+        _channelNoSoundId,
+        _channelNoSoundName,
+        importance: Importance.high,
+        playSound: false,
+        enableVibration: true,
+      ),
+      AndroidNotificationChannel(
+        _channelSilentId,
+        _channelSilentName,
+        importance: Importance.high,
+        playSound: false,
+        enableVibration: false,
+      ),
+    ]) {
+      await androidPlugin?.createNotificationChannel(channel);
+    }
+  }
+
   /// Elimina de la bandeja todas las notificaciones asociadas a un chat.
-  /// Cubre tanto las mostradas en foreground (`id = chatId.hashCode`) como
-  /// las que pintó FCM en background/closed (`tag = chatId` / `groupKey = chatId`).
-  ///
-  /// En iOS la cancelación de notificaciones de FCM no es accesible desde el
-  /// plugin (la identidad la asigna APNs), pero `apns-collapse-id` garantiza
-  /// que sólo haya una notificación por chat en la bandeja.
+  /// Android uses `id = chatId.hashCode` in every app state; iOS keeps its
+  /// native APNs grouping through `apns-collapse-id`.
   Future<void> cancelChatNotifications(String chatId) async {
     try {
       await _localNotifications.cancel(id: chatId.hashCode);
+      final rawHistory = _prefs.getString(_chatHistoryKey);
+      if (rawHistory != null) {
+        final history = jsonDecode(rawHistory) as Map<String, dynamic>;
+        history.remove(chatId);
+        await _prefs.setString(_chatHistoryKey, jsonEncode(history));
+      }
       final active = await _localNotifications.getActiveNotifications();
       for (final n in active) {
         if (n.tag != chatId && n.groupKey != chatId) continue;
