@@ -20,7 +20,7 @@ dependencies:
   flutter_secure_storage: ^10.3.1 # Para guardar el token de forma segura
   cloud_functions: ^6.3.3
   font_awesome_flutter: ^11.0.0 # Para iconos
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.9
   lucide_icons_flutter: ^3.1.15
   url_launcher: ^6.3.2
   shared_preferences: ^2.5.5
