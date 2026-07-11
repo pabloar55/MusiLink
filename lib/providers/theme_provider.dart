@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 
@@ -16,7 +17,7 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
     // Carga sincrónica desde el SharedPreferences ya inicializado en main.
     final prefs = ref.read(sharedPreferencesProvider);
     final saved = prefs.getString(_kThemeKey);
-    return _values[saved] ?? ThemeMode.dark;
+    return _values[saved] ?? (kIsWeb ? ThemeMode.system : ThemeMode.dark);
   }
 
   bool get isDark {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/cupertino.dart';
@@ -109,7 +110,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
   }
 
   bool get _usesCupertinoTabBar {
-    return defaultTargetPlatform == TargetPlatform.iOS ||
+    return kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
   }
 
@@ -138,6 +140,56 @@ class _MainScreenState extends ConsumerState<MainScreen>
         .watch(receivedRequestsProvider)
         .maybeWhen(data: (list) => list.length, orElse: () => 0);
 
+    final bottomNavigationBar = _usesCupertinoTabBar
+        ? _CupertinoMainTabBar(
+            currentIndex: currentPageIndex,
+            unreadChats: unreadChats,
+            pendingCount: pendingCount,
+            onTap: _selectPage,
+            discoverLabel: l10n.navDiscover,
+            statsLabel: l10n.navStats,
+            messagesLabel: l10n.navMessages,
+            friendsLabel: l10n.navFriends,
+          )
+        : TooltipVisibility(
+            visible: false,
+            child: NavigationBar(
+              height: kIsWeb ? 72 : null,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(LucideIcons.compass500),
+                  label: l10n.navDiscover,
+                ),
+                NavigationDestination(
+                  icon: const Icon(LucideIcons.crown),
+                  label: l10n.navStats,
+                ),
+                NavigationDestination(
+                  icon: Badge(
+                    isLabelVisible: unreadChats > 0,
+                    label: unreadChats > 9
+                        ? const Text('9+')
+                        : Text('$unreadChats'),
+                    child: const Icon(LucideIcons.messageCircle500),
+                  ),
+                  label: l10n.navMessages,
+                ),
+                NavigationDestination(
+                  icon: Badge(
+                    isLabelVisible: pendingCount > 0,
+                    label: pendingCount > 9
+                        ? const Text('9+')
+                        : Text('$pendingCount'),
+                    child: const Icon(LucideIcons.users500),
+                  ),
+                  label: l10n.navFriends,
+                ),
+              ],
+              selectedIndex: currentPageIndex,
+              onDestinationSelected: _selectPage,
+            ),
+          );
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.surface,
@@ -156,54 +208,32 @@ class _MainScreenState extends ConsumerState<MainScreen>
         children: screens,
       ),
 
-      bottomNavigationBar: _usesCupertinoTabBar
-          ? _CupertinoMainTabBar(
-              currentIndex: currentPageIndex,
-              unreadChats: unreadChats,
-              pendingCount: pendingCount,
-              onTap: _selectPage,
-              discoverLabel: l10n.navDiscover,
-              statsLabel: l10n.navStats,
-              messagesLabel: l10n.navMessages,
-              friendsLabel: l10n.navFriends,
-            )
-          : TooltipVisibility(
-              visible: false,
-              child: NavigationBar(
-                destinations: [
-                  NavigationDestination(
-                    icon: const Icon(LucideIcons.compass500),
-                    label: l10n.navDiscover,
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(LucideIcons.crown),
-                    label: l10n.navStats,
-                  ),
-                  NavigationDestination(
-                    icon: Badge(
-                      isLabelVisible: unreadChats > 0,
-                      label: unreadChats > 9
-                          ? const Text('9+')
-                          : Text('$unreadChats'),
-                      child: const Icon(LucideIcons.messageCircle500),
-                    ),
-                    label: l10n.navMessages,
-                  ),
-                  NavigationDestination(
-                    icon: Badge(
-                      isLabelVisible: pendingCount > 0,
-                      label: pendingCount > 9
-                          ? const Text('9+')
-                          : Text('$pendingCount'),
-                      child: const Icon(LucideIcons.users500),
-                    ),
-                    label: l10n.navFriends,
-                  ),
-                ],
-                selectedIndex: currentPageIndex,
-                onDestinationSelected: _selectPage,
-              ),
-            ),
+      bottomNavigationBar: kIsWeb
+          ? _WebBottomNavigationSafeArea(child: bottomNavigationBar)
+          : bottomNavigationBar,
+    );
+  }
+}
+
+class _WebBottomNavigationSafeArea extends StatelessWidget {
+  const _WebBottomNavigationSafeArea({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = MediaQuery.paddingOf(context);
+
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surface,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: math.max(padding.left, 8),
+          right: math.max(padding.right, 8),
+          bottom: math.max(padding.bottom, 12),
+        ),
+        child: child,
+      ),
     );
   }
 }
@@ -238,6 +268,7 @@ class _CupertinoMainTabBar extends StatelessWidget {
       onTap: onTap,
       activeColor: cs.primary,
       inactiveColor: cs.onSurfaceVariant,
+      iconSize: 24,
       backgroundColor: cs.surface,
       border: Border(top: BorderSide(color: cs.outlineVariant)),
       items: [
