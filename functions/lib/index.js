@@ -105,10 +105,18 @@ tag) {
             data,
             android: {
                 priority: 'high',
-                notification: {
-                    channelId,
-                    ...(tag ? { tag } : {}),
-                },
+                // A platform notification block makes FCM treat the push as a
+                // notification message on Android. For chats that would create an
+                // additional empty system notification before the data-only handler
+                // builds the app's MessagingStyle notification.
+                ...(!isChatMessage
+                    ? {
+                        notification: {
+                            channelId,
+                            ...(tag ? { tag } : {}),
+                        },
+                    }
+                    : {}),
             },
             apns: {
                 ...(tag ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } } : {}),
