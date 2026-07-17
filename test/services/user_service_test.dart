@@ -414,7 +414,10 @@ void main() {
 
         final publicUpdate = Map<String, dynamic>.from(
           verify(
-                () => mockBatch.update(mockUserDocRef, captureAny()),
+                () => mockBatch.update<Map<String, dynamic>>(
+                  mockUserDocRef,
+                  captureAny(),
+                ),
               ).captured.single
               as Map,
         );

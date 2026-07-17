@@ -15,8 +15,8 @@
 ## Tecnologías
 
 - **Framework:** Flutter SDK ^3.11.5 (Dart)
-- **Versión de app:** 1.0.1+3
-- **Backend:** Firebase Auth, Firestore, Cloud Functions, Storage, Analytics, Crashlytics y FCM
+- **Versión de app:** 1.0.6+10
+- **Backend:** Firebase Auth, Firestore, Cloud Functions, Remote Config, Storage, Analytics, Crashlytics y FCM
 - **Búsqueda musical:** Spotify Web API vía Cloud Functions, con apoyo de Last.fm para géneros y artistas similares
 - **Internacionalización:** `flutter_localizations` + `intl` (EN, ES, FR, EL)
 - **Gestión de estado:** Riverpod (`flutter_riverpod` ^3.3.1)
@@ -151,6 +151,10 @@ splash -> auth -> username-setup -> artist-select -> onboarding -> photo-setup -
 ```
 
 Desde `main` se accede a búsqueda de usuarios, perfiles, chats, ajustes, usuarios bloqueados y política de privacidad. `AppRouterNotifier` escucha `FirebaseAuth.authStateChanges()` y redirige según si el usuario está autenticado y ha completado el onboarding.
+
+## Actualizaciones obligatorias
+
+Firebase Remote Config define la build mínima admitida. Android usa la interfaz nativa de Google Play In-App Updates en modo inmediato; iOS abre App Store. La configuración y el orden seguro de publicación están en [`docs/mandatory_updates.md`](docs/mandatory_updates.md).
 
 ## Privacidad y Seguridad
 

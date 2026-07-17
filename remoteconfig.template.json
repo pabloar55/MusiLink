@@ -1,0 +1,43 @@
+{
+  "conditions": [],
+  "parameters": {
+    "force_update_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Interruptor global de la pantalla de actualización obligatoria.",
+      "valueType": "BOOLEAN"
+    },
+    "minimum_android_build": {
+      "defaultValue": {
+        "value": "0"
+      },
+      "description": "versionCode mínimo admitido en Android.",
+      "valueType": "NUMBER"
+    },
+    "minimum_ios_build": {
+      "defaultValue": {
+        "value": "0"
+      },
+      "description": "CFBundleVersion mínimo admitido en iOS.",
+      "valueType": "NUMBER"
+    },
+    "android_store_url": {
+      "defaultValue": {
+        "value": "https://play.google.com/store/apps/details?id=app.musilink"
+      },
+      "description": "URL pública de MusiLink en Google Play.",
+      "valueType": "STRING"
+    },
+    "ios_store_url": {
+      "defaultValue": {
+        "value": "https://apps.apple.com/search?term=MusiLink"
+      },
+      "description": "Sustituir por la URL exacta de App Store Connect antes de bloquear iOS.",
+      "valueType": "STRING"
+    }
+  },
+  "version": {
+    "description": "Configuración base de actualización obligatoria de MusiLink."
+  }
+}

@@ -263,4 +263,17 @@
   "privacyS9Body": "Pour toute question concernant cette Politique de Confidentialité ou le traitement de vos données personnelles, contactez-nous à :\n\nPablo Armas\narmasp80@gmail.com",
   "privacyS10Title": "10. Transferts internationaux de données",
   "privacyS10Body": "Les photos de profil sont stockées dans Google Firebase Storage avec des serveurs situés aux États-Unis. En utilisant l'application, vous autorisez explicitement ce transfert international de données d'images. Google a mis en place les mesures techniques et organisationnelles nécessaires en vertu des Clauses Contractuelles Types approuvées par la Commission Européenne (Art. 46 RGPD) pour garantir un niveau de protection adéquat équivalent à celui de l'UE.\n\nVos données personnelles, messages et données de profil musical sont stockés sur des serveurs situés dans la région européenne (europe-southwest1), au sein de l'UE."
+  ,
+  "updateRequiredTitle": "Mise à jour requise",
+  "updateRequiredBody": "Une nouvelle version de MusiLink est nécessaire pour continuer. Mettez l'application à jour afin de sécuriser votre compte et vos discussions.",
+  "updateCurrentVersion": "Version installée : {version} ({build})",
+  "@updateCurrentVersion": {
+    "placeholders": {
+      "version": { "type": "String" },
+      "build": { "type": "int" }
+    }
+  },
+  "updateNowButton": "Mettre à jour",
+  "updateRetryButton": "Vérifier à nouveau",
+  "updateStoreOpenError": "Impossible d'ouvrir la boutique. Vérifiez votre connexion et réessayez."
 }

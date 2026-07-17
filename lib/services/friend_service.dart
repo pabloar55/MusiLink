@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -23,11 +24,14 @@ class FriendService with AuthenticatedService {
   FriendService({
     required FirebaseFirestore firestore,
     required FirebaseAuth auth,
+    required FirebaseFunctions functions,
   }) : _firestore = firestore,
-       _auth = auth;
+       _auth = auth,
+       _functions = functions;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
   @override
   FirebaseAuth get auth => _auth;
@@ -84,7 +88,6 @@ class FriendService with AuthenticatedService {
       final inverseDocRef = _requestsRef.doc('${receiverUid}_$currentUid');
       final limiterRef = _rateLimitsRef.doc(currentUid);
       final currentUserRef = _privateUsersRef.doc(currentUid);
-      final receiverUserRef = _privateUsersRef.doc(receiverUid);
       final receiverPublicRef = _usersRef.doc(receiverUid);
       await _firestore.runTransaction((tx) async {
         final receiverPublicSnap = await tx.get(receiverPublicRef);
@@ -109,16 +112,9 @@ class FriendService with AuthenticatedService {
         if (inverseSnapshot.exists &&
             inverseSnapshot.data()?['status'] ==
                 FriendRequestStatus.pending.name) {
-          tx.update(inverseDocRef, {
-            'status': FriendRequestStatus.accepted.name,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-          tx.update(currentUserRef, {
-            'friends': FieldValue.arrayUnion([receiverUid]),
-          });
-          tx.update(receiverUserRef, {
-            'friends': FieldValue.arrayUnion([currentUid]),
-          });
+          // El usuario actual es el receptor de la solicitud inversa. No se
+          // autoacepta: debe pasar por acceptFriendRequest para que solo una
+          // acción explícita del receptor cree la amistad en el backend.
           return;
         }
 
@@ -144,39 +140,12 @@ class FriendService with AuthenticatedService {
   }
 
   /// Acepta una solicitud de amistad.
-  /// Actualiza el status y añade ambos UIDs a la lista de amigos de cada uno.
-  /// Usa una transaction para evitar race conditions si dos dispositivos
-  /// aceptan la misma solicitud simultáneamente.
+  /// La callable valida que el usuario actual sea el receptor y crea ambos
+  /// lados de la amistad mediante una transacción privilegiada.
   Future<void> acceptRequest(String requestId, String otherUid) async {
     try {
-      await _firestore.runTransaction((tx) async {
-        final requestRef = _requestsRef.doc(requestId);
-        final requestDoc = await tx.get(requestRef);
-
-        if (!requestDoc.exists ||
-            requestDoc['status'] != FriendRequestStatus.pending.name) {
-          return; // ya fue aceptada o rechazada
-        }
-
-        final senderId = (requestDoc.data()?['senderId'] ?? otherUid)
-            .toString();
-        final receiverId = (requestDoc.data()?['receiverId'] ?? currentUid)
-            .toString();
-        final inverseRef = _requestsRef.doc('${receiverId}_$senderId');
-        final inverseSnap = await tx.get(inverseRef);
-
-        tx.update(requestRef, {
-          'status': FriendRequestStatus.accepted.name,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        tx.update(_privateUsersRef.doc(currentUid), {
-          'friends': FieldValue.arrayUnion([otherUid]),
-        });
-        tx.update(_privateUsersRef.doc(otherUid), {
-          'friends': FieldValue.arrayUnion([currentUid]),
-        });
-        if (inverseSnap.exists) tx.delete(inverseRef);
-      });
+      final callable = _functions.httpsCallable('acceptFriendRequest');
+      await callable.call<void>({'requestId': requestId, 'senderId': otherUid});
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;

@@ -121,7 +121,7 @@ void main() {
     });
 
     group('sendMessage', () {
-      test('crea mensaje y actualiza lastMessage del chat', () async {
+      test('crea mensaje y deja el resumen al backend', () async {
         final mockChatDocRef = MockDocumentReference();
         final mockMessagesCol = MockMessagesCollectionRef();
         final mockMsgDocRef = MockDocumentReference();
@@ -147,7 +147,7 @@ void main() {
           otherUid: 'other_uid',
         );
 
-        // Verificar que se creó el mensaje y se actualizó el chat
+        // El cliente crea el mensaje; el trigger actualiza el resumen.
         final setCall = fakeTransaction.sets
             .firstWhere((entry) => entry.key == mockMsgDocRef)
             .value;
@@ -155,11 +155,7 @@ void main() {
         expect(setCall['senderId'], 'current_uid');
         expect(setCall['timestamp'], isA<FieldValue>());
 
-        final updateCall = fakeTransaction.updates
-            .firstWhere((entry) => entry.key == mockChatDocRef)
-            .value;
-        expect(updateCall['lastMessage'], 'Hello!');
-        expect(updateCall['lastMessageTime'], isA<FieldValue>());
+        expect(fakeTransaction.updates, isEmpty);
 
         final limiterData = fakeTransaction.sets
             .firstWhere((entry) => entry.key == mockRateLimitDocRef)
@@ -247,12 +243,7 @@ void main() {
         expect(setCall['trackData'], isNotNull);
         expect(setCall['timestamp'], isA<FieldValue>());
 
-        // Verificar lastMessage con emoji
-        final updateCall = fakeTransaction.updates
-            .firstWhere((entry) => entry.key == mockChatDocRef)
-            .value;
-        expect(updateCall['lastMessage'], contains('Bohemian Rhapsody'));
-        expect(updateCall['lastMessageTime'], isA<FieldValue>());
+        expect(fakeTransaction.updates, isEmpty);
         final limiterData = fakeTransaction.sets
             .firstWhere((entry) => entry.key == mockRateLimitDocRef)
             .value;

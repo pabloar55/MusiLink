@@ -66,6 +66,7 @@ final friendServiceProvider = Provider<FriendService>((ref) {
   return FriendService(
     firestore: ref.watch(firebaseFirestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
   );
 });
 

@@ -298,4 +298,17 @@
   "privacyS9Body": "For any questions about this Privacy Policy or the processing of your data, please contact:\n\nPablo Armas\narmasp80@gmail.com",
   "privacyS10Title": "10. International Data Transfers",
   "privacyS10Body": "Profile photos are stored in Google Firebase Storage with servers located in the United States. By using the App, you explicitly authorise this international data transfer of image data. Google has implemented the necessary technical and organisational measures under the Standard Contractual Clauses approved by the European Commission (Art. 46 GDPR) to ensure an adequate level of protection equivalent to that in the EU.\n\nYour personal data, messages, and music profile data are stored on servers located in the European region (europe-southwest1), within the EU."
+  ,
+  "updateRequiredTitle": "Update required",
+  "updateRequiredBody": "A new version of MusiLink is required to continue. Update now to keep your account and chats working securely.",
+  "updateCurrentVersion": "Installed version: {version} ({build})",
+  "@updateCurrentVersion": {
+    "placeholders": {
+      "version": { "type": "String" },
+      "build": { "type": "int" }
+    }
+  },
+  "updateNowButton": "Update now",
+  "updateRetryButton": "Check again",
+  "updateStoreOpenError": "We couldn't open the store. Check your connection and try again."
 }

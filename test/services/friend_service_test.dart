@@ -10,6 +10,7 @@ import '../helpers/mocks.dart';
 void main() {
   late MockFirebaseFirestore mockFirestore;
   late MockFirebaseAuth mockAuth;
+  late MockFirebaseFunctions mockFunctions;
   late MockCollectionReference mockRequestsRef;
   late MockCollectionReference mockUsersRef;
   late MockCollectionReference mockRateLimitsRef;
@@ -19,6 +20,7 @@ void main() {
   setUp(() {
     mockFirestore = MockFirebaseFirestore();
     mockAuth = MockFirebaseAuth();
+    mockFunctions = MockFirebaseFunctions();
     mockRequestsRef = MockCollectionReference();
     mockUsersRef = MockCollectionReference();
     mockRateLimitsRef = MockCollectionReference();
@@ -37,7 +39,11 @@ void main() {
     when(() => mockAuth.currentUser).thenReturn(mockCurrentUser);
     when(() => mockCurrentUser.uid).thenReturn('current_uid');
 
-    friendService = FriendService(firestore: mockFirestore, auth: mockAuth);
+    friendService = FriendService(
+      firestore: mockFirestore,
+      auth: mockAuth,
+      functions: mockFunctions,
+    );
     registerFallbackValues();
   });
 
@@ -181,81 +187,57 @@ void main() {
         expect(fakeTransaction.updates, isEmpty);
       });
 
-      test(
-        'acepta solicitud inversa pendiente en vez de crear duplicado',
-        () async {
-          final fakeTransaction = FakeTransaction();
-          mockFirestore.fakeTransaction = fakeTransaction;
+      test('no autoacepta una solicitud inversa pendiente', () async {
+        final fakeTransaction = FakeTransaction();
+        mockFirestore.fakeTransaction = fakeTransaction;
 
-          final mockCurrentUserDoc = MockDocumentReference();
-          final mockReceiverUserDoc = MockDocumentReference();
-          when(
-            () => mockUsersRef.doc('current_uid'),
-          ).thenReturn(mockCurrentUserDoc);
-          when(
-            () => mockUsersRef.doc('receiver_uid'),
-          ).thenReturn(mockReceiverUserDoc);
+        final mockCurrentUserDoc = MockDocumentReference();
+        final mockReceiverUserDoc = MockDocumentReference();
+        when(
+          () => mockUsersRef.doc('current_uid'),
+        ).thenReturn(mockCurrentUserDoc);
+        when(
+          () => mockUsersRef.doc('receiver_uid'),
+        ).thenReturn(mockReceiverUserDoc);
 
-          final mockCurrentUserSnap = MockDocumentSnapshot();
-          when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
-          final mockReceiverPublicSnap = MockDocumentSnapshot();
-          when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-          when(
-            () => mockReceiverPublicSnap.data(),
-          ).thenReturn({'username': 'receiver'});
-          final mockInverseSnap = MockDocumentSnapshot();
-          when(() => mockInverseSnap.exists).thenReturn(true);
-          when(() => mockInverseSnap.data()).thenReturn({
-            'senderId': 'receiver_uid',
-            'receiverId': 'current_uid',
-            'status': 'pending',
-          });
-          fakeTransaction.getResults.addAll([
-            mockReceiverPublicSnap,
-            mockCurrentUserSnap,
-            mockInverseSnap,
-          ]);
+        final mockCurrentUserSnap = MockDocumentSnapshot();
+        when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
+        final mockReceiverPublicSnap = MockDocumentSnapshot();
+        when(() => mockReceiverPublicSnap.exists).thenReturn(true);
+        when(
+          () => mockReceiverPublicSnap.data(),
+        ).thenReturn({'username': 'receiver'});
+        final mockInverseSnap = MockDocumentSnapshot();
+        when(() => mockInverseSnap.exists).thenReturn(true);
+        when(() => mockInverseSnap.data()).thenReturn({
+          'senderId': 'receiver_uid',
+          'receiverId': 'current_uid',
+          'status': 'pending',
+        });
+        fakeTransaction.getResults.addAll([
+          mockReceiverPublicSnap,
+          mockCurrentUserSnap,
+          mockInverseSnap,
+        ]);
 
-          final mockForwardDocRef = MockDocumentReference();
-          final mockInverseDocRef = MockDocumentReference();
-          when(
-            () => mockRequestsRef.doc('current_uid_receiver_uid'),
-          ).thenReturn(mockForwardDocRef);
-          when(
-            () => mockRequestsRef.doc('receiver_uid_current_uid'),
-          ).thenReturn(mockInverseDocRef);
-          final mockRateLimitDocRef = MockDocumentReference();
-          when(
-            () => mockRateLimitsRef.doc('current_uid'),
-          ).thenReturn(mockRateLimitDocRef);
+        final mockForwardDocRef = MockDocumentReference();
+        final mockInverseDocRef = MockDocumentReference();
+        when(
+          () => mockRequestsRef.doc('current_uid_receiver_uid'),
+        ).thenReturn(mockForwardDocRef);
+        when(
+          () => mockRequestsRef.doc('receiver_uid_current_uid'),
+        ).thenReturn(mockInverseDocRef);
+        final mockRateLimitDocRef = MockDocumentReference();
+        when(
+          () => mockRateLimitsRef.doc('current_uid'),
+        ).thenReturn(mockRateLimitDocRef);
 
-          await friendService.sendRequest('receiver_uid');
+        await friendService.sendRequest('receiver_uid');
 
-          expect(fakeTransaction.sets, isEmpty);
-          expect(
-            fakeTransaction.updates.any(
-              (e) =>
-                  e.key == mockInverseDocRef && e.value['status'] == 'accepted',
-            ),
-            isTrue,
-          );
-          expect(
-            fakeTransaction.updates.any(
-              (e) =>
-                  e.key == mockCurrentUserDoc && e.value.containsKey('friends'),
-            ),
-            isTrue,
-          );
-          expect(
-            fakeTransaction.updates.any(
-              (e) =>
-                  e.key == mockReceiverUserDoc &&
-                  e.value.containsKey('friends'),
-            ),
-            isTrue,
-          );
-        },
-      );
+        expect(fakeTransaction.sets, isEmpty);
+        expect(fakeTransaction.updates, isEmpty);
+      });
 
       test('propaga error si Firestore falla', () async {
         when(
@@ -270,58 +252,23 @@ void main() {
     });
 
     group('acceptRequest', () {
-      test('actualiza status y añade amigos a ambos usuarios', () async {
-        final fakeTransaction = FakeTransaction();
-        mockFirestore.fakeTransaction = fakeTransaction;
-
-        final mockRequestDoc = MockDocumentReference();
-        when(() => mockRequestsRef.doc('req_123')).thenReturn(mockRequestDoc);
-        final mockInverseDoc = MockDocumentReference();
+      test('delega la aceptación en la callable privilegiada', () async {
+        final mockCallable = MockHttpsCallable();
         when(
-          () => mockRequestsRef.doc('current_uid_other_uid'),
-        ).thenReturn(mockInverseDoc);
-
-        final mockCurrentUserDoc = MockDocumentReference();
-        final mockOtherUserDoc = MockDocumentReference();
+          () => mockFunctions.httpsCallable('acceptFriendRequest'),
+        ).thenReturn(mockCallable);
         when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-
-        final mockRequestSnap = MockDocumentSnapshot();
-        when(() => mockRequestSnap.exists).thenReturn(true);
-        when(() => mockRequestSnap['status']).thenReturn('pending');
-        when(() => mockRequestSnap.data()).thenReturn({
-          'senderId': 'other_uid',
-          'receiverId': 'current_uid',
-          'status': 'pending',
-        });
-        fakeTransaction.getResult = mockRequestSnap;
+          () => mockCallable.call<void>(any()),
+        ).thenAnswer((_) async => MockHttpsCallableResult<void>());
 
         await friendService.acceptRequest('req_123', 'other_uid');
 
-        expect(fakeTransaction.getCalled, isTrue);
-
-        expect(
-          fakeTransaction.updates.any(
-            (e) => e.key == mockRequestDoc && e.value['status'] == 'accepted',
-          ),
-          isTrue,
-        );
-        expect(
-          fakeTransaction.updates.any(
-            (e) =>
-                e.key == mockCurrentUserDoc && e.value.containsKey('friends'),
-          ),
-          isTrue,
-        );
-        expect(
-          fakeTransaction.updates.any(
-            (e) => e.key == mockOtherUserDoc && e.value.containsKey('friends'),
-          ),
-          isTrue,
-        );
-        expect(fakeTransaction.deletes, [mockInverseDoc]);
+        verify(
+          () => mockCallable.call<void>({
+            'requestId': 'req_123',
+            'senderId': 'other_uid',
+          }),
+        ).called(1);
       });
     });
 

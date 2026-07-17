@@ -9,6 +9,18 @@
   "functions": {
     "source": "functions"
   },
+  "remoteconfig": {
+    "template": "remoteconfig.template.json"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  },
   "flutter": {
     "platforms": {
       "android": {

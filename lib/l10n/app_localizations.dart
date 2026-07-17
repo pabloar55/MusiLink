@@ -1361,6 +1361,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Profile photos are stored in Google Firebase Storage with servers located in the United States. By using the App, you explicitly authorise this international data transfer of image data. Google has implemented the necessary technical and organisational measures under the Standard Contractual Clauses approved by the European Commission (Art. 46 GDPR) to ensure an adequate level of protection equivalent to that in the EU.\n\nYour personal data, messages, and music profile data are stored on servers located in the European region (europe-southwest1), within the EU.'**
   String get privacyS10Body;
+
+  /// No description provided for @updateRequiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update required'**
+  String get updateRequiredTitle;
+
+  /// No description provided for @updateRequiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A new version of MusiLink is required to continue. Update now to keep your account and chats working securely.'**
+  String get updateRequiredBody;
+
+  /// No description provided for @updateCurrentVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed version: {version} ({build})'**
+  String updateCurrentVersion(String version, int build);
+
+  /// No description provided for @updateNowButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Update now'**
+  String get updateNowButton;
+
+  /// No description provided for @updateRetryButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get updateRetryButton;
+
+  /// No description provided for @updateStoreOpenError.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t open the store. Check your connection and try again.'**
+  String get updateStoreOpenError;
 }
 
 class _AppLocalizationsDelegate

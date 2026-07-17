@@ -33,10 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
+const https_1 = require("firebase-functions/v2/https");
 const firestore_2 = require("firebase-admin/firestore");
 var spotify_1 = require("./spotify");
 Object.defineProperty(exports, "searchSpotifyArtists", { enumerable: true, get: function () { return spotify_1.searchSpotifyArtists; } });
@@ -178,6 +179,69 @@ function stringList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
+function userHasBlocked(data, otherUid) {
+    return stringList(data?.blockedUsers).includes(otherUid);
+}
+async function establishAcceptedFriendship(requestId, expectedReceiverId, expectedSenderId) {
+    const requestRef = db.collection('friend_requests').doc(requestId);
+    return db.runTransaction(async (tx) => {
+        const requestSnap = await tx.get(requestRef);
+        if (!requestSnap.exists) {
+            throw new https_1.HttpsError('not-found', 'Friend request not found.');
+        }
+        const requestData = requestSnap.data();
+        const senderId = requestData?.senderId;
+        const receiverId = requestData?.receiverId;
+        const status = requestData?.status;
+        if (typeof senderId !== 'string' ||
+            typeof receiverId !== 'string' ||
+            senderId === receiverId ||
+            (status !== 'pending' && status !== 'accepted')) {
+            throw new https_1.HttpsError('failed-precondition', 'Invalid friend request.');
+        }
+        if (expectedReceiverId !== undefined && receiverId !== expectedReceiverId) {
+            throw new https_1.HttpsError('permission-denied', 'Only the receiver can accept this request.');
+        }
+        if (expectedSenderId !== undefined && senderId !== expectedSenderId) {
+            throw new https_1.HttpsError('failed-precondition', 'Unexpected friend request sender.');
+        }
+        const senderPrivateRef = db.doc(`${userPrivateCollection}/${senderId}`);
+        const receiverPrivateRef = db.doc(`${userPrivateCollection}/${receiverId}`);
+        const senderPublicRef = db.doc(`users/${senderId}`);
+        const receiverPublicRef = db.doc(`users/${receiverId}`);
+        const inverseRef = db.collection('friend_requests').doc(`${receiverId}_${senderId}`);
+        const [senderPrivate, receiverPrivate, senderPublic, receiverPublic, inverse] = await Promise.all([
+            tx.get(senderPrivateRef),
+            tx.get(receiverPrivateRef),
+            tx.get(senderPublicRef),
+            tx.get(receiverPublicRef),
+            tx.get(inverseRef),
+        ]);
+        if (!senderPrivate.exists ||
+            !receiverPrivate.exists ||
+            !senderPublic.exists ||
+            !receiverPublic.exists ||
+            senderPublic.data()?.username === 'deleted_user' ||
+            receiverPublic.data()?.username === 'deleted_user') {
+            throw new https_1.HttpsError('failed-precondition', 'Both users must be active.');
+        }
+        if (userHasBlocked(senderPrivate.data(), receiverId) ||
+            userHasBlocked(receiverPrivate.data(), senderId)) {
+            throw new https_1.HttpsError('failed-precondition', 'Blocked users cannot become friends.');
+        }
+        tx.update(senderPrivateRef, { friends: firestore_2.FieldValue.arrayUnion(receiverId) });
+        tx.update(receiverPrivateRef, { friends: firestore_2.FieldValue.arrayUnion(senderId) });
+        if (status === 'pending') {
+            tx.update(requestRef, {
+                status: 'accepted',
+                updatedAt: firestore_2.FieldValue.serverTimestamp(),
+            });
+        }
+        if (inverse.exists && inverseRef.path !== requestRef.path)
+            tx.delete(inverseRef);
+        return { senderId, receiverId };
+    });
+}
 function readMusicProfile(data) {
     return {
         topArtistNames: stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists),
@@ -198,6 +262,14 @@ function timestampMillis(value) {
 }
 function timestampValue(value) {
     return value instanceof firestore_2.Timestamp ? value : undefined;
+}
+function messageSummary(data) {
+    if (data.type === 'track') {
+        const title = data.trackData?.title;
+        if (typeof title === 'string' && title.length > 0)
+            return `🎵 ${title}`;
+    }
+    return typeof data.text === 'string' ? data.text : '';
 }
 function chatParticipants(data) {
     if (!Array.isArray(data?.participants))
@@ -286,7 +358,7 @@ async function refreshChatSummaryFromLatestMessage(chatRef) {
     }
     const latestData = latest.data();
     await chatRef.update({
-        lastMessage: latestData.text ?? '',
+        lastMessage: messageSummary(latestData),
         lastMessageTime: timestampValue(latestData.timestamp) ?? firestore_2.FieldValue.serverTimestamp(),
     });
     return true;
@@ -539,21 +611,54 @@ async function rebuildMusicRecommendations(uid, before, after, options = {}) {
 // ── Función 1 — Nuevo mensaje ─────────────────────────────────────────────────
 exports.onNewMessage = (0, firestore_1.onDocumentCreated)({ document: 'chats/{chatId}/messages/{messageId}', region: 'europe-southwest1' }, async (event) => {
     try {
-        const message = event.data?.data();
+        const messageSnapshot = event.data;
+        if (!messageSnapshot)
+            return;
+        const message = messageSnapshot.data();
         if (!message)
             return;
         const chatId = event.params.chatId;
         const senderId = message.senderId;
-        const chatSnap = await db.doc(`chats/${chatId}`).get();
-        const chatData = chatSnap.data();
-        if (!chatData)
+        const chatRef = db.doc(`chats/${chatId}`);
+        const messageRef = messageSnapshot.ref;
+        const summaryResult = await db.runTransaction(async (tx) => {
+            const [chatSnap, currentMessageSnap] = await Promise.all([
+                tx.get(chatRef),
+                tx.get(messageRef),
+            ]);
+            const chatData = chatSnap.data();
+            const currentMessage = currentMessageSnap.data();
+            if (!chatData || !currentMessage || currentMessage.summaryApplied === true) {
+                return undefined;
+            }
+            const participants = chatParticipants(chatData);
+            if (participants.length !== 2 || !participants.includes(senderId))
+                return undefined;
+            const recipientId = participants.find((uid) => uid !== senderId);
+            const messageTime = timestampValue(currentMessage.timestamp);
+            if (!recipientId || !messageTime)
+                return undefined;
+            const updates = {};
+            const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
+            const summary = messageSummary(currentMessage);
+            const legacyClientAlreadyAppliedSummary = currentLastMessageTime?.seconds === messageTime.seconds &&
+                currentLastMessageTime.nanoseconds === messageTime.nanoseconds &&
+                chatData.lastMessage === summary;
+            if (!currentLastMessageTime || messageTime.toMillis() >= currentLastMessageTime.toMillis()) {
+                updates.lastMessage = summary;
+                updates.lastMessageTime = messageTime;
+            }
+            if (currentMessage.read !== true && !legacyClientAlreadyAppliedSummary) {
+                updates[`unreadCounts.${recipientId}`] = firestore_2.FieldValue.increment(1);
+            }
+            if (Object.keys(updates).length > 0)
+                tx.update(chatRef, updates);
+            tx.update(messageRef, { summaryApplied: true });
+            return { recipientId };
+        });
+        if (!summaryResult)
             return;
-        const participants = chatData.participants;
-        if (participants.length !== 2)
-            return;
-        const recipientId = participants.find((p) => p !== senderId);
-        if (!recipientId)
-            return;
+        const { recipientId } = summaryResult;
         const [recipientSnap, senderSnap] = await Promise.all([
             db.doc(`${userPrivateCollection}/${recipientId}`).get(),
             db.doc(`users/${senderId}`).get(),
@@ -617,7 +722,23 @@ exports.onUserMusicProfileChanged = (0, firestore_1.onDocumentUpdated)({ documen
         throw error;
     }
 });
-// ── Función 3 — Nueva solicitud de amistad ────────────────────────────────────
+// ── Función 3 — Aceptación privilegiada de amistad ───────────────────────────
+exports.acceptFriendRequest = (0, https_1.onCall)({ region: 'europe-southwest1' }, async (request) => {
+    const receiverId = request.auth?.uid;
+    if (!receiverId) {
+        throw new https_1.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const data = request.data;
+    const requestId = data?.requestId;
+    const senderId = data?.senderId;
+    if (typeof requestId !== 'string' || requestId.length === 0 || requestId.length > 300 ||
+        typeof senderId !== 'string' || senderId.length === 0 || senderId.length > 128) {
+        throw new https_1.HttpsError('invalid-argument', 'Valid requestId and senderId values are required.');
+    }
+    await establishAcceptedFriendship(requestId, receiverId, senderId);
+    return { ok: true };
+});
+// ── Función 4 — Nueva solicitud de amistad ────────────────────────────────────
 exports.onFriendRequest = (0, firestore_1.onDocumentCreated)({ document: 'friend_requests/{requestId}', region: 'europe-southwest1' }, async (event) => {
     try {
         const request = event.data?.data();
@@ -646,17 +767,35 @@ exports.onFriendRequest = (0, firestore_1.onDocumentCreated)({ document: 'friend
         throw error;
     }
 });
-// ── Función 4 — Solicitud de amistad aceptada ─────────────────────────────────
+// ── Función 5 — Solicitud de amistad aceptada ─────────────────────────────────
 exports.onFriendRequestAccepted = (0, firestore_1.onDocumentUpdated)({ document: 'friend_requests/{requestId}', region: 'europe-southwest1' }, async (event) => {
     try {
-        const before = event.data?.before.data();
-        const after = event.data?.after.data();
+        const change = event.data;
+        if (!change)
+            return;
+        const before = change.before.data();
+        const after = change.after.data();
         if (!before || !after)
             return;
         if (before.status !== 'pending' || after.status !== 'accepted')
             return;
         const senderId = after.senderId;
         const receiverId = after.receiverId;
+        // Defensa en profundidad para clientes antiguos que aún actualicen el
+        // documento directamente: el Admin SDK crea ambos lados de la amistad.
+        try {
+            await establishAcceptedFriendship(event.params.requestId, receiverId);
+        }
+        catch (error) {
+            if (!(error instanceof https_1.HttpsError))
+                throw error;
+            v2_1.logger.warn('onFriendRequestAccepted: friendship rejected', {
+                requestId: event.params.requestId,
+                error,
+            });
+            await change.after.ref.delete();
+            return;
+        }
         const [senderSnap, receiverSnap] = await Promise.all([
             db.doc(`${userPrivateCollection}/${senderId}`).get(),
             db.doc(`users/${receiverId}`).get(),
@@ -664,10 +803,10 @@ exports.onFriendRequestAccepted = (0, firestore_1.onDocumentUpdated)({ document:
         const sender = senderSnap.data();
         const fcmToken = sender?.fcmToken;
         const accepterName = receiverSnap.data()?.displayName;
-        if (!fcmToken || !accepterName)
-            return;
-        const locale = preferredLocale(sender);
-        await sendNotification(senderId, sender, fcmToken, { title: 'MusiLink', body: notificationText.friendRequestAccepted[locale](accepterName) }, { type: 'friend_request_accepted', accepterId: receiverId });
+        if (fcmToken && accepterName) {
+            const locale = preferredLocale(sender);
+            await sendNotification(senderId, sender, fcmToken, { title: 'MusiLink', body: notificationText.friendRequestAccepted[locale](accepterName) }, { type: 'friend_request_accepted', accepterId: receiverId });
+        }
         await db.doc(event.document).delete();
     }
     catch (error) {
@@ -675,7 +814,7 @@ exports.onFriendRequestAccepted = (0, firestore_1.onDocumentUpdated)({ document:
         throw error;
     }
 });
-// ── Funcion 5 - Limpieza segura de chats ─────────────────
+// ── Funcion 6 - Limpieza segura de chats ─────────────────
 // Clientes nuevos solo escriben deletedAt[uid]. El backend elimina mensajes
 // que ya estan ocultos para ambos usuarios; si ya no hay mensajes visibles
 // para nadie, elimina fisicamente mensajes y documento del chat.
@@ -723,7 +862,7 @@ exports.onChatDeleted = (0, firestore_1.onDocumentDeleted)({ document: `${chatsC
         const latestData = latest.data();
         await chatRef.set({
             ...chatData,
-            lastMessage: latestData.text ?? '',
+            lastMessage: messageSummary(latestData),
             lastMessageTime: timestampValue(latestData.timestamp) ??
                 timestampValue(chatData.lastMessageTime) ??
                 firestore_2.FieldValue.serverTimestamp(),

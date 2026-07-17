@@ -719,4 +719,26 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get privacyS10Body =>
       'Les photos de profil sont stockées dans Google Firebase Storage avec des serveurs situés aux États-Unis. En utilisant l\'application, vous autorisez explicitement ce transfert international de données d\'images. Google a mis en place les mesures techniques et organisationnelles nécessaires en vertu des Clauses Contractuelles Types approuvées par la Commission Européenne (Art. 46 RGPD) pour garantir un niveau de protection adéquat équivalent à celui de l\'UE.\n\nVos données personnelles, messages et données de profil musical sont stockés sur des serveurs situés dans la région européenne (europe-southwest1), au sein de l\'UE.';
+
+  @override
+  String get updateRequiredTitle => 'Mise à jour requise';
+
+  @override
+  String get updateRequiredBody =>
+      'Une nouvelle version de MusiLink est nécessaire pour continuer. Mettez l\'application à jour afin de sécuriser votre compte et vos discussions.';
+
+  @override
+  String updateCurrentVersion(String version, int build) {
+    return 'Version installée : $version ($build)';
+  }
+
+  @override
+  String get updateNowButton => 'Mettre à jour';
+
+  @override
+  String get updateRetryButton => 'Vérifier à nouveau';
+
+  @override
+  String get updateStoreOpenError =>
+      'Impossible d\'ouvrir la boutique. Vérifiez votre connexion et réessayez.';
 }

@@ -15,13 +15,16 @@ import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/screens/mandatory_update_screen.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
+import 'package:musi_link/services/app_update_service.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -110,9 +113,198 @@ void main() async {
           notificationLocation ?? '/',
         ),
       ],
-      child: const MainApp(),
+      child: const AppBootstrap(),
     ),
   );
+}
+
+class AppBootstrap extends StatefulWidget {
+  const AppBootstrap({
+    super.key,
+    this.updateChecker,
+    this.immediateUpdateLauncher,
+  });
+
+  final AppUpdateChecker? updateChecker;
+  final ImmediateUpdateLauncher? immediateUpdateLauncher;
+
+  @override
+  State<AppBootstrap> createState() => _AppBootstrapState();
+}
+
+class _AppBootstrapState extends State<AppBootstrap>
+    with WidgetsBindingObserver {
+  late final AppUpdateChecker _updateChecker;
+  late final ImmediateUpdateLauncher _immediateUpdateLauncher;
+  StreamSubscription<AppUpdatePolicy>? _policySubscription;
+  AppUpdatePolicy? _policy;
+  bool _checking = true;
+  bool _openingStore = false;
+  bool _immediateUpdateInProgress = false;
+  bool _immediateUpdateAttempted = false;
+  bool _storeOpenFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _updateChecker = widget.updateChecker ?? FirebaseAppUpdateService();
+    _immediateUpdateLauncher =
+        widget.immediateUpdateLauncher ?? const PlayImmediateUpdateLauncher();
+    _policySubscription = _updateChecker.policyUpdates.listen(
+      _applyPolicy,
+      onError: (_) {},
+    );
+    unawaited(_checkForUpdate());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        _policy?.isUpdateRequired == true) {
+      unawaited(_checkForUpdate());
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    if (mounted) {
+      setState(() {
+        _checking = true;
+        _storeOpenFailed = false;
+      });
+    }
+    try {
+      _applyPolicy(await _updateChecker.check());
+    } catch (_) {
+      // Fail-open: una incidencia temporal de Remote Config no debe bloquear
+      // una versión válida. Las reglas de Firestore siguen siendo la barrera.
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  void _applyPolicy(AppUpdatePolicy policy) {
+    if (!mounted) return;
+    setState(() {
+      _policy = policy;
+      _checking = false;
+      _storeOpenFailed = false;
+    });
+    if (policy.isUpdateRequired) {
+      unawaited(_startImmediateUpdate());
+    }
+  }
+
+  Future<ImmediateUpdateResult?> _startImmediateUpdate({
+    bool force = false,
+  }) async {
+    final policy = _policy;
+    if (policy?.platform != AppUpdatePlatform.android ||
+        _immediateUpdateInProgress ||
+        (_immediateUpdateAttempted && !force)) {
+      return null;
+    }
+
+    setState(() {
+      _immediateUpdateAttempted = true;
+      _immediateUpdateInProgress = true;
+      _storeOpenFailed = false;
+    });
+    final result = await _immediateUpdateLauncher.startImmediateUpdate();
+    if (mounted) setState(() => _immediateUpdateInProgress = false);
+    return result;
+  }
+
+  Future<void> _requestUpdate() async {
+    if (_policy?.platform == AppUpdatePlatform.android) {
+      final result = await _startImmediateUpdate(force: true);
+      if (result == ImmediateUpdateResult.failed ||
+          result == ImmediateUpdateResult.unavailable ||
+          result == ImmediateUpdateResult.unsupported) {
+        await _openStore();
+      }
+      return;
+    }
+    await _openStore();
+  }
+
+  Future<void> _retryUpdateCheck() async {
+    _immediateUpdateAttempted = false;
+    await _checkForUpdate();
+  }
+
+  Future<void> _openStore() async {
+    final policy = _policy;
+    if (policy == null) return;
+    setState(() {
+      _openingStore = true;
+      _storeOpenFailed = false;
+    });
+    try {
+      final opened = await launchUrl(
+        policy.storeUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) setState(() => _storeOpenFailed = true);
+    } catch (_) {
+      if (mounted) setState(() => _storeOpenFailed = true);
+    } finally {
+      if (mounted) setState(() => _openingStore = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_policySubscription?.cancel());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final policy = _policy;
+    if (_checking && policy == null) {
+      return const _BootstrapMaterialApp(home: _UpdateCheckLoadingScreen());
+    }
+    if (policy?.isUpdateRequired == true) {
+      return _BootstrapMaterialApp(
+        home: MandatoryUpdateScreen(
+          policy: policy!,
+          onUpdate: _requestUpdate,
+          onRetry: _retryUpdateCheck,
+          isOpeningStore: _openingStore || _immediateUpdateInProgress,
+          storeOpenFailed: _storeOpenFailed,
+        ),
+      );
+    }
+    return const MainApp();
+  }
+}
+
+class _BootstrapMaterialApp extends StatelessWidget {
+  const _BootstrapMaterialApp({required this.home});
+
+  final Widget home;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      darkTheme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
+  }
+}
+
+class _UpdateCheckLoadingScreen extends StatelessWidget {
+  const _UpdateCheckLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+  }
 }
 
 class MainApp extends ConsumerWidget {

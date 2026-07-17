@@ -77,16 +77,17 @@ class ChatService with AuthenticatedService {
           chat = Chat.fromFirestore(snap);
         } else {
           final now = DateTime.now();
+          final participants = [currentUid, otherUid]..sort();
           tx.set(docRef, {
-            'participants': [currentUid, otherUid],
+            'participants': participants,
             'lastMessage': '',
-            'lastMessageTime': Timestamp.fromDate(now),
-            'createdAt': Timestamp.fromDate(now),
+            'lastMessageTime': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
             'unreadCounts': {currentUid: 0, otherUid: 0},
           });
           chat = Chat(
             id: docRef.id,
-            participants: [currentUid, otherUid],
+            participants: participants,
             lastMessageTime: now,
             createdAt: now,
           );
@@ -378,12 +379,6 @@ class ChatService with AuthenticatedService {
           'timestamp': FieldValue.serverTimestamp(),
         });
 
-        // Actualizar último mensaje e incrementar el contador del destinatario
-        tx.update(chatRef, {
-          'lastMessage': trimmed,
-          'lastMessageTime': FieldValue.serverTimestamp(),
-          'unreadCounts.$otherUid': FieldValue.increment(1),
-        });
         tx.set(
           limiterRef,
           _nextMessageRateLimit(limiterSnap),
@@ -533,11 +528,6 @@ class ChatService with AuthenticatedService {
           'timestamp': FieldValue.serverTimestamp(),
         });
 
-        tx.update(chatRef, {
-          'lastMessage': '🎵 ${track.title}',
-          'lastMessageTime': FieldValue.serverTimestamp(),
-          'unreadCounts.$otherUid': FieldValue.increment(1),
-        });
         tx.set(
           limiterRef,
           _nextMessageRateLimit(limiterSnap),

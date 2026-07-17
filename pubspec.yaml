@@ -1,7 +1,7 @@
 name: musi_link
 description: "MusiLink - Connect through music."
 publish_to: 'none'
-version: 1.0.5+9
+version: 1.0.6+10
 
 environment:
   sdk: ^3.11.5
@@ -35,6 +35,8 @@ dependencies:
   cached_network_image: ^3.4.1
   image_picker: ^1.2.3
   firebase_storage: ^13.4.3
+  firebase_remote_config: ^6.5.5
+  package_info_plus: ^10.2.1
 
 
 dev_dependencies:
