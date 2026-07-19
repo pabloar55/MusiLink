@@ -71,6 +71,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
       if (!mounted) return;
       handleNotificationNavigation(message.data, context);
     });
+    // Local notification taps can arrive while MainScreen is being mounted.
+    // Listen from the lifecycle instead of registering a callback in build().
+    ref.listenManual<Map<String, dynamic>?>(pendingNotificationProvider, (
+      _,
+      data,
+    ) {
+      if (data == null || !mounted) return;
+      ref.read(pendingNotificationProvider.notifier).setValue(null);
+      handleNotificationNavigation(data, context);
+    }, fireImmediately: true);
   }
 
   @override
@@ -79,9 +89,14 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final nextIndex = widget.initialPageIndex.clamp(0, screens.length - 1);
     if (nextIndex == currentPageIndex) return;
     currentPageIndex = nextIndex;
-    if (_pageController.hasClients) {
+    // This update is usually caused by GoRouter rebuilding MainScreen after a
+    // tab notification. Moving PageView synchronously here invokes
+    // onPageChanged while Router's Builder is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+      if (_pageController.page?.round() == nextIndex) return;
       _pageController.jumpToPage(nextIndex);
-    }
+    });
   }
 
   @override
@@ -93,12 +108,14 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   void _syncLocationToPage(int index) {
     final tab = MainScreen.tabForPageIndex(index);
-    context.go(
-      Uri(
-        path: '/',
-        queryParameters: tab == null ? null : {'tab': tab},
-      ).toString(),
+    final location = Uri(
+      path: '/',
+      queryParameters: tab == null ? null : {'tab': tab},
     );
+    // A router-driven PageView update already has the desired location. Do
+    // not ask GoRouter to rebuild itself again from onPageChanged.
+    if (GoRouterState.of(context).uri.toString() == location.toString()) return;
+    context.go(location.toString());
   }
 
   void _selectPage(int index) {
@@ -126,14 +143,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-
-    // FCM: tap en local notification (foreground) o cold-start
-    ref.listen<Map<String, dynamic>?>(pendingNotificationProvider, (_, data) {
-      if (data != null) {
-        handleNotificationNavigation(data, context);
-        ref.read(pendingNotificationProvider.notifier).setValue(null);
-      }
-    });
 
     final unreadChats = ref.watch(unreadChatsCountProvider);
     final pendingCount = ref
@@ -200,9 +209,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {
-          setState(() {
-            currentPageIndex = index;
-          });
+          if (currentPageIndex != index) {
+            setState(() {
+              currentPageIndex = index;
+            });
+          }
           _syncLocationToPage(index);
         },
         children: screens,

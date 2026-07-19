@@ -32,9 +32,16 @@ void handleNotificationNavigation(
 ) {
   final location = notificationLocationFromData(data);
   if (location == null) return;
-  if (location.startsWith('/chat')) {
-    context.push(location);
-  } else {
-    context.go(location);
-  }
+
+  // Notification callbacks can run while the router is building after the
+  // app resumes. Navigating synchronously in that phase makes GoRouter call
+  // markNeedsBuild during build, so wait until the current frame is complete.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    if (location.startsWith('/chat')) {
+      context.push(location);
+    } else {
+      context.go(location);
+    }
+  });
 }
