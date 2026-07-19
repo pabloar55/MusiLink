@@ -17,6 +17,8 @@ class RelationshipResult {
   final RelationshipStatus status;
   final String? requestId; // ID del friend_request si existe
   const RelationshipResult(this.status, [this.requestId]);
+
+  bool get canInteractInChat => status == RelationshipStatus.friends;
 }
 
 /// Servicio para gestionar solicitudes de amistad y amigos en Firestore.

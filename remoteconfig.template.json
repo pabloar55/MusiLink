@@ -3,14 +3,14 @@
   "parameters": {
     "force_update_enabled": {
       "defaultValue": {
-        "value": "false"
+        "value": "true"
       },
       "description": "Interruptor global de la pantalla de actualización obligatoria.",
       "valueType": "BOOLEAN"
     },
     "minimum_android_build": {
       "defaultValue": {
-        "value": "0"
+        "value": "11"
       },
       "description": "versionCode mínimo admitido en Android.",
       "valueType": "NUMBER"

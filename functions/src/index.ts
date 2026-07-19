@@ -822,6 +822,7 @@ export const onNewMessage = onDocumentCreated(
 
       const fcmToken = recipientSnap.data()?.fcmToken as string | undefined;
       const senderName = senderSnap.data()?.displayName as string | undefined;
+      const senderPhotoUrl = senderSnap.data()?.photoUrl as string | undefined;
       if (!fcmToken || !senderName) return;
 
       // Android receives this as a data-only message so the app can render a
@@ -838,6 +839,7 @@ export const onNewMessage = onDocumentCreated(
           otherUserId: senderId,
           otherUserName: senderName,
           messageText: (message.text as string | undefined) ?? '📎',
+          ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
         },
         chatId,
       );

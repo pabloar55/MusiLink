@@ -83,6 +83,7 @@
   "chatShareSong": "Share song",
   "chatDeletedUser": "This account has been deleted. You can no longer send messages.",
   "chatBlockedCannotSend": "You can view the history, but you cannot send messages in this chat.",
+  "chatNotFriendsCannotSend": "You can view the history, but only friends can send messages in this chat.",
   "chatSendFirst": "Send the first message",
   "chatTypeToSearch": "Type to search songs",
   "chatNoResults": "No results",

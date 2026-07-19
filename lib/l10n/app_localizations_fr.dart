@@ -231,6 +231,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Vous pouvez voir l\'historique, mais pas envoyer de messages dans ce chat.';
 
   @override
+  String get chatNotFriendsCannotSend =>
+      'Vous pouvez consulter l\'historique, mais seuls les amis peuvent envoyer des messages dans cette discussion.';
+
+  @override
   String get chatSendFirst => 'Envoyez le premier message';
 
   @override

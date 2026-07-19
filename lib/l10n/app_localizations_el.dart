@@ -227,6 +227,10 @@ class AppLocalizationsEl extends AppLocalizations {
       'Μπορείτε να δείτε το ιστορικό, αλλά δεν μπορείτε να στείλετε μηνύματα σε αυτήν τη συνομιλία.';
 
   @override
+  String get chatNotFriendsCannotSend =>
+      'Μπορείτε να δείτε το ιστορικό, αλλά μόνο φίλοι μπορούν να στέλνουν μηνύματα σε αυτήν τη συνομιλία.';
+
+  @override
   String get chatSendFirst => 'Στείλτε το πρώτο μήνυμα';
 
   @override

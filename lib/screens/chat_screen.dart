@@ -50,7 +50,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   DateTime? _deletedSince;
 
   bool _isOtherUserDeleted = false;
-  bool _isBlockedByMe = false;
 
   // Paginación: lista única de mensajes acumulados.
   List<Message> _allMessages = [];
@@ -65,6 +64,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   String get _currentUid =>
       ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
 
+  bool get _canInteractInChat =>
+      ref
+          .read(relationshipProvider(widget.otherUserId))
+          .asData
+          ?.value
+          .canInteractInChat ??
+      false;
+
   @override
   void initState() {
     super.initState();
@@ -78,7 +85,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .read(notificationServiceProvider)
           .cancelChatNotifications(widget.chatId),
     );
-    _otherUserFuture = ref.read(userServiceProvider).getUser(widget.otherUserId);
+    _otherUserFuture = ref
+        .read(userServiceProvider)
+        .getUser(widget.otherUserId);
     _otherUserFuture.then((user) {
       if (!mounted) return;
       setState(() => _isOtherUserDeleted = user?.isDeleted ?? false);
@@ -96,25 +105,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// mensajes borrados). En cambio muestra genericError y sale del chat.
   Future<void> _initMessagesStream() async {
     try {
-      _deletedSince =
-          await ref.read(chatServiceProvider).getDeletedSince(widget.chatId);
+      _deletedSince = await ref
+          .read(chatServiceProvider)
+          .getDeletedSince(widget.chatId);
     } catch (_) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.genericError),
-        ),
+        SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
       );
       _leaveChat();
       return;
     }
     if (!mounted) return;
 
-    final stream = ref.read(chatServiceProvider).getMessages(
-      widget.chatId,
-      since: _deletedSince,
-    );
+    final stream = ref
+        .read(chatServiceProvider)
+        .getMessages(widget.chatId, since: _deletedSince);
     _messagesSubscription = stream.listen(_onMessagesUpdated);
   }
 
@@ -148,14 +155,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     if (hasNewMessages) {
       _lastSeenTimestamp = latestTimestamp;
-      if (!_isBlockedByMe) {
-        unawaited(
-          ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId),
-        );
+      if (_canInteractInChat) {
+        _markMessagesAsRead();
       }
       // Primera carga: saltar sin animación para no ver el scroll desde arriba.
       _scrollToBottom(animate: !isFirst);
     }
+  }
+
+  void _markMessagesAsRead() {
+    unawaited(ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId));
   }
 
   @override
@@ -257,7 +266,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Future<void> _sendMessage() async {
-    if (_isOtherUserDeleted || _isBlockedByMe) return;
+    if (_isOtherUserDeleted || !_canInteractInChat) return;
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
@@ -295,7 +304,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _showWriteError(FirebaseException? error) {
     final l10n = AppLocalizations.of(context)!;
     final message = error?.code == 'permission-denied'
-        ? l10n.chatBlockedCannotSend
+        ? l10n.chatNotFriendsCannotSend
         : l10n.genericError;
     ScaffoldMessenger.of(
       context,
@@ -319,7 +328,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _showTrackSearch() {
-    if (_isOtherUserDeleted || _isBlockedByMe) return;
+    if (_isOtherUserDeleted || !_canInteractInChat) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -365,12 +374,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(relationshipProvider(widget.otherUserId), (previous, next) {
+      final couldInteract = previous?.asData?.value.canInteractInChat ?? false;
+      final canInteractNow = next.asData?.value.canInteractInChat ?? false;
+      if (!couldInteract && canInteractNow && _allMessages.isNotEmpty) {
+        _markMessagesAsRead();
+      }
+    });
+
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final relationship = ref.watch(relationshipProvider(widget.otherUserId));
+    final relationshipResult = relationship.asData?.value;
     final isBlockedByMe =
-        relationship.asData?.value.status == RelationshipStatus.blocked;
-    _isBlockedByMe = isBlockedByMe;
+        relationshipResult?.status == RelationshipStatus.blocked;
+    final canInteract = relationshipResult?.canInteractInChat ?? false;
     final canPop = GoRouter.of(context).canPop();
 
     return PopScope(
@@ -413,11 +431,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         body: Column(
           children: [
             // Lista de mensajes
-            Expanded(child: _buildMessageList(colorScheme, l10n)),
+            Expanded(child: _buildMessageList(colorScheme, l10n, canInteract)),
             if (_isOtherUserDeleted)
               _buildDeletedAccountBar(colorScheme, l10n)
+            else if (relationship.isLoading)
+              _buildRelationshipLoadingBar(colorScheme)
             else if (isBlockedByMe)
               _buildBlockedChatBar(colorScheme, l10n)
+            else if (!canInteract)
+              _buildNotFriendsChatBar(colorScheme, l10n)
             else
               _buildInputBar(colorScheme),
           ],
@@ -426,7 +448,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildMessageList(ColorScheme colorScheme, AppLocalizations l10n) {
+  Widget _buildMessageList(
+    ColorScheme colorScheme,
+    AppLocalizations l10n,
+    bool canInteract,
+  ) {
     if (_isInitialLoading) {
       return const SkeletonShimmer(child: SkeletonChatMessages());
     }
@@ -469,7 +495,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   currentUid: _currentUid,
                   chatId: widget.chatId,
                   chatService: ref.read(chatServiceProvider),
-                  reactionsEnabled: !_isBlockedByMe,
+                  reactionsEnabled: canInteract,
                 );
               }
 
@@ -480,7 +506,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 currentUid: _currentUid,
                 chatId: widget.chatId,
                 chatService: ref.read(chatServiceProvider),
-                reactionsEnabled: !_isBlockedByMe,
+                reactionsEnabled: canInteract,
               );
             },
           ),
@@ -574,6 +600,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           l10n.chatBlockedCannotSend,
           textAlign: TextAlign.center,
           style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotFriendsChatBar(
+    ColorScheme colorScheme,
+    AppLocalizations l10n,
+  ) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Text(
+          l10n.chatNotFriendsCannotSend,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRelationshipLoadingBar(ColorScheme colorScheme) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: colorScheme.primary,
+          ),
         ),
       ),
     );

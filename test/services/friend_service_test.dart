@@ -47,6 +47,28 @@ void main() {
     registerFallbackValues();
   });
 
+  group('RelationshipResult', () {
+    test('solo permite interactuar en el chat cuando son amigos', () {
+      expect(
+        const RelationshipResult(RelationshipStatus.friends).canInteractInChat,
+        isTrue,
+      );
+
+      for (final status in [
+        RelationshipStatus.none,
+        RelationshipStatus.requestSent,
+        RelationshipStatus.requestReceived,
+        RelationshipStatus.blocked,
+      ]) {
+        expect(
+          RelationshipResult(status).canInteractInChat,
+          isFalse,
+          reason: '$status no debe permitir escribir ni reaccionar',
+        );
+      }
+    });
+  });
+
   group('FriendService', () {
     group('sendRequest', () {
       test('crea un friend_request con status pending', () async {

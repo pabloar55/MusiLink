@@ -516,6 +516,12 @@ abstract class AppLocalizations {
   /// **'You can view the history, but you cannot send messages in this chat.'**
   String get chatBlockedCannotSend;
 
+  /// No description provided for @chatNotFriendsCannotSend.
+  ///
+  /// In en, this message translates to:
+  /// **'You can view the history, but only friends can send messages in this chat.'**
+  String get chatNotFriendsCannotSend;
+
   /// No description provided for @chatSendFirst.
   ///
   /// In en, this message translates to:

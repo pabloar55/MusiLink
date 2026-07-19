@@ -665,6 +665,7 @@ exports.onNewMessage = (0, firestore_1.onDocumentCreated)({ document: 'chats/{ch
         ]);
         const fcmToken = recipientSnap.data()?.fcmToken;
         const senderName = senderSnap.data()?.displayName;
+        const senderPhotoUrl = senderSnap.data()?.photoUrl;
         if (!fcmToken || !senderName)
             return;
         // Android receives this as a data-only message so the app can render a
@@ -676,6 +677,7 @@ exports.onNewMessage = (0, firestore_1.onDocumentCreated)({ document: 'chats/{ch
             otherUserId: senderId,
             otherUserName: senderName,
             messageText: message.text ?? '📎',
+            ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
         }, chatId);
     }
     catch (error) {
