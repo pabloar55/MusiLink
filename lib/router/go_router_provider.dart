@@ -5,6 +5,7 @@ import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_router.dart';
+import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
 import 'package:musi_link/screens/blocked_users_screen.dart';
 import 'package:musi_link/screens/auth_screen.dart';
@@ -52,6 +53,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: ref.watch(initialRouterLocationProvider),
     refreshListenable: notifier,
+    observers: [appRouteObserver],
     redirect: (context, state) => appRedirect(notifier, state.matchedLocation),
     routes: [
       GoRoute(path: '/auth', builder: (context, state) => const AuthScreen()),
@@ -93,8 +95,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         },
         builder: (context, state) {
           final extra = state.extra;
-          final fromChat =
-              state.uri.queryParameters['fromChat'] == 'true';
+          final fromChat = state.uri.queryParameters['fromChat'] == 'true';
           if (extra is DiscoveryResult) {
             return UserProfileScreen(
               user: extra.user,
@@ -102,10 +103,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               fromChat: fromChat,
             );
           }
-          return UserProfileScreen(
-            user: extra! as AppUser,
-            fromChat: fromChat,
-          );
+          return UserProfileScreen(user: extra! as AppUser, fromChat: fromChat);
         },
       ),
       GoRoute(

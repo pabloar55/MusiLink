@@ -8,6 +8,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
+import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
@@ -37,13 +38,16 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController(keepScrollOffset: false);
   StreamSubscription<List<Message>>? _messagesSubscription;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
+  ModalRoute<void>? _route;
   DateTime? _lastSeenTimestamp;
+  bool _isRouteVisible = true;
+  bool _isAppResumed = true;
 
   /// Timestamp de borrado suave derivado del documento del chat en Firestore.
   /// Se resuelve de forma asíncrona en _initMessagesStream antes de suscribirse.
@@ -72,14 +76,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .canInteractInChat ??
       false;
 
+  bool get _canMarkMessagesRead => _isRouteVisible && _isAppResumed;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _isAppResumed =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
     _activeChatNotifier = ref.read(activeChatIdProvider.notifier);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _activeChatNotifier.setChat(widget.chatId);
-    });
     unawaited(
       ref
           .read(notificationServiceProvider)
@@ -94,6 +100,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     unawaited(_initMessagesStream());
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<void>(context);
+    if (identical(route, _route)) return;
+    if (_route != null) appRouteObserver.unsubscribe(this);
+    _route = route;
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPush() {
+    _setRouteVisible(true);
+  }
+
+  @override
+  void didPushNext() {
+    _setRouteVisible(false);
+  }
+
+  @override
+  void didPopNext() {
+    _setRouteVisible(true);
+  }
+
+  @override
+  void didPop() {
+    _setRouteVisible(false);
+  }
+
+  void _setRouteVisible(bool visible) {
+    _isRouteVisible = visible;
+    // RouteObserver callbacks may run while Navigator is updating its pages.
+    // Defer provider changes until that frame ends in both directions.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_canMarkMessagesRead) {
+        _activeChatNotifier.clearChat(widget.chatId);
+        return;
+      }
+      _activeChatNotifier.setChat(widget.chatId);
+      if (_canInteractInChat) _markMessagesAsRead();
+      _scrollToBottom(animate: false);
+      unawaited(
+        ref
+            .read(notificationServiceProvider)
+            .cancelChatNotifications(widget.chatId),
+      );
+    });
   }
 
   /// Lee el chat de Firestore para obtener deletedAt[currentUid] y luego
@@ -155,11 +212,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     if (hasNewMessages) {
       _lastSeenTimestamp = latestTimestamp;
-      if (_canInteractInChat) {
+      if (_canMarkMessagesRead && _canInteractInChat) {
         _markMessagesAsRead();
       }
-      // Primera carga: saltar sin animación para no ver el scroll desde arriba.
-      _scrollToBottom(animate: !isFirst);
+      if (_isRouteVisible) {
+        // Primera carga: saltar sin animación para no ver el scroll desde arriba.
+        _scrollToBottom(animate: !isFirst);
+      }
     }
   }
 
@@ -183,10 +242,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _isAppResumed = state == AppLifecycleState.resumed;
+    if (!_isAppResumed || !_isRouteVisible) {
+      _activeChatNotifier.clearChat(widget.chatId);
+      return;
+    }
+    _activeChatNotifier.setChat(widget.chatId);
+    if (_canInteractInChat) _markMessagesAsRead();
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _activeChatNotifier.setChat(null);
+      _activeChatNotifier.clearChat(widget.chatId);
     });
     _messagesSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
@@ -314,7 +385,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      final bottom = _scrollController.position.minScrollExtent;
+      final position = _scrollController.position;
+      if (!position.hasContentDimensions) return;
+      final bottom = position.minScrollExtent;
       if (animate) {
         _scrollController.animateTo(
           bottom,
@@ -377,7 +450,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     ref.listen(relationshipProvider(widget.otherUserId), (previous, next) {
       final couldInteract = previous?.asData?.value.canInteractInChat ?? false;
       final canInteractNow = next.asData?.value.canInteractInChat ?? false;
-      if (!couldInteract && canInteractNow && _allMessages.isNotEmpty) {
+      if (!couldInteract &&
+          canInteractNow &&
+          _canMarkMessagesRead &&
+          _allMessages.isNotEmpty) {
         _markMessagesAsRead();
       }
     });

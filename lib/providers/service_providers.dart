@@ -22,7 +22,15 @@ class ActiveChatNotifier extends Notifier<String?> {
   @override
   String? build() => null;
 
-  void setChat(String? chatId) => state = chatId;
+  void setChat(String? chatId) {
+    if (!ref.mounted) return;
+    state = chatId;
+  }
+
+  void clearChat(String chatId) {
+    if (!ref.mounted) return;
+    if (state == chatId) state = null;
+  }
 }
 
 final activeChatIdProvider = NotifierProvider<ActiveChatNotifier, String?>(
