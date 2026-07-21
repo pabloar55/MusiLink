@@ -101,7 +101,7 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
   Future<void> refresh() => loadDiscovery(useLocalCache: false);
 
   Future<void> loadMore() async {
-    if (state.isLoadingMore || !state.hasMore) return;
+    if (state.isLoadingMore || state.isStale || !state.hasMore) return;
     state = state.copyWith(isLoadingMore: true);
 
     try {

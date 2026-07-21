@@ -349,6 +349,8 @@ void main() {
     late MockDocumentSnapshot mockStoredRecommendationDocSnap;
     late MockQuery mockRecommendationOrderQuery;
     late MockQuery mockRecommendationLimitQuery;
+    late MockQuery mockRecommendationStartAfterQuery;
+    late MockQuery mockRecommendationNextPageQuery;
     late MockQuery mockUsersByIdQuery;
     late MockMusicCatalogService mockMusicCatalogService;
     late MusicProfileService service;
@@ -383,12 +385,22 @@ void main() {
       required List<MockQueryDocumentSnapshot> recommendationDocs,
       required List<MockQueryDocumentSnapshot> userDocs,
     }) {
+      var nextPageIndex = 1;
+      List<MockQueryDocumentSnapshot> pageAt(int index) =>
+          recommendationDocs.skip(index * 20).take(20).toList(growable: false);
+
       when(
         () => mockRecommendationLimitQuery.get(),
-      ).thenAnswer((_) async => buildSnapshot(recommendationDocs));
+      ).thenAnswer((_) async => buildSnapshot(pageAt(0)));
       when(
         () => mockRecommendationLimitQuery.get(any()),
-      ).thenAnswer((_) async => buildSnapshot(recommendationDocs));
+      ).thenAnswer((_) async => buildSnapshot(pageAt(0)));
+      when(
+        () => mockRecommendationNextPageQuery.get(),
+      ).thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
+      when(
+        () => mockRecommendationNextPageQuery.get(any()),
+      ).thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
       when(
         () => mockUsersByIdQuery.get(),
       ).thenAnswer((_) async => buildSnapshot(userDocs));
@@ -409,6 +421,8 @@ void main() {
       mockStoredRecommendationDocSnap = MockDocumentSnapshot();
       mockRecommendationOrderQuery = MockQuery();
       mockRecommendationLimitQuery = MockQuery();
+      mockRecommendationStartAfterQuery = MockQuery();
+      mockRecommendationNextPageQuery = MockQuery();
       mockUsersByIdQuery = MockQuery();
       mockMusicCatalogService = MockMusicCatalogService();
 
@@ -433,6 +447,12 @@ void main() {
       when(
         () => mockRecommendationOrderQuery.limit(any()),
       ).thenReturn(mockRecommendationLimitQuery);
+      when(
+        () => mockRecommendationOrderQuery.startAfterDocument(any()),
+      ).thenReturn(mockRecommendationStartAfterQuery);
+      when(
+        () => mockRecommendationStartAfterQuery.limit(any()),
+      ).thenReturn(mockRecommendationNextPageQuery);
       when(
         () => mockUsersRef.where(any(), whereIn: any(named: 'whereIn')),
       ).thenReturn(mockUsersByIdQuery);
@@ -537,6 +557,19 @@ void main() {
 
           expect(results.length, 20);
           expect(service.hasMoreDiscoveryUsers, isTrue);
+          verify(() => mockRecommendationOrderQuery.limit(20)).called(1);
+          verify(
+            () => mockUsersRef.where(
+              FieldPath.documentId,
+              whereIn: List.generate(10, (i) => 'user$i'),
+            ),
+          ).called(1);
+          verify(
+            () => mockUsersRef.where(
+              FieldPath.documentId,
+              whereIn: List.generate(10, (i) => 'user${i + 10}'),
+            ),
+          ).called(1);
         },
       );
 
@@ -712,7 +745,7 @@ void main() {
         },
       );
 
-      test('returns next page from recommendation cache', () async {
+      test('fetches the next page with a Firestore cursor', () async {
         final recommendations = List.generate(
           25,
           (i) => buildRecommendationDoc('user$i'),
@@ -731,9 +764,15 @@ void main() {
         expect(allResults.length, 25);
         expect(hasMore, isFalse);
         verify(() => mockRecommendationLimitQuery.get()).called(1);
+        verify(
+          () => mockRecommendationOrderQuery.startAfterDocument(
+            recommendations[19],
+          ),
+        ).called(1);
+        verify(() => mockRecommendationNextPageQuery.get()).called(1);
       });
 
-      test('multiple loadMore calls page correctly from cache', () async {
+      test('multiple loadMore calls page correctly from Firestore', () async {
         final recommendations = List.generate(
           50,
           (i) => buildRecommendationDoc('user$i'),
@@ -754,6 +793,7 @@ void main() {
         final (results2, hasMore2) = await service.loadMoreDiscoveryUsers();
         expect(results2.length, 50);
         expect(hasMore2, isFalse);
+        verify(() => mockRecommendationNextPageQuery.get()).called(2);
       });
     });
   });

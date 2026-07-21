@@ -31,36 +31,43 @@ class MusicProfileService with AuthenticatedService {
       _firestore.collection(FirestoreCollections.userPrivate);
 
   List<DiscoveryResult>? _cachedResults;
-  int _displayedCount = 0;
   DateTime? _cacheTime;
+  QueryDocumentSnapshot<Map<String, dynamic>>? _lastRecommendationDoc;
+  Set<String>? _blockedUids;
+  bool _hasMoreDiscoveryUsers = false;
 
   void clearCache() {
     _cachedResults = null;
-    _displayedCount = 0;
     _cacheTime = null;
+    _lastRecommendationDoc = null;
+    _blockedUids = null;
+    _hasMoreDiscoveryUsers = false;
   }
 
   static const _cacheTtl = Duration(minutes: 30);
   static const _pageSize = 20;
-  static const _recommendationLimit = 100;
   static const _artistScoreWeight = 70.0;
   static const _genreScoreWeight = 30.0;
   static const _artistEvidenceTarget = 7.0;
   static const _genreEvidenceTarget = 4.0;
 
-  bool get hasMoreDiscoveryUsers =>
-      _cachedResults != null && _displayedCount < _cachedResults!.length;
+  bool get hasMoreDiscoveryUsers => _hasMoreDiscoveryUsers;
 
   bool get _isCacheValid =>
       _cachedResults != null &&
       _cacheTime != null &&
       DateTime.now().difference(_cacheTime!) < _cacheTtl;
 
-  List<DiscoveryResult> _cacheFirstPage(List<DiscoveryResult> results) {
+  List<DiscoveryResult> _cacheFirstPage(
+    List<DiscoveryResult> results, {
+    required QueryDocumentSnapshot<Map<String, dynamic>>? lastDocument,
+    required bool hasMore,
+  }) {
     _cachedResults = results;
     _cacheTime = DateTime.now();
-    _displayedCount = results.length.clamp(0, _pageSize);
-    return List<DiscoveryResult>.unmodifiable(results.take(_displayedCount));
+    _lastRecommendationDoc = lastDocument;
+    _hasMoreDiscoveryUsers = hasMore;
+    return List<DiscoveryResult>.unmodifiable(results);
   }
 
   Future<void> saveManualArtists(
@@ -129,9 +136,7 @@ class MusicProfileService with AuthenticatedService {
   /// recommendation set.
   Future<List<DiscoveryResult>?> readDiscoveryUsersFromLocalCache() async {
     if (_isCacheValid) {
-      return List<DiscoveryResult>.unmodifiable(
-        _cachedResults!.take(_displayedCount),
-      );
+      return List<DiscoveryResult>.unmodifiable(_cachedResults!);
     }
 
     try {
@@ -146,11 +151,16 @@ class MusicProfileService with AuthenticatedService {
         return null;
       }
 
-      final stored = await _fetchStoredRecommendations(options: opts);
+      _blockedUids = null;
+      final stored = await _fetchStoredRecommendationsPage(options: opts);
       final recommendationCount = myDoc.data()?['recommendationsCount'] as int?;
       if (stored.storedCount == 0 && recommendationCount != 0) return null;
 
-      return _cacheFirstPage(stored.results);
+      return _cacheFirstPage(
+        stored.results,
+        lastDocument: stored.lastDocument,
+        hasMore: stored.hasMore,
+      );
     } on FirebaseException catch (e) {
       if (e.code == 'unavailable') return null;
       await reportError(e, StackTrace.current);
@@ -165,17 +175,28 @@ class MusicProfileService with AuthenticatedService {
   /// This operation never requests a recommendation rebuild.
   Future<List<DiscoveryResult>> readStoredDiscoveryUsers() async {
     try {
+      _lastRecommendationDoc = null;
+      _blockedUids = null;
+      _hasMoreDiscoveryUsers = false;
       final myDoc = await _usersRef.doc(currentUid).get();
-      if (!myDoc.exists) return _cacheFirstPage(const []);
-
-      final myUser = AppUser.fromFirestore(myDoc);
-      if (myUser == null) return _cacheFirstPage(const []);
-      if (myUser.topArtistNames.isEmpty && myUser.topGenreNames.isEmpty) {
-        return _cacheFirstPage(const []);
+      if (!myDoc.exists) {
+        return _cacheFirstPage(const [], lastDocument: null, hasMore: false);
       }
 
-      final stored = await _fetchStoredRecommendations();
-      return _cacheFirstPage(stored.results);
+      final myUser = AppUser.fromFirestore(myDoc);
+      if (myUser == null) {
+        return _cacheFirstPage(const [], lastDocument: null, hasMore: false);
+      }
+      if (myUser.topArtistNames.isEmpty && myUser.topGenreNames.isEmpty) {
+        return _cacheFirstPage(const [], lastDocument: null, hasMore: false);
+      }
+
+      final stored = await _fetchStoredRecommendationsPage();
+      return _cacheFirstPage(
+        stored.results,
+        lastDocument: stored.lastDocument,
+        hasMore: stored.hasMore,
+      );
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
@@ -183,31 +204,61 @@ class MusicProfileService with AuthenticatedService {
   }
 
   Future<(List<DiscoveryResult>, bool hasMore)> loadMoreDiscoveryUsers() async {
-    if (_cachedResults == null || _displayedCount >= _cachedResults!.length) {
-      return (List<DiscoveryResult>.unmodifiable(_cachedResults ?? []), false);
+    if (_cachedResults == null || !_hasMoreDiscoveryUsers) {
+      return (
+        List<DiscoveryResult>.unmodifiable(_cachedResults ?? const []),
+        false,
+      );
     }
 
-    _displayedCount = (_displayedCount + _pageSize).clamp(
-      0,
-      _cachedResults!.length,
+    final stored = await _fetchStoredRecommendationsPage(
+      startAfter: _lastRecommendationDoc,
     );
+    final knownUids = _cachedResults!.map((result) => result.user.uid).toSet();
+    final nextResults = stored.results
+        .where((result) => knownUids.add(result.user.uid))
+        .toList();
+    _cachedResults = [..._cachedResults!, ...nextResults];
+    _lastRecommendationDoc = stored.lastDocument;
+    _hasMoreDiscoveryUsers = stored.hasMore;
+    _cacheTime = DateTime.now();
+
     return (
-      List<DiscoveryResult>.unmodifiable(_cachedResults!.take(_displayedCount)),
-      _displayedCount < _cachedResults!.length,
+      List<DiscoveryResult>.unmodifiable(_cachedResults!),
+      _hasMoreDiscoveryUsers,
     );
   }
 
-  Future<({List<DiscoveryResult> results, int storedCount})>
-  _fetchStoredRecommendations({GetOptions? options}) async {
-    final snapshot = await _usersRef
+  Future<
+    ({
+      List<DiscoveryResult> results,
+      int storedCount,
+      QueryDocumentSnapshot<Map<String, dynamic>>? lastDocument,
+      bool hasMore,
+    })
+  >
+  _fetchStoredRecommendationsPage({
+    GetOptions? options,
+    QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
+  }) async {
+    Query<Map<String, dynamic>> query = _usersRef
         .doc(currentUid)
         .collection(FirestoreCollections.recommendations)
-        .orderBy('score', descending: true)
-        .limit(_recommendationLimit)
-        .get(options);
+        .orderBy('score', descending: true);
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final blockedUidsFuture = _readBlockedUids(options: options);
+    final snapshot = await query.limit(_pageSize).get(options);
 
     if (snapshot.docs.isEmpty) {
-      return (results: const <DiscoveryResult>[], storedCount: 0);
+      return (
+        results: const <DiscoveryResult>[],
+        storedCount: 0,
+        lastDocument: startAfter,
+        hasMore: false,
+      );
     }
 
     final recommendationDocs = snapshot.docs;
@@ -220,6 +271,8 @@ class MusicProfileService with AuthenticatedService {
       return (
         results: const <DiscoveryResult>[],
         storedCount: recommendationDocs.length,
+        lastDocument: recommendationDocs.last,
+        hasMore: recommendationDocs.length == _pageSize,
       );
     }
 
@@ -257,13 +310,7 @@ class MusicProfileService with AuthenticatedService {
     }
 
     try {
-      final privateDoc = await _privateUsersRef.doc(currentUid).get(options);
-      final blockedUids = Set<String>.from(
-        (privateDoc.data()?['blockedUsers'] as List?)?.map(
-              (e) => e.toString(),
-            ) ??
-            [],
-      );
+      final blockedUids = await blockedUidsFuture;
       if (blockedUids.isNotEmpty) {
         results.removeWhere((r) => blockedUids.contains(r.user.uid));
       }
@@ -271,7 +318,31 @@ class MusicProfileService with AuthenticatedService {
       // non-fatal: discovery proceeds without block filtering
     }
 
-    return (results: results, storedCount: recommendationDocs.length);
+    return (
+      results: results,
+      storedCount: recommendationDocs.length,
+      lastDocument: recommendationDocs.last,
+      hasMore: recommendationDocs.length == _pageSize,
+    );
+  }
+
+  Future<Set<String>> _readBlockedUids({GetOptions? options}) async {
+    final cached = _blockedUids;
+    if (cached != null) return cached;
+
+    try {
+      final privateDoc = await _privateUsersRef.doc(currentUid).get(options);
+      final blocked = Set<String>.from(
+        (privateDoc.data()?['blockedUsers'] as List?)?.map(
+              (value) => value.toString(),
+            ) ??
+            const <String>[],
+      );
+      _blockedUids = blocked;
+      return blocked;
+    } catch (_) {
+      return const <String>{};
+    }
   }
 
   Future<DiscoveryResult?> getStoredCompatibilityWith(AppUser otherUser) async {

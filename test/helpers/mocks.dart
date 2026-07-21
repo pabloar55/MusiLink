@@ -132,9 +132,13 @@ class MockNotificationService extends Mock implements NotificationService {}
 class FakeDocumentReference extends Fake
     implements DocumentReference<Map<String, dynamic>> {}
 
+class FakeDocumentSnapshot extends Fake
+    implements DocumentSnapshot<Map<String, dynamic>> {}
+
 // ── Fallback values ──────────────────────────────────────────
 void registerFallbackValues() {
   registerFallbackValue(<String, dynamic>{});
   registerFallbackValue(FakeDocumentReference());
+  registerFallbackValue(FakeDocumentSnapshot());
   registerFallbackValue(SetOptions(merge: true));
 }
