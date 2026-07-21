@@ -53,13 +53,13 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
   @override
   DiscoverState build() => const DiscoverState(isLoading: true);
 
-  Future<void> loadDiscovery({bool forceRefresh = false}) async {
+  Future<void> loadDiscovery({bool useLocalCache = true}) async {
     final service = ref.read(musicProfileServiceProvider);
 
-    if (!forceRefresh) {
+    if (useLocalCache) {
       // Intentar caché local de Firestore primero (< 100 ms, sin red).
-      final cached = await service.getDiscoveryUsersFromCache();
-      if (cached != null && cached.isNotEmpty) {
+      final cached = await service.readDiscoveryUsersFromLocalCache();
+      if (cached != null) {
         state = state.copyWith(
           results: cached,
           isLoading: false,
@@ -76,10 +76,7 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
     // Sin datos visibles, mostrar shimmer y esperar al servidor.
     // En pull-to-refresh conservamos los resultados actuales para que solo
     // se vea el indicador de refresco hasta recibir la nueva lista.
-    // Se fuerza forceRefresh: true para evitar que un _isCacheValid falso
-    // (establecido por getDiscoveryUsersFromCache con resultados vacíos)
-    // devuelva una lista vacía en lugar de ir al servidor.
-    final keepVisibleResults = forceRefresh && state.results.isNotEmpty;
+    final keepVisibleResults = !useLocalCache && state.results.isNotEmpty;
     state = state.copyWith(
       isLoading: !keepVisibleResults,
       isStale: keepVisibleResults,
@@ -88,7 +85,7 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
     );
 
     try {
-      final results = await service.getDiscoveryUsers(forceRefresh: true);
+      final results = await service.readStoredDiscoveryUsers();
       state = state.copyWith(
         results: results,
         isLoading: false,
@@ -97,23 +94,20 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
       );
     } catch (e, stack) {
       await reportError(e, stack);
-      state = state.copyWith(
-        isLoading: false,
-        isStale: false,
-        error: e,
-      );
+      state = state.copyWith(isLoading: false, isStale: false, error: e);
     }
   }
 
-  Future<void> refresh() => loadDiscovery(forceRefresh: true);
+  Future<void> refresh() => loadDiscovery(useLocalCache: false);
 
   Future<void> loadMore() async {
     if (state.isLoadingMore || !state.hasMore) return;
     state = state.copyWith(isLoadingMore: true);
 
     try {
-      final (allResults, hasMore) =
-          await ref.read(musicProfileServiceProvider).loadMoreDiscoveryUsers();
+      final (allResults, hasMore) = await ref
+          .read(musicProfileServiceProvider)
+          .loadMoreDiscoveryUsers();
 
       state = state.copyWith(
         results: allResults,
@@ -128,7 +122,7 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
 
   Future<void> _refreshInBackground(MusicProfileService service) async {
     try {
-      final results = await service.getDiscoveryUsers(forceRefresh: true);
+      final results = await service.readStoredDiscoveryUsers();
       state = state.copyWith(
         results: results,
         isStale: false,
@@ -142,5 +136,6 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
   }
 }
 
-final discoverProvider =
-    NotifierProvider<DiscoverNotifier, DiscoverState>(DiscoverNotifier.new);
+final discoverProvider = NotifierProvider<DiscoverNotifier, DiscoverState>(
+  DiscoverNotifier.new,
+);

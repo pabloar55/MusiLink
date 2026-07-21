@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -45,7 +43,6 @@ class MusicProfileService with AuthenticatedService {
   static const _cacheTtl = Duration(minutes: 30);
   static const _pageSize = 20;
   static const _recommendationLimit = 100;
-  static const _recommendationRefreshTimeout = Duration(seconds: 60);
   static const _artistScoreWeight = 70.0;
   static const _genreScoreWeight = 30.0;
   static const _artistEvidenceTarget = 7.0;
@@ -58,6 +55,13 @@ class MusicProfileService with AuthenticatedService {
       _cachedResults != null &&
       _cacheTime != null &&
       DateTime.now().difference(_cacheTime!) < _cacheTtl;
+
+  List<DiscoveryResult> _cacheFirstPage(List<DiscoveryResult> results) {
+    _cachedResults = results;
+    _cacheTime = DateTime.now();
+    _displayedCount = results.length.clamp(0, _pageSize);
+    return List<DiscoveryResult>.unmodifiable(results.take(_displayedCount));
+  }
 
   Future<void> saveManualArtists(
     String uid,
@@ -118,7 +122,12 @@ class MusicProfileService with AuthenticatedService {
     }
   }
 
-  Future<List<DiscoveryResult>?> getDiscoveryUsersFromCache() async {
+  /// Reads only local memory and Firestore's persistent cache.
+  ///
+  /// Returns null when there is not enough cached data to know the current
+  /// result, and an empty list when the backend has generated a valid empty
+  /// recommendation set.
+  Future<List<DiscoveryResult>?> readDiscoveryUsersFromLocalCache() async {
     if (_isCacheValid) {
       return List<DiscoveryResult>.unmodifiable(
         _cachedResults!.take(_displayedCount),
@@ -137,13 +146,11 @@ class MusicProfileService with AuthenticatedService {
         return null;
       }
 
-      final results = await _fetchStoredRecommendations(options: opts);
-      if (results == null) return null;
+      final stored = await _fetchStoredRecommendations(options: opts);
+      final recommendationCount = myDoc.data()?['recommendationsCount'] as int?;
+      if (stored.storedCount == 0 && recommendationCount != 0) return null;
 
-      _cachedResults = results;
-      _cacheTime = DateTime.now();
-      _displayedCount = results.length.clamp(0, _pageSize);
-      return List<DiscoveryResult>.unmodifiable(results.take(_displayedCount));
+      return _cacheFirstPage(stored.results);
     } on FirebaseException catch (e) {
       if (e.code == 'unavailable') return null;
       await reportError(e, StackTrace.current);
@@ -153,69 +160,25 @@ class MusicProfileService with AuthenticatedService {
     }
   }
 
-  Future<List<DiscoveryResult>> getDiscoveryUsers({
-    bool forceRefresh = false,
-  }) async {
-    if (!forceRefresh && _isCacheValid) {
-      return List<DiscoveryResult>.unmodifiable(
-        _cachedResults!.take(_displayedCount),
-      );
-    }
-
+  /// Reads the recommendation set currently stored on the server.
+  ///
+  /// This operation never requests a recommendation rebuild.
+  Future<List<DiscoveryResult>> readStoredDiscoveryUsers() async {
     try {
-      _cachedResults = null;
-      _displayedCount = 0;
-
       final myDoc = await _usersRef.doc(currentUid).get();
-      if (!myDoc.exists) return [];
+      if (!myDoc.exists) return _cacheFirstPage(const []);
 
       final myUser = AppUser.fromFirestore(myDoc);
-      if (myUser == null) return [];
+      if (myUser == null) return _cacheFirstPage(const []);
       if (myUser.topArtistNames.isEmpty && myUser.topGenreNames.isEmpty) {
-        return [];
+        return _cacheFirstPage(const []);
       }
 
-      if (forceRefresh) {
-        await _requestRecommendationRefresh();
-      }
-
-      final results = await _fetchStoredRecommendations() ?? [];
-      _cachedResults = results;
-      _cacheTime = DateTime.now();
-      _displayedCount = results.length.clamp(0, _pageSize);
-      return List<DiscoveryResult>.unmodifiable(results.take(_displayedCount));
+      final stored = await _fetchStoredRecommendations();
+      return _cacheFirstPage(stored.results);
     } catch (e, stack) {
       await reportError(e, stack);
-      return [];
-    }
-  }
-
-  Future<void> _requestRecommendationRefresh() async {
-    try {
-      final userRef = _usersRef.doc(currentUid);
-      await userRef.update({
-        'recommendationsRefreshRequestedAt': FieldValue.serverTimestamp(),
-      });
-
-      await userRef
-          .snapshots()
-          .where((snapshot) {
-            final data = snapshot.data();
-            final requestedAt =
-                data?['recommendationsRefreshRequestedAt'] as Timestamp?;
-            final generatedAt =
-                data?['recommendationsGeneratedAt'] as Timestamp?;
-            return requestedAt != null &&
-                generatedAt != null &&
-                generatedAt.compareTo(requestedAt) >= 0;
-          })
-          .first
-          .timeout(_recommendationRefreshTimeout);
-    } on TimeoutException {
-      // Keep the previous recommendations visible if the refresh completion
-      // signal is delayed by network conditions or a slow Cloud Function.
-    } catch (e, stack) {
-      await reportError(e, stack);
+      rethrow;
     }
   }
 
@@ -234,80 +197,81 @@ class MusicProfileService with AuthenticatedService {
     );
   }
 
-  Future<List<DiscoveryResult>?> _fetchStoredRecommendations({
-    GetOptions? options,
-  }) async {
-    try {
-      final snapshot = await _usersRef
-          .doc(currentUid)
-          .collection(FirestoreCollections.recommendations)
-          .orderBy('score', descending: true)
-          .limit(_recommendationLimit)
-          .get(options);
+  Future<({List<DiscoveryResult> results, int storedCount})>
+  _fetchStoredRecommendations({GetOptions? options}) async {
+    final snapshot = await _usersRef
+        .doc(currentUid)
+        .collection(FirestoreCollections.recommendations)
+        .orderBy('score', descending: true)
+        .limit(_recommendationLimit)
+        .get(options);
 
-      if (snapshot.docs.isEmpty) return null;
-
-      final recommendationDocs = snapshot.docs;
-      final orderedIds = recommendationDocs
-          .map((doc) => (doc.data()['userId'] ?? doc.id).toString())
-          .where((uid) => uid.isNotEmpty && uid != currentUid)
-          .toList();
-
-      if (orderedIds.isEmpty) return null;
-
-      final usersById = <String, AppUser>{};
-      for (var i = 0; i < orderedIds.length; i += 10) {
-        final chunk = orderedIds.sublist(
-          i,
-          (i + 10).clamp(0, orderedIds.length),
-        );
-        final usersSnapshot = await _usersRef
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get(options);
-        for (final doc in usersSnapshot.docs) {
-          final user = AppUser.fromFirestore(doc);
-          if (user != null) usersById[user.uid] = user;
-        }
-      }
-
-      final results = <DiscoveryResult>[];
-      for (final doc in recommendationDocs) {
-        final data = doc.data();
-        final uid = (data['userId'] ?? doc.id).toString();
-        final user = usersById[uid];
-        if (user == null) continue;
-        if (user.topArtistNames.isEmpty && user.topGenreNames.isEmpty) continue;
-
-        results.add(
-          _discoveryResultFromStoredRecommendation(user: user, data: data),
-        );
-      }
-
-      try {
-        final privateDoc = await _privateUsersRef.doc(currentUid).get(options);
-        final blockedUids = Set<String>.from(
-          (privateDoc.data()?['blockedUsers'] as List?)?.map(
-                (e) => e.toString(),
-              ) ??
-              [],
-        );
-        if (blockedUids.isNotEmpty) {
-          results.removeWhere((r) => blockedUids.contains(r.user.uid));
-        }
-      } catch (_) {
-        // non-fatal: discovery proceeds without block filtering
-      }
-
-      return results.isEmpty ? null : results;
-    } on FirebaseException catch (e) {
-      if (options?.source == Source.cache && e.code == 'unavailable') {
-        return null;
-      }
-      await reportError(e, StackTrace.current);
-      return null;
-    } catch (_) {
-      return null;
+    if (snapshot.docs.isEmpty) {
+      return (results: const <DiscoveryResult>[], storedCount: 0);
     }
+
+    final recommendationDocs = snapshot.docs;
+    final orderedIds = recommendationDocs
+        .map((doc) => (doc.data()['userId'] ?? doc.id).toString())
+        .where((uid) => uid.isNotEmpty && uid != currentUid)
+        .toList();
+
+    if (orderedIds.isEmpty) {
+      return (
+        results: const <DiscoveryResult>[],
+        storedCount: recommendationDocs.length,
+      );
+    }
+
+    final usersById = <String, AppUser>{};
+    final userSnapshots = await Future.wait([
+      for (var i = 0; i < orderedIds.length; i += 10)
+        _usersRef
+            .where(
+              FieldPath.documentId,
+              whereIn: orderedIds.sublist(
+                i,
+                (i + 10).clamp(0, orderedIds.length),
+              ),
+            )
+            .get(options),
+    ]);
+    for (final usersSnapshot in userSnapshots) {
+      for (final doc in usersSnapshot.docs) {
+        final user = AppUser.fromFirestore(doc);
+        if (user != null) usersById[user.uid] = user;
+      }
+    }
+
+    final results = <DiscoveryResult>[];
+    for (final doc in recommendationDocs) {
+      final data = doc.data();
+      final uid = (data['userId'] ?? doc.id).toString();
+      final user = usersById[uid];
+      if (user == null) continue;
+      if (user.topArtistNames.isEmpty && user.topGenreNames.isEmpty) continue;
+
+      results.add(
+        _discoveryResultFromStoredRecommendation(user: user, data: data),
+      );
+    }
+
+    try {
+      final privateDoc = await _privateUsersRef.doc(currentUid).get(options);
+      final blockedUids = Set<String>.from(
+        (privateDoc.data()?['blockedUsers'] as List?)?.map(
+              (e) => e.toString(),
+            ) ??
+            [],
+      );
+      if (blockedUids.isNotEmpty) {
+        results.removeWhere((r) => blockedUids.contains(r.user.uid));
+      }
+    } catch (_) {
+      // non-fatal: discovery proceeds without block filtering
+    }
+
+    return (results: results, storedCount: recommendationDocs.length);
   }
 
   Future<DiscoveryResult?> getStoredCompatibilityWith(AppUser otherUser) async {

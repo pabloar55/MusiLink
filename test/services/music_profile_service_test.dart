@@ -358,9 +358,13 @@ void main() {
     void stubMyUserDoc({
       List<String> topArtistNames = const ['Artist A'],
       List<String> topGenreNames = const ['rock'],
+      int? recommendationCount,
     }) {
       when(() => mockUsersRef.doc(myUid)).thenReturn(mockMyDocRef);
       when(() => mockMyDocRef.get()).thenAnswer((_) async => mockMyDocSnap);
+      when(
+        () => mockMyDocRef.get(any()),
+      ).thenAnswer((_) async => mockMyDocSnap);
       when(() => mockMyDocSnap.exists).thenReturn(true);
       when(() => mockMyDocSnap.id).thenReturn(myUid);
       when(() => mockMyDocSnap.data()).thenReturn({
@@ -371,6 +375,7 @@ void main() {
         'lastLogin': Timestamp.fromDate(DateTime(2025, 1, 1)),
         'topArtistNames': topArtistNames,
         'topGenreNames': topGenreNames,
+        'recommendationsCount': ?recommendationCount,
       });
     }
 
@@ -382,7 +387,13 @@ void main() {
         () => mockRecommendationLimitQuery.get(),
       ).thenAnswer((_) async => buildSnapshot(recommendationDocs));
       when(
+        () => mockRecommendationLimitQuery.get(any()),
+      ).thenAnswer((_) async => buildSnapshot(recommendationDocs));
+      when(
         () => mockUsersByIdQuery.get(),
+      ).thenAnswer((_) async => buildSnapshot(userDocs));
+      when(
+        () => mockUsersByIdQuery.get(any()),
       ).thenAnswer((_) async => buildSnapshot(userDocs));
     }
 
@@ -404,6 +415,7 @@ void main() {
       registerFallbackValues();
       registerFallbackValue(<Object?>[]);
       registerFallbackValue(<app.Artist>[]);
+      registerFallbackValue(const GetOptions());
 
       when(() => mockAuth.currentUser).thenReturn(mockCurrentUser);
       when(() => mockCurrentUser.uid).thenReturn(myUid);
@@ -507,7 +519,7 @@ void main() {
       });
     });
 
-    group('getDiscoveryUsers', () {
+    group('stored discovery reads', () {
       test(
         'more than 20 stored recommendations sets hasMoreDiscoveryUsers true',
         () async {
@@ -521,7 +533,7 @@ void main() {
             userDocs: users,
           );
 
-          final results = await service.getDiscoveryUsers();
+          final results = await service.readStoredDiscoveryUsers();
 
           expect(results.length, 20);
           expect(service.hasMoreDiscoveryUsers, isTrue);
@@ -541,7 +553,7 @@ void main() {
             userDocs: users,
           );
 
-          final results = await service.getDiscoveryUsers();
+          final results = await service.readStoredDiscoveryUsers();
 
           expect(results.length, 15);
           expect(service.hasMoreDiscoveryUsers, isFalse);
@@ -551,7 +563,7 @@ void main() {
       test('empty recommendation collection returns empty discovery', () async {
         stubStoredRecommendations(recommendationDocs: [], userDocs: []);
 
-        final results = await service.getDiscoveryUsers();
+        final results = await service.readStoredDiscoveryUsers();
 
         expect(results, isEmpty);
         expect(service.hasMoreDiscoveryUsers, isFalse);
@@ -569,7 +581,7 @@ void main() {
           userDocs: users,
         );
 
-        final results = await service.getDiscoveryUsers();
+        final results = await service.readStoredDiscoveryUsers();
 
         expect(results.length, 2);
         expect(results.any((result) => result.user.uid == myUid), isFalse);
@@ -596,7 +608,7 @@ void main() {
           userDocs: users,
         );
 
-        final results = await service.getDiscoveryUsers();
+        final results = await service.readStoredDiscoveryUsers();
 
         expect(results.first.user.uid, 'other1');
         expect(results.first.score, 90);
@@ -605,7 +617,7 @@ void main() {
         expect(results.last.user.uid, 'other2');
       });
 
-      test('second call without forceRefresh serves in-memory cache', () async {
+      test('local read after server read serves in-memory cache', () async {
         final recommendations = List.generate(
           5,
           (i) => buildRecommendationDoc('user$i'),
@@ -616,15 +628,15 @@ void main() {
           userDocs: users,
         );
 
-        await service.getDiscoveryUsers();
-        await service.getDiscoveryUsers();
+        await service.readStoredDiscoveryUsers();
+        await service.readDiscoveryUsersFromLocalCache();
 
         verify(() => mockRecommendationLimitQuery.get()).called(1);
         verify(() => mockUsersByIdQuery.get()).called(1);
       });
 
       test(
-        'forceRefresh invalidates cache and reads recommendations again',
+        'each explicit server read fetches stored recommendations again',
         () async {
           final recommendations = List.generate(
             5,
@@ -636,13 +648,39 @@ void main() {
             userDocs: users,
           );
 
-          await service.getDiscoveryUsers(forceRefresh: true);
-          await service.getDiscoveryUsers(forceRefresh: true);
+          await service.readStoredDiscoveryUsers();
+          await service.readStoredDiscoveryUsers();
 
           verify(() => mockRecommendationLimitQuery.get()).called(2);
           verify(() => mockUsersByIdQuery.get()).called(2);
         },
       );
+
+      test('server read never requests a recommendation rebuild', () async {
+        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+
+        await service.readStoredDiscoveryUsers();
+
+        verifyNever(() => mockMyDocRef.update(any()));
+      });
+
+      test('generated empty result is a valid persistent cache hit', () async {
+        stubMyUserDoc(recommendationCount: 0);
+        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+
+        final results = await service.readDiscoveryUsersFromLocalCache();
+
+        expect(results, isNotNull);
+        expect(results, isEmpty);
+      });
+
+      test('empty local query without generation metadata is a miss', () async {
+        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+
+        final results = await service.readDiscoveryUsersFromLocalCache();
+
+        expect(results, isNull);
+      });
     });
 
     group('loadMoreDiscoveryUsers', () {
@@ -665,7 +703,7 @@ void main() {
             recommendationDocs: recommendations,
             userDocs: users,
           );
-          await service.getDiscoveryUsers();
+          await service.readStoredDiscoveryUsers();
 
           final (results, hasMore) = await service.loadMoreDiscoveryUsers();
 
@@ -685,7 +723,7 @@ void main() {
           userDocs: users,
         );
 
-        await service.getDiscoveryUsers();
+        await service.readStoredDiscoveryUsers();
         expect(service.hasMoreDiscoveryUsers, isTrue);
 
         final (allResults, hasMore) = await service.loadMoreDiscoveryUsers();
@@ -706,7 +744,7 @@ void main() {
           userDocs: users,
         );
 
-        await service.getDiscoveryUsers();
+        await service.readStoredDiscoveryUsers();
         expect(service.hasMoreDiscoveryUsers, isTrue);
 
         final (results1, hasMore1) = await service.loadMoreDiscoveryUsers();

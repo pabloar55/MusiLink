@@ -611,7 +611,10 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
 
   if (tokens.length === 0) {
     await deleteExistingRecommendations(uid);
-    await userDocRef(uid).update({ recommendationsGeneratedAt: generatedAt });
+    await userDocRef(uid).update({
+      recommendationsGeneratedAt: generatedAt,
+      recommendationsCount: 0,
+    });
     return;
   }
 
@@ -658,7 +661,10 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
     );
   }));
   await deleteStaleRecommendations(uid, recommendationIds);
-  await userDocRef(uid).update({ recommendationsGeneratedAt: generatedAt });
+  await userDocRef(uid).update({
+    recommendationsGeneratedAt: generatedAt,
+    recommendationsCount: recommendations.length,
+  });
 
   logger.info('refreshRecommendations: generated recommendations', {
     uid,
@@ -750,12 +756,12 @@ async function rebuildMusicRecommendations(
   const forceSelfRefresh = options.forceSelfRefresh === true;
   if (!profileChanged && !forceSelfRefresh) return;
 
-  const reciprocalCandidates = profileChanged || forceSelfRefresh
+  const reciprocalCandidates = profileChanged
     ? await matchingCandidateProfiles(uid, [before, after])
     : new Map<string, CandidateProfile>();
-  if (profileChanged || forceSelfRefresh) await updateRecommendationIndex(uid, before, after);
+  if (profileChanged) await updateRecommendationIndex(uid, before, after);
   await refreshRecommendations(uid, after);
-  if (profileChanged || forceSelfRefresh) {
+  if (profileChanged) {
     await updateReciprocalRecommendations(uid, after, reciprocalCandidates);
   }
 }

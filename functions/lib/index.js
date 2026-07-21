@@ -489,7 +489,10 @@ async function refreshRecommendations(uid, profile) {
     const generatedAt = firestore_2.Timestamp.now();
     if (tokens.length === 0) {
         await deleteExistingRecommendations(uid);
-        await userDocRef(uid).update({ recommendationsGeneratedAt: generatedAt });
+        await userDocRef(uid).update({
+            recommendationsGeneratedAt: generatedAt,
+            recommendationsCount: 0,
+        });
         return;
     }
     const snapshots = await Promise.all(tokens.map((token) => db
@@ -528,7 +531,10 @@ async function refreshRecommendations(uid, profile) {
         });
     }));
     await deleteStaleRecommendations(uid, recommendationIds);
-    await userDocRef(uid).update({ recommendationsGeneratedAt: generatedAt });
+    await userDocRef(uid).update({
+        recommendationsGeneratedAt: generatedAt,
+        recommendationsCount: recommendations.length,
+    });
     v2_1.logger.info('refreshRecommendations: generated recommendations', {
         uid,
         candidateCount: candidates.size,
@@ -598,13 +604,13 @@ async function rebuildMusicRecommendations(uid, before, after, options = {}) {
     const forceSelfRefresh = options.forceSelfRefresh === true;
     if (!profileChanged && !forceSelfRefresh)
         return;
-    const reciprocalCandidates = profileChanged || forceSelfRefresh
+    const reciprocalCandidates = profileChanged
         ? await matchingCandidateProfiles(uid, [before, after])
         : new Map();
-    if (profileChanged || forceSelfRefresh)
+    if (profileChanged)
         await updateRecommendationIndex(uid, before, after);
     await refreshRecommendations(uid, after);
-    if (profileChanged || forceSelfRefresh) {
+    if (profileChanged) {
         await updateReciprocalRecommendations(uid, after, reciprocalCandidates);
     }
 }
