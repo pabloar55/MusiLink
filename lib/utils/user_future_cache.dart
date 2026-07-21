@@ -27,6 +27,7 @@ mixin UserFutureCache {
   // LinkedHashMap mantiene orden de inserción: el primer elemento
   // es siempre el menos recientemente usado (LRU).
   final LinkedHashMap<String, _CachedUser> _userCache = LinkedHashMap();
+  final Map<String, Future<AppUser?>> _pendingUserFutures = {};
 
   /// TTL del caché. Sobreescribir para ajustar por pantalla.
   Duration get cacheTtl => const Duration(minutes: 5);
@@ -47,12 +48,25 @@ mixin UserFutureCache {
       return Future.value(cached.user);
     }
 
-    return userService.getUser(uid).then((user) {
-      _userCache.remove(uid); // Eliminar entrada expirada si existía.
-      _evictIfNeeded();
-      _userCache[uid] = _CachedUser(user);
-      return user;
-    });
+    final pending = _pendingUserFutures[uid];
+    if (pending != null) return pending;
+
+    late final Future<AppUser?> request;
+    request = userService
+        .getUser(uid)
+        .then((user) {
+          _userCache.remove(uid); // Eliminar entrada expirada si existía.
+          _evictIfNeeded();
+          _userCache[uid] = _CachedUser(user);
+          return user;
+        })
+        .whenComplete(() {
+          if (identical(_pendingUserFutures[uid], request)) {
+            _pendingUserFutures.remove(uid);
+          }
+        });
+    _pendingUserFutures[uid] = request;
+    return request;
   }
 
   void _evictIfNeeded() {
@@ -63,5 +77,6 @@ mixin UserFutureCache {
 
   void invalidateUserFuture(String uid) {
     _userCache.remove(uid);
+    _pendingUserFutures.remove(uid);
   }
 }

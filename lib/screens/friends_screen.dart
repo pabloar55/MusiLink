@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
@@ -23,11 +24,30 @@ class FriendsScreen extends ConsumerStatefulWidget {
 
 class _FriendsScreenState extends ConsumerState<FriendsScreen>
     with AutomaticKeepAliveClientMixin, UserFutureCache {
+  List<String> _loadedFriendUids = const [];
+  Future<List<AppUser>>? _friendProfilesFuture;
+
   @override
   UserService get userService => ref.read(userServiceProvider);
 
   @override
   bool get wantKeepAlive => true;
+
+  Future<List<AppUser>> _getFriendProfiles(List<String> uids) {
+    if (_friendProfilesFuture == null || !_sameUids(_loadedFriendUids, uids)) {
+      _loadedFriendUids = List<String>.unmodifiable(uids);
+      _friendProfilesFuture = userService.getUsersByIds(_loadedFriendUids);
+    }
+    return _friendProfilesFuture!;
+  }
+
+  bool _sameUids(List<String> left, List<String> right) {
+    if (left.length != right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+      if (left[i] != right[i]) return false;
+    }
+    return true;
+  }
 
   Future<void> _showRemoveFriendDialog(String uid, String? name) async {
     final confirmed = await showRemoveFriendDialog(context);
@@ -73,15 +93,20 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: Icon(LucideIcons.circleCheck,
-                              color: colorScheme.primary),
+                          icon: Icon(
+                            LucideIcons.circleCheck,
+                            color: colorScheme.primary,
+                          ),
                           tooltip: l10n.friendsAccept,
                           onPressed: () => ref
                               .read(friendServiceProvider)
                               .acceptRequest(request.id, request.senderId),
                         ),
                         IconButton(
-                          icon: Icon(LucideIcons.circleX, color: colorScheme.error),
+                          icon: Icon(
+                            LucideIcons.circleX,
+                            color: colorScheme.error,
+                          ),
                           tooltip: l10n.friendsReject,
                           onPressed: () => ref
                               .read(friendServiceProvider)
@@ -157,22 +182,48 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                   ],
                 );
               }
-              return Column(
-                children: friendUids.map((uid) {
-                  return FriendTile(
-                    uid: uid,
-                    getUserFuture: getUserFuture,
-                    onTap: (user) {
-                      if (user != null) {
-                        // Invalida el caché para obtener los datos más recientes (ej. Now Playing)
-                        invalidateUserFuture(user.uid);
-                        context.push('/profile', extra: user);
-                      }
-                    },
-                    onLongPress: (user) =>
-                        _showRemoveFriendDialog(uid, user?.displayName),
+              return FutureBuilder<List<AppUser>>(
+                future: _getFriendProfiles(friendUids),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return SkeletonShimmer(
+                      child: Column(
+                        children: List.generate(
+                          friendUids.length.clamp(1, 3),
+                          (_) => const SkeletonListTile(),
+                        ),
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text(l10n.genericError));
+                  }
+
+                  final usersById = {
+                    for (final user in snapshot.data ?? const <AppUser>[])
+                      user.uid: user,
+                  };
+                  return Column(
+                    children: friendUids.map((uid) {
+                      final user = usersById[uid];
+                      return FriendTile(
+                        user: user,
+                        onTap: (selectedUser) {
+                          if (selectedUser != null) {
+                            // Invalida el caché para obtener los datos más recientes (ej. Now Playing)
+                            invalidateUserFuture(selectedUser.uid);
+                            context.push('/profile', extra: selectedUser);
+                          }
+                        },
+                        onLongPress: (selectedUser) => _showRemoveFriendDialog(
+                          uid,
+                          selectedUser?.displayName,
+                        ),
+                      );
+                    }).toList(),
                   );
-                }).toList(),
+                },
               );
             },
           ),

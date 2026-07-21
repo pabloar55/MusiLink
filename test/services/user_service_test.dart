@@ -1,4 +1,6 @@
 // ignore_for_file: subtype_of_sealed_class, unnecessary_lambdas, avoid_redundant_argument_values
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -140,6 +142,28 @@ void main() {
           () => userService.getUser('uid123'),
           throwsA(isA<FirebaseException>()),
         );
+      });
+
+      test('deduplica peticiones concurrentes del mismo usuario', () async {
+        final mockDocRef = MockDocumentReference();
+        final mockDocSnap = MockDocumentSnapshot();
+        final completer = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
+        when(() => mockDocRef.get()).thenAnswer((_) => completer.future);
+        when(() => mockDocSnap.exists).thenReturn(true);
+        when(() => mockDocSnap.id).thenReturn('uid123');
+        when(
+          () => mockDocSnap.data(),
+        ).thenReturn({'displayName': 'Test User', 'photoUrl': ''});
+
+        final first = userService.getUser('uid123');
+        final second = userService.getUser('uid123');
+
+        expect(identical(first, second), isTrue);
+        verify(() => mockDocRef.get()).called(1);
+
+        completer.complete(mockDocSnap);
+        await Future.wait([first, second]);
       });
 
       test('cache aplica LRU y desaloja la entrada menos reciente', () async {
@@ -521,6 +545,35 @@ void main() {
         expect(result, hasLength(2));
         verify(() => mockQuery1.get()).called(1);
         verify(() => mockQuery2.get()).called(1);
+      });
+
+      test('conserva el orden y reutiliza los perfiles cacheados', () async {
+        final initialQuery = MockQuery();
+        final initialSnapshot = MockQuerySnapshot();
+        final user1Doc = MockQueryDocumentSnapshot();
+        final user2Doc = MockQueryDocumentSnapshot();
+        final initialUids = ['u2', 'u1'];
+
+        when(
+          () => mockUsersRef.where(FieldPath.documentId, whereIn: initialUids),
+        ).thenReturn(initialQuery);
+        when(() => initialQuery.get()).thenAnswer((_) async => initialSnapshot);
+        when(() => initialSnapshot.docs).thenReturn([user1Doc, user2Doc]);
+        when(() => user1Doc.id).thenReturn('u1');
+        when(
+          () => user1Doc.data(),
+        ).thenReturn({'displayName': 'User 1', 'photoUrl': ''});
+        when(() => user2Doc.id).thenReturn('u2');
+        when(
+          () => user2Doc.data(),
+        ).thenReturn({'displayName': 'User 2', 'photoUrl': ''});
+
+        final first = await userService.getUsersByIds(initialUids);
+        final second = await userService.getUsersByIds(['u1', 'u2']);
+
+        expect(first.map((user) => user.uid), ['u2', 'u1']);
+        expect(second.map((user) => user.uid), ['u1', 'u2']);
+        verify(() => initialQuery.get()).called(1);
       });
     });
   });

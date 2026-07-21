@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
@@ -66,6 +68,25 @@ void main() {
         await cache.getUserFuture('u1'); // hit
 
         verify(() => mockUserService.getUser('u1')).called(1);
+      },
+    );
+
+    test(
+      'reutiliza el mismo Future mientras la petición está pendiente',
+      () async {
+        final completer = Completer<AppUser?>();
+        when(
+          () => mockUserService.getUser('u1'),
+        ).thenAnswer((_) => completer.future);
+
+        final first = cache.getUserFuture('u1');
+        final second = cache.getUserFuture('u1');
+
+        expect(identical(first, second), isTrue);
+        verify(() => mockUserService.getUser('u1')).called(1);
+
+        completer.complete(_makeUser('u1'));
+        await Future.wait([first, second]);
       },
     );
 

@@ -19,6 +19,8 @@ class UserService {
   static const _userCacheTtl = Duration(minutes: 10);
   final LinkedHashMap<String, ({AppUser user, DateTime cachedAt})> _userCache =
       LinkedHashMap();
+  final Map<String, Future<AppUser?>> _pendingUserRequests = {};
+  final Map<String, Future<List<AppUser>>> _pendingUserListRequests = {};
 
   void clearCache() => _userCache.clear();
 
@@ -66,13 +68,28 @@ class UserService {
     String uid, {
     bool reportErrors = true,
     bool bypassCache = false,
-  }) async {
+  }) {
     if (!bypassCache) {
       final cached = _getFromCache(uid);
       if (cached != null) {
-        return cached.user;
+        return Future.value(cached.user);
       }
+
+      final pending = _pendingUserRequests[uid];
+      if (pending != null) return pending;
     }
+
+    late final Future<AppUser?> request;
+    request = _fetchUser(uid, reportErrors: reportErrors).whenComplete(() {
+      if (identical(_pendingUserRequests[uid], request)) {
+        _pendingUserRequests.remove(uid);
+      }
+    });
+    if (!bypassCache) _pendingUserRequests[uid] = request;
+    return request;
+  }
+
+  Future<AppUser?> _fetchUser(String uid, {required bool reportErrors}) async {
     try {
       final doc = await _usersRef.doc(uid).get();
       if (!doc.exists) return null;
@@ -246,20 +263,64 @@ class UserService {
   }
 
   /// Obtiene los usuarios correspondientes a una lista de UIDs.
-  Future<List<AppUser>> getUsersByIds(List<String> uids) async {
-    if (uids.isEmpty) return [];
+  ///
+  /// Conserva el orden original, reutiliza perfiles ya cacheados y agrupa en
+  /// una sola petición las llamadas concurrentes para la misma lista.
+  Future<List<AppUser>> getUsersByIds(List<String> uids) {
+    final uniqueUids = uids
+        .where((uid) => uid.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueUids.isEmpty) return Future.value(const []);
+
+    final requestKey = uniqueUids.join('\u0000');
+    final pending = _pendingUserListRequests[requestKey];
+    if (pending != null) return pending;
+
+    late final Future<List<AppUser>> request;
+    request = _fetchUsersByIds(uniqueUids).whenComplete(() {
+      if (identical(_pendingUserListRequests[requestKey], request)) {
+        _pendingUserListRequests.remove(requestKey);
+      }
+    });
+    _pendingUserListRequests[requestKey] = request;
+    return request;
+  }
+
+  Future<List<AppUser>> _fetchUsersByIds(List<String> uids) async {
     try {
+      final usersById = <String, AppUser>{};
+      final missingUids = <String>[];
+      for (final uid in uids) {
+        final cached = _getFromCache(uid);
+        if (cached != null) {
+          usersById[uid] = cached.user;
+        } else {
+          missingUids.add(uid);
+        }
+      }
+
       final futures = <Future<QuerySnapshot<Map<String, dynamic>>>>[];
-      for (var i = 0; i < uids.length; i += 10) {
-        final chunk = uids.sublist(i, (i + 10).clamp(0, uids.length));
+      for (var i = 0; i < missingUids.length; i += 10) {
+        final chunk = missingUids.sublist(
+          i,
+          (i + 10).clamp(0, missingUids.length),
+        );
         futures.add(
           _usersRef.where(FieldPath.documentId, whereIn: chunk).get(),
         );
       }
       final snapshots = await Future.wait(futures);
-      return snapshots
-          .expand((s) => s.docs.map(AppUser.fromFirestore).whereType<AppUser>())
-          .toList();
+      for (final snapshot in snapshots) {
+        for (final doc in snapshot.docs) {
+          final user = AppUser.fromFirestore(doc);
+          if (user == null) continue;
+          usersById[user.uid] = user;
+          _addToCache(user.uid, user);
+        }
+      }
+
+      return [for (final uid in uids) ?usersById[uid]];
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
