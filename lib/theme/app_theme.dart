@@ -51,6 +51,13 @@ abstract final class AppTokens {
 class AppTheme {
   AppTheme._();
 
+  /// Borde tipo cápsula para búsquedas y entradas compactas, sin alterar el
+  /// radio global usado por los formularios.
+  static const pillInputBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(28)),
+    borderSide: BorderSide.none,
+  );
+
   // ── Helpers privados ──────────────────────────────────────────────────────
 
   static TextTheme _buildTextTheme(ColorScheme cs) {

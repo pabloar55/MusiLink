@@ -13,6 +13,7 @@ import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
@@ -694,10 +695,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   hintText: l10n.chatWriteMessage,
                   filled: true,
                   fillColor: colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
+                  border: AppTheme.pillInputBorder,
+                  enabledBorder: AppTheme.pillInputBorder,
+                  focusedBorder: AppTheme.pillInputBorder,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,

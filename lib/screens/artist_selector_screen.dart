@@ -10,6 +10,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 
@@ -534,10 +535,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                               )
                             : null,
                         filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
+                        border: AppTheme.pillInputBorder,
+                        enabledBorder: AppTheme.pillInputBorder,
+                        focusedBorder: AppTheme.pillInputBorder,
                       ),
                     ),
                     if (_suggestions.isNotEmpty) const SizedBox(height: 10),
@@ -697,9 +697,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         SizedBox(
           height: 34,
           child: Theme(
-            data: Theme.of(context).copyWith(
-              splashFactory: NoSplash.splashFactory,
-            ),
+            data: Theme.of(
+              context,
+            ).copyWith(splashFactory: NoSplash.splashFactory),
             child: AnimatedList(
               key: _suggestionsListKey,
               scrollDirection: Axis.horizontal,

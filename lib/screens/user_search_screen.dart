@@ -9,6 +9,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:go_router/go_router.dart';
@@ -193,10 +194,9 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
                 ),
                 filled: true,
                 fillColor: colorScheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
+                border: AppTheme.pillInputBorder,
+                enabledBorder: AppTheme.pillInputBorder,
+                focusedBorder: AppTheme.pillInputBorder,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 10,
@@ -317,10 +317,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
         );
 
       case RelationshipStatus.blocked:
-        return Icon(
-          LucideIcons.userX,
-          color: colorScheme.onSurfaceVariant,
-        );
+        return Icon(LucideIcons.userX, color: colorScheme.onSurfaceVariant);
     }
   }
 }

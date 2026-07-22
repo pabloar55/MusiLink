@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/track_artwork.dart';
 
@@ -92,10 +93,9 @@ class _DailySongSearchSheetState extends ConsumerState<DailySongSearchSheet> {
                   prefixIcon: const Icon(LucideIcons.search),
                   filled: true,
                   fillColor: colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
+                  border: AppTheme.pillInputBorder,
+                  enabledBorder: AppTheme.pillInputBorder,
+                  focusedBorder: AppTheme.pillInputBorder,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
