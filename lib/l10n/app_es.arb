@@ -86,6 +86,8 @@
   "chatDeleteBody": "Se eliminará esta conversación.",
   "chatDeleteConfirm": "Eliminar",
   "chatDeleteCancel": "Cancelar",
+  "chatDateToday": "Hoy",
+  "chatDateYesterday": "Ayer",
 
   "statsTracks": "Canciones",
   "statsArtists": "Artistas",

@@ -91,6 +91,8 @@
   "chatDeleteBody": "This conversation will be deleted.",
   "chatDeleteConfirm": "Delete",
   "chatDeleteCancel": "Cancel",
+  "chatDateToday": "Today",
+  "chatDateYesterday": "Yesterday",
 
   "statsTracks": "Tracks",
   "statsArtists": "Artists",

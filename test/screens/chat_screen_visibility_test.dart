@@ -114,5 +114,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     verify(() => chatService.markMessagesAsRead('chat-1')).called(1);
+
+    final sameDayMessage = Message(
+      id: 'message-2',
+      senderId: 'current-user',
+      text: 'Same day',
+      timestamp: DateTime(2026, 7, 19, 18),
+    );
+    final nextDayMessage = Message(
+      id: 'message-3',
+      senderId: 'other-user',
+      text: 'Next day',
+      timestamp: DateTime(2026, 7, 20, 9),
+    );
+    messages.add([firstMessage, sameDayMessage, nextDayMessage]);
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('chat-date-2026-7-19')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-date-2026-7-20')), findsOneWidget);
   });
 }

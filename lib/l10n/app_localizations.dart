@@ -564,6 +564,18 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get chatDeleteCancel;
 
+  /// No description provided for @chatDateToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatDateToday;
+
+  /// No description provided for @chatDateYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get chatDateYesterday;
+
   /// No description provided for @statsTracks.
   ///
   /// In en, this message translates to:

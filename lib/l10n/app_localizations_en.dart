@@ -251,6 +251,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatDeleteCancel => 'Cancel';
 
   @override
+  String get chatDateToday => 'Today';
+
+  @override
+  String get chatDateYesterday => 'Yesterday';
+
+  @override
   String get statsTracks => 'Tracks';
 
   @override

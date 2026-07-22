@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,7 +46,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string if session was lost (GoRouter redirects before this
   /// is reached in normal flow, but race conditions are possible).
-  String get _currentUid => ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+  String get _currentUid =>
+      ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
 
   /// Obtiene el UID del otro participante del chat.
   String _otherUid(Chat chat) {
@@ -86,9 +86,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       await ref.read(chatServiceProvider).softDeleteChat(chatId);
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.genericError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.genericError)));
       }
     }
   }
@@ -113,164 +113,171 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
 
-    return ref.watch(chatsProvider).when(
-        loading: () => SkeletonShimmer(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: List.generate(6, (_) => const SkeletonChatListTile()),
-          ),
-        ),
-        error: (error, _) {
-          reportError(error, StackTrace.current);
-          return Center(
-            child: Text(
-              l10n.socialErrorLoading,
-              style: TextStyle(color: colorScheme.onSurface.withAlpha(150)),
+    return ref
+        .watch(chatsProvider)
+        .when(
+          loading: () => SkeletonShimmer(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: List.generate(6, (_) => const SkeletonChatListTile()),
             ),
-          );
-        },
-        data: (chats) {
-          if (chats.isEmpty) {
+          ),
+          error: (error, _) {
+            reportError(error, StackTrace.current);
             return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    LucideIcons.messageCircle,
-                    size: 64,
-                    color: colorScheme.onSurface.withAlpha(100),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.socialNoChats,
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withAlpha(150),
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.socialNoChatsHint,
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withAlpha(100),
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+              child: Text(
+                l10n.socialErrorLoading,
+                style: TextStyle(color: colorScheme.onSurface.withAlpha(150)),
               ),
             );
-          }
+          },
+          data: (chats) {
+            if (chats.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.messageCircle,
+                      size: 64,
+                      color: colorScheme.onSurface.withAlpha(100),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.socialNoChats,
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withAlpha(150),
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.socialNoChatsHint,
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withAlpha(100),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: chats.length,
-            separatorBuilder: (_, _) => Divider(
-              height: 1,
-              indent: 72,
-              color: colorScheme.onSurface.withAlpha(30),
-            ),
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-              final otherUid = _otherUid(chat);
+            return ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: chats.length,
+              separatorBuilder: (_, _) => Divider(
+                height: 1,
+                indent: 72,
+                color: colorScheme.onSurface.withAlpha(30),
+              ),
+              itemBuilder: (context, index) {
+                final chat = chats[index];
+                final otherUid = _otherUid(chat);
 
-              return FutureBuilder<AppUser?>(
-                future: getUserFuture(otherUid),
-                builder: (context, userSnap) {
-                  final isLoading =
-                      userSnap.connectionState == ConnectionState.waiting &&
-                      !userSnap.hasData;
-                  if (isLoading) {
-                    return const SkeletonShimmer(child: SkeletonChatListTile());
-                  }
+                return FutureBuilder<AppUser?>(
+                  future: getUserFuture(otherUid),
+                  builder: (context, userSnap) {
+                    final isLoading =
+                        userSnap.connectionState == ConnectionState.waiting &&
+                        !userSnap.hasData;
+                    if (isLoading) {
+                      return const SkeletonShimmer(
+                        child: SkeletonChatListTile(),
+                      );
+                    }
 
-                  final otherUser = userSnap.data;
-                  final name = otherUser?.displayName ?? l10n.socialUser;
-                  final photoUrl = otherUser?.photoUrl ?? '';
+                    final otherUser = userSnap.data;
+                    final name = otherUser?.displayName ?? l10n.socialUser;
+                    final photoUrl = otherUser?.photoUrl ?? '';
 
                   final unread = chat.unreadCounts[_currentUid] ?? 0;
-                  return ListTile(
-                    leading: UserCircleAvatar(
-                      photoUrl: photoUrl,
-                      name: name,
-                      radius: 24,
-                    ),
-                    title: Text(
-                      name,
-                      style: TextStyle(
-                        fontWeight: unread > 0
-                            ? FontWeight.w800
-                            : FontWeight.w600,
+                    return ListTile(
+                      leading: UserCircleAvatar(
+                        photoUrl: photoUrl,
+                        name: name,
+                        radius: 24,
                       ),
-                    ),
-                    subtitle: Text(
+                      title: Text(
+                        name,
+                        style: TextStyle(
+                          fontWeight: unread > 0
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
                       chat.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: colorScheme.onSurface.withAlpha(
-                          unread > 0 ? 200 : 150,
-                        ),
-                        fontWeight: unread > 0
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    trailing: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatTime(chat.lastMessageTime, l10n),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: unread > 0
-                                ? colorScheme.primary
-                                : colorScheme.onSurface.withAlpha(120),
-                            fontWeight: unread > 0
-                                ? FontWeight.w600
-                                : FontWeight.normal,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withAlpha(
+                            unread > 0 ? 200 : 150,
                           ),
+                          fontWeight: unread > 0
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
-                        if (unread > 0) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              unread > 99 ? '99+' : '$unread',
+                      ),
+                      trailing: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                            Text(
+                              _formatTime(chat.lastMessageTime, l10n),
                               style: TextStyle(
-                                color: colorScheme.onPrimary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: unread > 0
+                                    ? colorScheme.primary
+                                    : colorScheme.onSurface.withAlpha(120),
+                                fontWeight: unread > 0
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                               ),
                             ),
-                          ),
+                          if (unread > 0) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                unread > 99 ? '99+' : '$unread',
+                                style: TextStyle(
+                                  color: colorScheme.onPrimary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    onTap: () {
-                      context.push(
-                        Uri(path: '/chat', queryParameters: {
-                          'chatId': chat.id,
-                          'otherUserName': name,
-                          'otherUserId': otherUid,
-                        }).toString(),
-                      );
-                    },
-                    onLongPress: () =>
-                        _confirmDeleteChat(context, chat.id, l10n),
-                  );
-                },
-              );
-            },
-          );
-        },
-      );
+                      ),
+                      onTap: () {
+                        context.push(
+                          Uri(
+                            path: '/chat',
+                            queryParameters: {
+                              'chatId': chat.id,
+                              'otherUserName': name,
+                              'otherUserId': otherUid,
+                            },
+                          ).toString(),
+                        );
+                      },
+                      onLongPress: () =>
+                          _confirmDeleteChat(context, chat.id, l10n),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
   }
 }

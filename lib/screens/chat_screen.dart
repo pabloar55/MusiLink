@@ -473,34 +473,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (!didPop) _leaveChat();
       },
       child: Scaffold(
-        appBar: AppBar(
-          leading: canPop ? null : BackButton(onPressed: _leaveChat),
-          centerTitle: false,
-          titleSpacing: 0,
-          title: GestureDetector(
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: _openOtherUserProfile,
-            child: FutureBuilder<AppUser?>(
-              future: _otherUserFuture,
-              builder: (context, snapshot) {
-                final user = snapshot.data;
-                final name = user?.displayName ?? widget.otherUserName;
-                final photoUrl = user?.photoUrl ?? '';
+            child: AppBar(
+              backgroundColor: colorScheme.surfaceContainerLow,
+              leading: canPop ? null : BackButton(onPressed: _leaveChat),
+              centerTitle: false,
+              titleSpacing: 0,
+              title: FutureBuilder<AppUser?>(
+                future: _otherUserFuture,
+                builder: (context, snapshot) {
+                  final user = snapshot.data;
+                  final name = user?.displayName ?? widget.otherUserName;
+                  final photoUrl = user?.photoUrl ?? '';
 
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    UserCircleAvatar(
-                      photoUrl: photoUrl,
-                      name: name,
-                      radius: 16,
-                    ),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Text(name, overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                );
-              },
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UserCircleAvatar(
+                        photoUrl: photoUrl,
+                        name: name,
+                        radius: 16,
+                      ),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -560,34 +565,100 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             itemCount: _allMessages.length,
             itemBuilder: (context, index) {
-              final msg = _allMessages[_allMessages.length - 1 - index];
+              final messageIndex = _allMessages.length - 1 - index;
+              final msg = _allMessages[messageIndex];
               final isMe = msg.senderId == _currentUid;
+              final showDateSeparator =
+                  messageIndex == 0 ||
+                  !_isSameCalendarDay(
+                    msg.timestamp,
+                    _allMessages[messageIndex - 1].timestamp,
+                  );
 
-              if (msg.isTrack) {
-                return TrackBubble(
-                  message: msg,
-                  isMe: isMe,
-                  colorScheme: colorScheme,
-                  currentUid: _currentUid,
-                  chatId: widget.chatId,
-                  chatService: ref.read(chatServiceProvider),
-                  reactionsEnabled: canInteract,
-                );
-              }
+              final messageBubble = msg.isTrack
+                  ? TrackBubble(
+                      message: msg,
+                      isMe: isMe,
+                      colorScheme: colorScheme,
+                      currentUid: _currentUid,
+                      chatId: widget.chatId,
+                      chatService: ref.read(chatServiceProvider),
+                      reactionsEnabled: canInteract,
+                    )
+                  : MessageBubble(
+                      message: msg,
+                      isMe: isMe,
+                      colorScheme: colorScheme,
+                      currentUid: _currentUid,
+                      chatId: widget.chatId,
+                      chatService: ref.read(chatServiceProvider),
+                      reactionsEnabled: canInteract,
+                    );
 
-              return MessageBubble(
-                message: msg,
-                isMe: isMe,
-                colorScheme: colorScheme,
-                currentUid: _currentUid,
-                chatId: widget.chatId,
-                chatService: ref.read(chatServiceProvider),
-                reactionsEnabled: canInteract,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (showDateSeparator)
+                    _buildDateSeparator(context, msg.timestamp, colorScheme),
+                  messageBubble,
+                ],
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  bool _isSameCalendarDay(DateTime first, DateTime second) {
+    final localFirst = first.toLocal();
+    final localSecond = second.toLocal();
+    return localFirst.year == localSecond.year &&
+        localFirst.month == localSecond.month &&
+        localFirst.day == localSecond.day;
+  }
+
+  Widget _buildDateSeparator(
+    BuildContext context,
+    DateTime timestamp,
+    ColorScheme colorScheme,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final localDate = timestamp.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(
+      localDate.year,
+      localDate.month,
+      localDate.day,
+    );
+    final daysAgo = today.difference(messageDate).inDays;
+    final label = switch (daysAgo) {
+      0 => l10n.chatDateToday,
+      1 => l10n.chatDateYesterday,
+      _ => MaterialLocalizations.of(context).formatMediumDate(localDate),
+    };
+
+    return Center(
+      child: Container(
+        key: ValueKey(
+          'chat-date-${localDate.year}-${localDate.month}-${localDate.day}',
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 

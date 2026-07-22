@@ -91,6 +91,8 @@
   "chatDeleteBody": "Αυτή η συνομιλία θα διαγραφεί.",
   "chatDeleteConfirm": "Διαγραφή",
   "chatDeleteCancel": "Άκυρο",
+  "chatDateToday": "Σήμερα",
+  "chatDateYesterday": "Χθες",
 
   "statsTracks": "Τραγούδια",
   "statsArtists": "Καλλιτέχνες",
