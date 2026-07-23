@@ -240,6 +240,10 @@ class UserService {
   /// un autor reconocible ("Deleted user") en lugar de romperse.
   Future<void> anonymizeUser(String uid) async {
     try {
+      final pushTokens = await _privateUsersRef
+          .doc(uid)
+          .collection(FirestoreCollections.pushTokens)
+          .get();
       final batch = _firestore.batch();
       batch.update(_usersRef.doc(uid), {
         'displayName': AppUser.deletedDisplayName,
@@ -253,6 +257,9 @@ class UserService {
         'dailySong': FieldValue.delete(),
         'dailySongUpdatedAt': FieldValue.delete(),
       });
+      for (final token in pushTokens.docs) {
+        batch.delete(token.reference);
+      }
       batch.delete(_privateUsersRef.doc(uid));
       await batch.commit();
       _userCache.remove(uid);

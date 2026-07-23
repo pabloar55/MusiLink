@@ -16,6 +16,7 @@ const db = admin.firestore();
 const messaging = admin.messaging();
 
 const userPrivateCollection = 'user_private';
+const pushTokensSubcollection = 'push_tokens';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
 const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationsCollection = 'recommendations';
@@ -95,64 +96,136 @@ function notifChannelId(sound: boolean, vibration: boolean): string {
   return 'musilink_high_silent';
 }
 
+function notificationPath(data: Record<string, string>): string {
+  if (data.type === 'new_message' && data.chatId && data.otherUserId) {
+    const query = new URLSearchParams({
+      chatId: data.chatId,
+      otherUserId: data.otherUserId,
+      ...(data.otherUserName ? { otherUserName: data.otherUserName } : {}),
+    });
+    return `/chat?${query.toString()}`;
+  }
+  if (
+    data.type === 'friend_request' ||
+    data.type === 'friend_request_accepted'
+  ) {
+    return '/?tab=friends';
+  }
+  return '/';
+}
+
+// Notifications with the same tag replace each other in the drawer, keeping
+// one entry per conversation instead of an unbounded stack.
 async function sendNotification(
   recipientUid: string,
   recipientPrivateData: admin.firestore.DocumentData | undefined,
-  token: string,
   notification: { title: string; body: string },
   data: Record<string, string>,
-  // Notifications with the same tag replace each other in the drawer,
-  // keeping one entry per conversation instead of an unbounded stack.
   tag?: string,
 ): Promise<void> {
   const sound = recipientPrivateData?.notifSound !== false;
   const vibration = recipientPrivateData?.notifVibration !== false;
   const channelId = notifChannelId(sound, vibration);
   const isChatMessage = data.type === 'new_message';
-  try {
-    await messaging.send({
-      token,
-      // A top-level `notification` is rendered by Android's FCM SDK before
-      // Flutter can process it. Chat messages must instead be data-only on
-      // Android so the client can update one MessagingStyle notification.
-      ...(!isChatMessage ? { notification } : {}),
-      data,
-      android: {
-        priority: 'high',
-        // A platform notification block makes FCM treat the push as a
-        // notification message on Android. For chats that would create an
-        // additional empty system notification before the data-only handler
-        // builds the app's MessagingStyle notification.
-        ...(!isChatMessage
-          ? {
-              notification: {
-                channelId,
-                ...(tag ? { tag } : {}),
-              },
-            }
-          : {}),
-      },
-      apns: {
-        ...(tag ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } } : {}),
-        payload: {
-          aps: {
-            // iOS cannot build Android's MessagingStyle notification, so it
-            // keeps its native grouped alert per conversation.
-            ...(isChatMessage ? { alert: notification } : {}),
-            ...(sound ? { sound: 'default' } : {}),
-          },
-        },
-      },
-    });
-  } catch (error: unknown) {
-    const fcmError = error as { code?: string };
-    if (fcmError.code === 'messaging/registration-token-not-registered') {
-      await db.doc(`${userPrivateCollection}/${recipientUid}`).update({ fcmToken: FieldValue.delete() });
-      return;
-    }
-    logger.error('sendNotification: unexpected FCM error', { recipientUid, error });
-    throw error;
+  const privateUserRef = db.doc(`${userPrivateCollection}/${recipientUid}`);
+  const pushTokensSnapshot = await privateUserRef
+    .collection(pushTokensSubcollection)
+    .limit(20)
+    .get();
+  const targets = new Map<
+    string,
+    admin.firestore.DocumentReference | undefined
+  >();
+  const legacyToken = recipientPrivateData?.fcmToken;
+  if (typeof legacyToken === 'string' && legacyToken.length > 0) {
+    targets.set(legacyToken, undefined);
   }
+  for (const tokenDoc of pushTokensSnapshot.docs) {
+    const token = tokenDoc.data().token;
+    if (typeof token === 'string' && token.length > 0) {
+      targets.set(token, tokenDoc.ref);
+    }
+  }
+  if (targets.size === 0) return;
+
+  await Promise.all(
+    [...targets].map(async ([token, tokenRef]) => {
+      try {
+        await messaging.send({
+          token,
+          // A top-level `notification` is rendered by Android's FCM SDK before
+          // Flutter can process it. Chat messages must instead be data-only on
+          // Android so the client can update one MessagingStyle notification.
+          ...(!isChatMessage ? { notification } : {}),
+          data,
+          android: {
+            priority: 'high',
+            // A platform notification block makes FCM treat the push as a
+            // notification message on Android. For chats that would create an
+            // additional empty system notification before the data-only handler
+            // builds the app's MessagingStyle notification.
+            ...(!isChatMessage
+              ? {
+                  notification: {
+                    channelId,
+                    ...(tag ? { tag } : {}),
+                  },
+                }
+              : {}),
+          },
+          apns: {
+            ...(tag
+              ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } }
+              : {}),
+            payload: {
+              aps: {
+                // iOS cannot build Android's MessagingStyle notification, so it
+                // keeps its native grouped alert per conversation.
+                ...(isChatMessage ? { alert: notification } : {}),
+                ...(sound ? { sound: 'default' } : {}),
+              },
+            },
+          },
+          webpush: {
+            notification: {
+              ...notification,
+              icon: '/icons/Icon-192.png',
+              badge: '/icons/Icon-192.png',
+              data: { path: notificationPath(data) },
+              ...(tag ? { tag } : {}),
+              ...(!sound ? { silent: true } : {}),
+            },
+            data: {
+              ...data,
+              notificationPath: notificationPath(data),
+            },
+          },
+        });
+      } catch (error: unknown) {
+        const fcmError = error as { code?: string };
+        if (fcmError.code === 'messaging/registration-token-not-registered') {
+          if (tokenRef) {
+            await tokenRef.delete();
+          } else {
+            await db.runTransaction(async (transaction) => {
+              const current = await transaction.get(privateUserRef);
+              if (current.data()?.fcmToken === token) {
+                transaction.update(privateUserRef, {
+                  fcmToken: FieldValue.delete(),
+                });
+              }
+            });
+          }
+          return;
+        }
+        logger.error('sendNotification: unexpected FCM error', {
+          recipientUid,
+          error,
+        });
+        throw error;
+      }
+    }),
+  );
 }
 
 function preferredLocale(data: admin.firestore.DocumentData | undefined): SupportedLocale {
@@ -925,10 +998,9 @@ export const onNewMessage = onDocumentCreated(
         db.doc(`users/${senderId}`).get(),
       ]);
 
-      const fcmToken = recipientSnap.data()?.fcmToken as string | undefined;
       const senderName = senderSnap.data()?.displayName as string | undefined;
       const senderPhotoUrl = senderSnap.data()?.photoUrl as string | undefined;
-      if (!fcmToken || !senderName) return;
+      if (!senderName) return;
 
       // Android receives this as a data-only message so the app can render a
       // single MessagingStyle notification containing the recent messages of
@@ -936,7 +1008,6 @@ export const onNewMessage = onDocumentCreated(
       await sendNotification(
         recipientId,
         recipientSnap.data(),
-        fcmToken,
         { title: senderName, body: (message.text as string | undefined) ?? '📎' },
         {
           type: 'new_message',
@@ -1060,15 +1131,13 @@ export const onFriendRequest = onDocumentCreated(
       ]);
 
       const receiver = receiverSnap.data();
-      const fcmToken = receiver?.fcmToken as string | undefined;
       const senderName = senderSnap.data()?.displayName as string | undefined;
-      if (!fcmToken || !senderName) return;
+      if (!senderName) return;
       const locale = preferredLocale(receiver);
 
       await sendNotification(
         receiverId,
         receiver,
-        fcmToken,
         { title: 'MusiLink', body: notificationText.friendRequest[locale](senderName) },
         { type: 'friend_request', senderId },
         `friend_request_${senderId}`,
@@ -1116,14 +1185,12 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       ]);
 
       const sender = senderSnap.data();
-      const fcmToken = sender?.fcmToken as string | undefined;
       const accepterName = receiverSnap.data()?.displayName as string | undefined;
-      if (fcmToken && accepterName) {
+      if (accepterName) {
         const locale = preferredLocale(sender);
         await sendNotification(
           senderId,
           sender,
-          fcmToken,
           { title: 'MusiLink', body: notificationText.friendRequestAccepted[locale](accepterName) },
           { type: 'friend_request_accepted', accepterId: receiverId },
         );

@@ -1,11 +1,13 @@
 {
     "name": "MusiLink",
     "short_name": "MusiLink",
-    "start_url": ".",
+    "id": "/",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
-    "description": "A new Flutter project.",
+    "description": "Conecta con personas a través de tus gustos musicales.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1188,6 +1188,48 @@ abstract class AppLocalizations {
   /// **'Sound'**
   String get settingsSound;
 
+  /// No description provided for @pushNotificationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t miss a message'**
+  String get pushNotificationsTitle;
+
+  /// No description provided for @pushNotificationsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable notifications to receive messages and friend requests even when MusiLink is closed.'**
+  String get pushNotificationsBody;
+
+  /// No description provided for @pushNotificationsEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable notifications'**
+  String get pushNotificationsEnable;
+
+  /// No description provided for @pushNotificationsInstallBody.
+  ///
+  /// In en, this message translates to:
+  /// **'On iPhone, open MusiLink in Safari, tap Share and choose “Add to Home Screen”. Then open the app from its icon.'**
+  String get pushNotificationsInstallBody;
+
+  /// No description provided for @pushNotificationsBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are blocked. You can enable them in iPhone Settings → Notifications → MusiLink.'**
+  String get pushNotificationsBlockedBody;
+
+  /// No description provided for @pushNotificationsUnsupportedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This browser or device does not support web notifications.'**
+  String get pushNotificationsUnsupportedBody;
+
+  /// No description provided for @pushNotificationsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications could not be enabled. Please try again.'**
+  String get pushNotificationsError;
+
   /// No description provided for @settingsLegal.
   ///
   /// In en, this message translates to:

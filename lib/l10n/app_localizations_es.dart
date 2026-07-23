@@ -611,6 +611,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsSound => 'Sonido';
 
   @override
+  String get pushNotificationsTitle => 'No te pierdas ningún mensaje';
+
+  @override
+  String get pushNotificationsBody =>
+      'Activa las notificaciones para recibir mensajes y solicitudes de amistad aunque MusiLink esté cerrada.';
+
+  @override
+  String get pushNotificationsEnable => 'Activar notificaciones';
+
+  @override
+  String get pushNotificationsInstallBody =>
+      'En iPhone, abre MusiLink desde Safari, pulsa Compartir y selecciona «Añadir a pantalla de inicio». Después, abre la app desde su icono.';
+
+  @override
+  String get pushNotificationsBlockedBody =>
+      'Las notificaciones están bloqueadas. Puedes activarlas en Ajustes del iPhone → Notificaciones → MusiLink.';
+
+  @override
+  String get pushNotificationsUnsupportedBody =>
+      'Este navegador o dispositivo no admite notificaciones web.';
+
+  @override
+  String get pushNotificationsError =>
+      'No se pudieron activar las notificaciones. Inténtalo de nuevo.';
+
+  @override
   String get settingsLegal => 'Legal';
 
   @override

@@ -96,6 +96,32 @@ test('un perfil privado nuevo debe comenzar sin amigos', async () => {
   }));
 });
 
+test('cada usuario solo puede gestionar sus propios tokens push válidos', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+  const tokenPath =
+    'user_private/alice/push_tokens/abcdefghijklmnopqrstuvwx';
+  const validToken = {
+    token: 'fcm-token',
+    platform: 'web',
+    preferredLocale: 'es',
+    updatedAt: serverTimestamp(),
+  };
+
+  await assertSucceeds(setDoc(doc(dbFor('alice'), tokenPath), validToken));
+  await assertFails(setDoc(doc(dbFor('bob'), tokenPath), validToken));
+  await assertFails(setDoc(
+    doc(
+      dbFor('alice'),
+      'user_private/alice/push_tokens/zyxwvutsrqponmlkjihgfedc',
+    ),
+    {
+      ...validToken,
+      platform: 'unknown',
+    },
+  ));
+});
+
 test('solo el receptor puede aceptar una solicitud pendiente', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');

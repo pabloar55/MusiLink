@@ -101,6 +101,27 @@ service cloud.firestore {
         && (!('notifVibration' in data) || data.notifVibration is bool);
     }
 
+    function validPushToken(data) {
+      return data.keys().hasOnly([
+          'token',
+          'platform',
+          'preferredLocale',
+          'updatedAt',
+        ])
+        && data.keys().hasAll([
+          'token',
+          'platform',
+          'preferredLocale',
+          'updatedAt',
+        ])
+        && data.token is string
+        && data.token.toUtf8().size() > 0
+        && data.token.toUtf8().size() <= 4096
+        && data.platform in ['android', 'ios', 'web']
+        && data.preferredLocale in ['en', 'es', 'fr']
+        && data.updatedAt == request.time;
+    }
+
     function validFriends(userId, data) {
       return !('friends' in data)
         || (
@@ -206,6 +227,15 @@ service cloud.firestore {
         )
       );
       allow delete: if request.auth != null && request.auth.uid == userId;
+
+      match /push_tokens/{installationId} {
+        allow read, delete: if request.auth != null
+          && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && installationId.matches('^[A-Za-z0-9_-]{20,64}$')
+          && validPushToken(request.resource.data);
+      }
     }
 
     // ─── Solicitudes de amistad ───────────────────────────

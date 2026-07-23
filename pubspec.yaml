@@ -37,6 +37,7 @@ dependencies:
   firebase_storage: ^13.4.3
   firebase_remote_config: ^6.5.5
   package_info_plus: ^10.2.1
+  web: ^1.1.1
 
 
 dev_dependencies:

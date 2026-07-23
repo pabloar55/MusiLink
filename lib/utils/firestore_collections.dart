@@ -6,6 +6,7 @@
 abstract final class FirestoreCollections {
   static const String users = 'users';
   static const String userPrivate = 'user_private';
+  static const String pushTokens = 'push_tokens';
   static const String recommendations = 'recommendations';
   static const String chats = 'chats';
   static const String messages = 'messages';

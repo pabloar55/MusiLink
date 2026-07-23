@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+enum PushPermissionState { unsupported, notDetermined, denied, enabled }
 
 class NotificationService {
   NotificationService({
@@ -47,6 +50,9 @@ class NotificationService {
   static const _channelSilentName = 'MusiLink Notifications (silent)';
   static const _supportedPreferredLocales = {'en', 'es', 'fr'};
   static const _pendingClearUidKey = 'pending_fcm_clear_uid';
+  static const _installationIdKey = 'push_installation_id';
+  static const _webVapidKey =
+      'BHWDoNtHqOTGikK1rCJeWntcKQUiv763Z1YtY96MP2DzePOFHFtw8dxy7mGME7EnkajPy3q6DfjdMU34yiq8sEc';
   static const kVibrationKey = 'notification_vibration';
   static const kSoundKey = 'notification_sound';
   static const _permissionDialogShownKey = 'notification_pre_dialog_shown';
@@ -58,7 +64,14 @@ class NotificationService {
   static const _maxAvatarBytes = 1024 * 1024;
 
   Future<void> initialize() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      if (!await _messaging.isSupported()) return;
+      await _retryPendingTokenClear();
+      await _saveTokenIfGranted();
+      _messaging.onTokenRefresh.listen((_) => _saveToken());
+      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      return;
+    }
 
     // 1. iOS foreground presentation options
     await _messaging.setForegroundNotificationPresentationOptions(
@@ -109,11 +122,22 @@ class NotificationService {
     await _requestPermissionAndSaveToken();
   }
 
+  Future<PushPermissionState> getPermissionState() async {
+    if (kIsWeb && !await _messaging.isSupported()) {
+      return PushPermissionState.unsupported;
+    }
+    final settings = await _messaging.getNotificationSettings();
+    return switch (settings.authorizationStatus) {
+      AuthorizationStatus.authorized ||
+      AuthorizationStatus.provisional => PushPermissionState.enabled,
+      AuthorizationStatus.denied => PushPermissionState.denied,
+      AuthorizationStatus.notDetermined => PushPermissionState.notDetermined,
+    };
+  }
+
   Future<void> saveTokenIfGranted() async => _saveTokenIfGranted();
 
   Future<void> _saveTokenIfGranted() async {
-    if (kIsWeb) return;
-
     final settings = await _messaging.getNotificationSettings();
     final granted =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
@@ -122,8 +146,6 @@ class NotificationService {
   }
 
   Future<void> _requestPermissionAndSaveToken() async {
-    if (kIsWeb) return;
-
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -136,8 +158,6 @@ class NotificationService {
   }
 
   Future<void> _saveToken() async {
-    if (kIsWeb) return;
-
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
@@ -145,17 +165,55 @@ class NotificationService {
 
     final String? token;
     try {
-      token = await _messaging.getToken();
+      token = await _getToken();
     } on FirebaseException catch (e, stack) {
       if (e.code == 'apns-token-not-set') return;
       await reportError(e, stack);
       rethrow;
     }
     if (token == null) return;
-    await _firestore.collection(FirestoreCollections.userPrivate).doc(uid).set({
-      'fcmToken': token,
+    final installationId = await _installationId();
+    final privateUserRef = _firestore
+        .collection(FirestoreCollections.userPrivate)
+        .doc(uid);
+    final tokenRef = privateUserRef
+        .collection(FirestoreCollections.pushTokens)
+        .doc(installationId);
+    final batch = _firestore.batch();
+    batch.set(privateUserRef, {
       'preferredLocale': _preferredLocale(),
     }, SetOptions(merge: true));
+    batch.set(tokenRef, {
+      'token': token,
+      'platform': _pushPlatform(),
+      'preferredLocale': _preferredLocale(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  String _pushPlatform() {
+    if (kIsWeb) return 'web';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => 'ios',
+      _ => 'android',
+    };
+  }
+
+  Future<String?> _getToken() => _messaging.getToken(
+    vapidKey: kIsWeb ? _webVapidKey : null,
+    serviceWorkerScriptPath: kIsWeb ? 'firebase-messaging-sw.js' : null,
+  );
+
+  Future<String> _installationId() async {
+    final existing = _prefs.getString(_installationIdKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final random = Random.secure();
+    final bytes = List<int>.generate(18, (_) => random.nextInt(256));
+    final id = base64Url.encode(bytes).replaceAll('=', '');
+    await _prefs.setString(_installationIdKey, id);
+    return id;
   }
 
   bool get _requiresApnsToken =>
@@ -182,10 +240,15 @@ class NotificationService {
   }
 
   Future<void> clearToken() async {
-    if (kIsWeb) return;
-
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+
+    String? currentToken;
+    try {
+      currentToken = await _getToken();
+    } catch (_) {
+      // Firestore cleanup below still prevents delivery to this installation.
+    }
 
     // Best-effort: revoke token from FCM. Even if this fails the token
     // will eventually expire; the Firestore cleanup below is what stops
@@ -196,15 +259,36 @@ class NotificationService {
       await reportError(e, stack);
     }
 
-    await _clearFcmTokenFromFirestore(uid);
+    await _clearFcmTokenFromFirestore(uid, legacyToken: currentToken);
   }
 
-  Future<void> _clearFcmTokenFromFirestore(String uid) async {
+  Future<void> _clearFcmTokenFromFirestore(
+    String uid, {
+    String? legacyToken,
+  }) async {
     try {
-      await _firestore
+      final privateUserRef = _firestore
           .collection(FirestoreCollections.userPrivate)
-          .doc(uid)
-          .update({'fcmToken': FieldValue.delete()});
+          .doc(uid);
+      final installationId = await _installationId();
+      await privateUserRef
+          .collection(FirestoreCollections.pushTokens)
+          .doc(installationId)
+          .delete();
+
+      // Remove the legacy single-token field only when it belongs to this
+      // installation. Older app versions can continue receiving during the
+      // migration without being overwritten by a web login.
+      if (legacyToken != null) {
+        await _firestore.runTransaction((transaction) async {
+          final snapshot = await transaction.get(privateUserRef);
+          if (snapshot.data()?['fcmToken'] == legacyToken) {
+            transaction.update(privateUserRef, {
+              'fcmToken': FieldValue.delete(),
+            });
+          }
+        });
+      }
       await _prefs.remove(_pendingClearUidKey);
     } catch (e, stack) {
       await reportError(e, stack);

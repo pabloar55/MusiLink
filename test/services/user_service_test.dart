@@ -427,10 +427,19 @@ void main() {
       test('no borra rate_limits al anonimizar usuario', () async {
         final mockUserDocRef = MockDocumentReference();
         final mockPrivateDocRef = MockDocumentReference();
+        final mockPushTokensRef = MockCollectionReference();
+        final mockPushTokensSnapshot = MockQuerySnapshot();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockUserDocRef);
         when(
           () => mockPrivateUsersRef.doc('uid123'),
         ).thenReturn(mockPrivateDocRef);
+        when(
+          () => mockPrivateDocRef.collection('push_tokens'),
+        ).thenReturn(mockPushTokensRef);
+        when(
+          () => mockPushTokensRef.get(),
+        ).thenAnswer((_) async => mockPushTokensSnapshot);
+        when(() => mockPushTokensSnapshot.docs).thenReturn([]);
         when(() => mockBatch.update(mockUserDocRef, any())).thenReturn(null);
         when(() => mockBatch.delete(mockPrivateDocRef)).thenReturn(null);
 
