@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
@@ -12,6 +14,16 @@ class _FakeUpdateChecker implements AppUpdateChecker {
 
   @override
   Future<AppUpdatePolicy> check({bool fetchRemote = true}) async => policy;
+
+  @override
+  Stream<AppUpdatePolicy> get policyUpdates => const Stream.empty();
+}
+
+class _CompleterUpdateChecker implements AppUpdateChecker {
+  final Completer<AppUpdatePolicy> completer = Completer<AppUpdatePolicy>();
+
+  @override
+  Future<AppUpdatePolicy> check({bool fetchRemote = true}) => completer.future;
 
   @override
   Stream<AppUpdatePolicy> get policyUpdates => const Stream.empty();
@@ -76,6 +88,7 @@ void main() {
       AppBootstrap(
         updateChecker: _FakeUpdateChecker(policy),
         immediateUpdateLauncher: launcher,
+        mainAppBuilder: () => const SizedBox.shrink(),
       ),
     );
     await tester.pumpAndSettle();
@@ -84,4 +97,29 @@ void main() {
     expect(find.byType(MandatoryUpdateScreen), findsOneWidget);
     expect(find.text('Update required'), findsOneWidget);
   });
+
+  testWidgets(
+    'muestra MainApp mientras Remote Config se comprueba en segundo plano',
+    (tester) async {
+      final checker = _CompleterUpdateChecker();
+
+      await tester.pumpWidget(
+        AppBootstrap(
+          updateChecker: checker,
+          immediateUpdateLauncher: _FakeImmediateUpdateLauncher(),
+          mainAppBuilder: () =>
+              const MaterialApp(home: Scaffold(body: Text('MainApp visible'))),
+        ),
+      );
+
+      expect(find.text('MainApp visible'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      checker.completer.complete(policy);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MandatoryUpdateScreen), findsOneWidget);
+      expect(find.text('MainApp visible'), findsNothing);
+    },
+  );
 }

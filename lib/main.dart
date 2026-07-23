@@ -123,10 +123,12 @@ class AppBootstrap extends StatefulWidget {
     super.key,
     this.updateChecker,
     this.immediateUpdateLauncher,
+    this.mainAppBuilder,
   });
 
   final AppUpdateChecker? updateChecker;
   final ImmediateUpdateLauncher? immediateUpdateLauncher;
+  final Widget Function()? mainAppBuilder;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -138,7 +140,6 @@ class _AppBootstrapState extends State<AppBootstrap>
   late final ImmediateUpdateLauncher _immediateUpdateLauncher;
   StreamSubscription<AppUpdatePolicy>? _policySubscription;
   AppUpdatePolicy? _policy;
-  bool _checking = true;
   bool _openingStore = false;
   bool _immediateUpdateInProgress = false;
   bool _immediateUpdateAttempted = false;
@@ -169,7 +170,6 @@ class _AppBootstrapState extends State<AppBootstrap>
   Future<void> _checkForUpdate() async {
     if (mounted) {
       setState(() {
-        _checking = true;
         _storeOpenFailed = false;
       });
     }
@@ -178,7 +178,6 @@ class _AppBootstrapState extends State<AppBootstrap>
     } catch (_) {
       // Fail-open: una incidencia temporal de Remote Config no debe bloquear
       // una versión válida. Las reglas de Firestore siguen siendo la barrera.
-      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -186,7 +185,6 @@ class _AppBootstrapState extends State<AppBootstrap>
     if (!mounted) return;
     setState(() {
       _policy = policy;
-      _checking = false;
       _storeOpenFailed = false;
     });
     if (policy.isUpdateRequired) {
@@ -262,9 +260,6 @@ class _AppBootstrapState extends State<AppBootstrap>
   @override
   Widget build(BuildContext context) {
     final policy = _policy;
-    if (_checking && policy == null) {
-      return const _BootstrapMaterialApp(home: _UpdateCheckLoadingScreen());
-    }
     if (policy?.isUpdateRequired == true) {
       return _BootstrapMaterialApp(
         home: MandatoryUpdateScreen(
@@ -276,7 +271,7 @@ class _AppBootstrapState extends State<AppBootstrap>
         ),
       );
     }
-    return const MainApp();
+    return widget.mainAppBuilder?.call() ?? const MainApp();
   }
 }
 
@@ -295,15 +290,6 @@ class _BootstrapMaterialApp extends StatelessWidget {
       supportedLocales: AppLocalizations.supportedLocales,
       home: home,
     );
-  }
-}
-
-class _UpdateCheckLoadingScreen extends StatelessWidget {
-  const _UpdateCheckLoadingScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
