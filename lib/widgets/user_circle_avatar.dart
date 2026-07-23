@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 /// CircleAvatar del usuario con imagen + fallback de letra inicial.
 class UserCircleAvatar extends StatelessWidget {
@@ -17,20 +17,24 @@ class UserCircleAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final hasPhoto = photoUrl.isNotEmpty;
-
     return CircleAvatar(
       radius: radius,
-      backgroundImage: hasPhoto ? CachedNetworkImageProvider(photoUrl) : null,
-      child: hasPhoto
-          ? null
-          : Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(
-                color: colorScheme.onPrimary,
-                fontWeight: FontWeight.bold,
+      child: ClipOval(
+        child: SizedBox.expand(
+          child: UserProfilePhoto(
+            photoUrl: photoUrl,
+            fallback: Center(
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(
+                  color: colorScheme.onPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }

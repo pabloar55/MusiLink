@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class UserAvatarButton extends ConsumerWidget {
   const UserAvatarButton({super.key});
@@ -25,12 +25,14 @@ class UserAvatarButton extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: CircleAvatar(
             radius: 16,
-            backgroundImage: imageUrl.trim().isNotEmpty
-                ? CachedNetworkImageProvider(imageUrl)
-                : null,
-            child: imageUrl.trim().isEmpty
-                ? const Icon(LucideIcons.user, size: 18)
-                : null,
+            child: ClipOval(
+              child: SizedBox.expand(
+                child: UserProfilePhoto(
+                  photoUrl: imageUrl,
+                  fallback: const Icon(LucideIcons.user, size: 18),
+                ),
+              ),
+            ),
           ),
         ),
       ),

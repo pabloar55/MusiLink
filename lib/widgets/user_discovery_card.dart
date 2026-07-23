@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class UserDiscoveryCard extends StatelessWidget {
   final DiscoveryResult result;
@@ -141,7 +141,6 @@ class _UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasPhoto = photoUrl.isNotEmpty;
     final isHighScore = score >= 70;
 
     return Container(
@@ -163,13 +162,20 @@ class _UserAvatar extends StatelessWidget {
               ]
             : null,
       ),
-      child: CircleAvatar(
-        radius: 26,
-        backgroundColor: cs.surfaceContainerHighest,
-        backgroundImage: hasPhoto ? CachedNetworkImageProvider(photoUrl) : null,
-        child: hasPhoto
-            ? null
-            : Icon(LucideIcons.user, size: 26, color: cs.onSurfaceVariant),
+      child: ClipOval(
+        child: UserProfilePhoto(
+          photoUrl: photoUrl,
+          fallback: ColoredBox(
+            color: cs.surfaceContainerHighest,
+            child: Center(
+              child: Icon(
+                LucideIcons.user,
+                size: 26,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

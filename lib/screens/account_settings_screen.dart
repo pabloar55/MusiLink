@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +21,7 @@ import 'package:musi_link/widgets/image_source_picker.dart';
 import 'package:musi_link/widgets/deleting_account_dialog.dart';
 import 'package:musi_link/widgets/reauth_password_dialog.dart';
 import 'package:musi_link/widgets/signing_out_dialog.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -406,9 +406,6 @@ class _ProfileCard extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundImage: imageUrl.trim().isNotEmpty
-                          ? CachedNetworkImageProvider(imageUrl)
-                          : null,
                       backgroundColor: cs.surfaceContainerHighest,
                       child: isUploadingPhoto
                           ? SizedBox(
@@ -421,9 +418,17 @@ class _ProfileCard extends StatelessWidget {
                                 ),
                               ),
                             )
-                          : imageUrl.trim().isEmpty
-                          ? Icon(LucideIcons.user, color: cs.onSurfaceVariant)
-                          : null,
+                          : ClipOval(
+                              child: SizedBox.expand(
+                                child: UserProfilePhoto(
+                                  photoUrl: imageUrl,
+                                  fallback: Icon(
+                                    LucideIcons.user,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                     if (!isUploadingPhoto)
                       Container(

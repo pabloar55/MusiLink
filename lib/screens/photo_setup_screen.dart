@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +23,7 @@ class PhotoSetupScreen extends ConsumerStatefulWidget {
 
 class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
   XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _isUploading = false;
 
   Future<void> _pickImage() async {
@@ -36,8 +37,13 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
       imageQuality: 85,
     );
 
-    if (image != null && mounted) {
-      setState(() => _selectedImage = image);
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _selectedImage = image;
+        _selectedImageBytes = bytes;
+      });
     }
   }
 
@@ -62,9 +68,7 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
           .read(storageServiceProvider)
           .uploadProfilePhoto(uid, _selectedImage!);
       if (url != null) {
-        await ref
-            .read(userServiceProvider)
-            .updateProfile(uid, photoUrl: url);
+        await ref.read(userServiceProvider).updateProfile(uid, photoUrl: url);
       }
       if (!mounted) return;
       await _completeSetup();
@@ -115,8 +119,8 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
                       ),
                       child: ClipOval(
                         child: hasPhoto
-                            ? Image.file(
-                                File(_selectedImage!.path),
+                            ? Image.memory(
+                                _selectedImageBytes!,
                                 fit: BoxFit.cover,
                               )
                             : Icon(
@@ -152,8 +156,8 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
               Text(
                 l10n.photoSetupTitle,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
 
@@ -163,8 +167,8 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
               Text(
                 l10n.photoSetupSubtitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
 
@@ -205,7 +209,9 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
 
               // Skip / change photo link
               TextButton(
-                onPressed: _isUploading ? null : (hasPhoto ? _pickImage : _handleContinue),
+                onPressed: _isUploading
+                    ? null
+                    : (hasPhoto ? _pickImage : _handleContinue),
                 child: Text(
                   hasPhoto ? l10n.photoSetupChange : l10n.photoSetupSkip,
                   style: TextStyle(color: colorScheme.onSurfaceVariant),

@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -6,6 +5,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class BlockedUsersScreen extends ConsumerWidget {
   const BlockedUsersScreen({super.key});
@@ -68,13 +68,19 @@ class _BlockedUserTile extends ConsumerWidget {
       ),
       leading: CircleAvatar(
         radius: 22,
-        backgroundImage: photoUrl.isNotEmpty
-            ? CachedNetworkImageProvider(photoUrl)
-            : null,
         backgroundColor: cs.surfaceContainerHighest,
-        child: photoUrl.isEmpty
-            ? Icon(LucideIcons.user, size: 20, color: cs.onSurfaceVariant)
-            : null,
+        child: ClipOval(
+          child: SizedBox.expand(
+            child: UserProfilePhoto(
+              photoUrl: photoUrl,
+              fallback: Icon(
+                LucideIcons.user,
+                size: 20,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
       ),
       title: Text(displayName),
       subtitle: username.isNotEmpty ? Text('@$username') : null,

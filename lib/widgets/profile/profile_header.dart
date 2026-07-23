@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class ProfileHeader extends StatelessWidget {
   final AppUser user;
@@ -30,10 +30,7 @@ class ProfileHeader extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    cs.primary,
-                    cs.primary.withAlpha(120),
-                  ],
+                  colors: [cs.primary, cs.primary.withAlpha(120)],
                 ),
               ),
             ),
@@ -50,14 +47,10 @@ class ProfileHeader extends StatelessWidget {
               child: SizedBox(
                 width: 90,
                 height: 90,
-                child: user.photoUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: user.photoUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (ctx, url) => _avatarPlaceholder(cs),
-                        errorWidget: (ctx, url, err) => _avatarPlaceholder(cs),
-                      )
-                    : _avatarPlaceholder(cs),
+                child: UserProfilePhoto(
+                  photoUrl: user.photoUrl,
+                  fallback: _avatarPlaceholder(cs),
+                ),
               ),
             ),
           ],
@@ -79,11 +72,7 @@ class ProfileHeader extends StatelessWidget {
   Widget _avatarPlaceholder(ColorScheme cs) {
     return Container(
       color: cs.surfaceContainerHighest,
-      child: Icon(
-        LucideIcons.user,
-        size: 44,
-        color: cs.onSurfaceVariant,
-      ),
+      child: Icon(LucideIcons.user, size: 44, color: cs.onSurfaceVariant),
     );
   }
 }
