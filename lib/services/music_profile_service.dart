@@ -46,6 +46,7 @@ class MusicProfileService with AuthenticatedService {
 
   static const _cacheTtl = Duration(minutes: 30);
   static const _pageSize = 20;
+  static const _recommendationSnapshotVersion = 1;
   static const _artistScoreWeight = 70.0;
   static const _genreScoreWeight = 30.0;
   static const _artistEvidenceTarget = 7.0;
@@ -262,45 +263,13 @@ class MusicProfileService with AuthenticatedService {
     }
 
     final recommendationDocs = snapshot.docs;
-    final orderedIds = recommendationDocs
-        .map((doc) => (doc.data()['userId'] ?? doc.id).toString())
-        .where((uid) => uid.isNotEmpty && uid != currentUid)
-        .toList();
-
-    if (orderedIds.isEmpty) {
-      return (
-        results: const <DiscoveryResult>[],
-        storedCount: recommendationDocs.length,
-        lastDocument: recommendationDocs.last,
-        hasMore: recommendationDocs.length == _pageSize,
-      );
-    }
-
-    final usersById = <String, AppUser>{};
-    final userSnapshots = await Future.wait([
-      for (var i = 0; i < orderedIds.length; i += 10)
-        _usersRef
-            .where(
-              FieldPath.documentId,
-              whereIn: orderedIds.sublist(
-                i,
-                (i + 10).clamp(0, orderedIds.length),
-              ),
-            )
-            .get(options),
-    ]);
-    for (final usersSnapshot in userSnapshots) {
-      for (final doc in usersSnapshot.docs) {
-        final user = AppUser.fromFirestore(doc);
-        if (user != null) usersById[user.uid] = user;
-      }
-    }
 
     final results = <DiscoveryResult>[];
     for (final doc in recommendationDocs) {
       final data = doc.data();
       final uid = (data['userId'] ?? doc.id).toString();
-      final user = usersById[uid];
+      if (uid.isEmpty || uid == currentUid) continue;
+      final user = _userFromRecommendationSnapshot(uid: uid, data: data);
       if (user == null) continue;
       if (user.topArtistNames.isEmpty && user.topGenreNames.isEmpty) continue;
 
@@ -324,6 +293,22 @@ class MusicProfileService with AuthenticatedService {
       lastDocument: recommendationDocs.last,
       hasMore: recommendationDocs.length == _pageSize,
     );
+  }
+
+  AppUser? _userFromRecommendationSnapshot({
+    required String uid,
+    required Map<String, dynamic> data,
+  }) {
+    if (data['snapshotVersion'] != _recommendationSnapshotVersion) return null;
+    final rawSnapshot = data['profileSnapshot'];
+    if (rawSnapshot is! Map) return null;
+
+    final snapshot = Map<String, dynamic>.from(rawSnapshot);
+    if ((snapshot['displayName'] ?? '').toString().trim().isEmpty ||
+        (snapshot['username'] ?? '').toString().trim().isEmpty) {
+      return null;
+    }
+    return AppUser.fromMap(uid: uid, data: snapshot);
   }
 
   Future<Set<String>> _readBlockedUids({GetOptions? options}) async {

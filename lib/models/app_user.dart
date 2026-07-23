@@ -36,8 +36,16 @@ class AppUser {
   static AppUser? fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null) return null;
+    return fromMap(uid: doc.id, data: data);
+  }
+
+  static AppUser? fromMap({
+    required String uid,
+    required Map<String, dynamic> data,
+  }) {
+    if (uid.isEmpty) return null;
     return AppUser(
-      uid: doc.id,
+      uid: uid,
       displayName: (data['displayName'] ?? '').toString(),
       username: (data['username'] ?? '').toString(),
       photoUrl: (data['photoUrl'] ?? '').toString(),

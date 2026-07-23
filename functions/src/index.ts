@@ -52,6 +52,12 @@ interface UserMusicProfile {
   topGenreNames: string[];
 }
 
+interface PublicProfileSnapshot extends UserMusicProfile {
+  displayName: string;
+  username: string;
+  photoUrl: string;
+}
+
 interface CandidateProfile extends UserMusicProfile {
   uid: string;
 }
@@ -65,6 +71,7 @@ interface RecommendationResult {
 
 const defaultLocale: SupportedLocale = 'en';
 const supportedLocales = new Set<SupportedLocale>(['en', 'es', 'fr']);
+const recommendationSnapshotVersion = 1;
 
 const notificationText = {
   friendRequest: {
@@ -284,6 +291,32 @@ function readMusicProfile(data: admin.firestore.DocumentData | undefined): UserM
     topArtistNames: stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists),
     topGenreNames: stringList(data?.topGenreNames).slice(0, maxRecommendationInputGenres),
   };
+}
+
+function readPublicProfileSnapshot(
+  data: admin.firestore.DocumentData | undefined,
+): PublicProfileSnapshot | undefined {
+  const displayName = typeof data?.displayName === 'string' ? data.displayName.trim() : '';
+  const username = typeof data?.username === 'string' ? data.username.trim() : '';
+  const photoUrl = typeof data?.photoUrl === 'string' ? data.photoUrl.trim() : '';
+  if (displayName.length === 0 || username.length === 0) return undefined;
+
+  return {
+    displayName,
+    username,
+    photoUrl,
+    ...readMusicProfile(data),
+  };
+}
+
+function publicProfileIdentityChanged(
+  before: PublicProfileSnapshot | undefined,
+  after: PublicProfileSnapshot | undefined,
+): boolean {
+  if (!before || !after) return before !== after;
+  return before.displayName !== after.displayName ||
+    before.username !== after.username ||
+    before.photoUrl !== after.photoUrl;
 }
 
 function sameStringList(left: string[], right: string[]): boolean {
@@ -511,6 +544,58 @@ async function commitBatches(
   }
 }
 
+function recommendationSnapshotData(
+  snapshot: PublicProfileSnapshot,
+  generatedAt: Timestamp,
+): admin.firestore.DocumentData {
+  return {
+    snapshotVersion: recommendationSnapshotVersion,
+    profileSnapshot: {
+      displayName: snapshot.displayName,
+      username: snapshot.username,
+      photoUrl: snapshot.photoUrl,
+      topArtistNames: snapshot.topArtistNames,
+      topGenreNames: snapshot.topGenreNames,
+    },
+    snapshotGeneratedAt: generatedAt,
+  };
+}
+
+async function loadPublicProfileSnapshots(
+  uids: string[],
+): Promise<Map<string, PublicProfileSnapshot>> {
+  if (uids.length === 0) return new Map();
+
+  const snapshots = await db.getAll(...uids.map(userDocRef));
+  const profiles = new Map<string, PublicProfileSnapshot>();
+  for (const snapshot of snapshots) {
+    const profile = readPublicProfileSnapshot(snapshot.data());
+    if (snapshot.exists && profile) profiles.set(snapshot.id, profile);
+  }
+  return profiles;
+}
+
+async function updateStoredProfileSnapshots(
+  uid: string,
+  snapshot: PublicProfileSnapshot,
+): Promise<void> {
+  const generatedAt = Timestamp.now();
+  const recommendations = await db
+    .collectionGroup(recommendationsCollection)
+    .where('userId', '==', uid)
+    .get();
+  if (recommendations.empty) return;
+
+  await commitBatches(recommendations.docs.map((doc) => (batch) => {
+    batch.set(doc.ref, recommendationSnapshotData(snapshot, generatedAt), { merge: true });
+  }));
+
+  logger.info('updateStoredProfileSnapshots: updated recommendation snapshots', {
+    uid,
+    recommendationCount: recommendations.size,
+  });
+}
+
 async function updateRecommendationIndex(
   uid: string,
   before: UserMusicProfile,
@@ -641,14 +726,24 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
     }
   }
 
-  const recommendations = [...candidates.values()]
+  const calculatedRecommendations = [...candidates.values()]
     .map((candidate) => calculateRecommendation(profile, candidate))
     .filter((result): result is RecommendationResult => result !== null)
     .sort((a, b) => b.score - a.score)
     .slice(0, maxStoredRecommendations);
 
-  const recommendationIds = new Set(recommendations.map((recommendation) => recommendation.uid));
-  await commitBatches(recommendations.map((recommendation) => (batch) => {
+  const profilesByUid = await loadPublicProfileSnapshots(
+    calculatedRecommendations.map((recommendation) => recommendation.uid),
+  );
+  const recommendations = calculatedRecommendations.flatMap((recommendation) => {
+    const profileSnapshot = profilesByUid.get(recommendation.uid);
+    return profileSnapshot ? [{ recommendation, profileSnapshot }] : [];
+  });
+
+  const recommendationIds = new Set(
+    recommendations.map(({ recommendation }) => recommendation.uid),
+  );
+  await commitBatches(recommendations.map(({ recommendation, profileSnapshot }) => (batch) => {
     batch.set(
       db.doc(`users/${uid}/${recommendationsCollection}/${recommendation.uid}`),
       {
@@ -657,6 +752,7 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
         sharedArtistNames: recommendation.sharedArtistNames,
         sharedGenreNames: recommendation.sharedGenreNames,
         generatedAt,
+        ...recommendationSnapshotData(profileSnapshot, generatedAt),
       },
     );
   }));
@@ -715,6 +811,7 @@ async function matchingCandidateProfiles(
 async function updateReciprocalRecommendations(
   uid: string,
   profile: UserMusicProfile,
+  profileSnapshot: PublicProfileSnapshot,
   candidates: Map<string, CandidateProfile>,
 ): Promise<void> {
   const generatedAt = Timestamp.now();
@@ -737,6 +834,7 @@ async function updateReciprocalRecommendations(
       sharedArtistNames: recommendation.sharedArtistNames,
       sharedGenreNames: recommendation.sharedGenreNames,
       generatedAt,
+      ...recommendationSnapshotData(profileSnapshot, generatedAt),
     });
   }));
 
@@ -750,6 +848,7 @@ async function rebuildMusicRecommendations(
   uid: string,
   before: UserMusicProfile,
   after: UserMusicProfile,
+  profileSnapshot: PublicProfileSnapshot,
   options: { forceSelfRefresh?: boolean } = {},
 ): Promise<void> {
   const profileChanged = musicProfileChanged(before, after);
@@ -762,7 +861,7 @@ async function rebuildMusicRecommendations(
   if (profileChanged) await updateRecommendationIndex(uid, before, after);
   await refreshRecommendations(uid, after);
   if (profileChanged) {
-    await updateReciprocalRecommendations(uid, after, reciprocalCandidates);
+    await updateReciprocalRecommendations(uid, after, profileSnapshot, reciprocalCandidates);
   }
 }
 
@@ -866,11 +965,16 @@ export const onUserMusicProfileCreated = onDocumentCreated(
   { document: 'users/{userId}', region: 'europe-southwest1' },
   async (event) => {
     try {
-      const after = readMusicProfile(event.data?.data());
+      const afterData = event.data?.data();
+      const after = readMusicProfile(afterData);
+      const profileSnapshot = readPublicProfileSnapshot(afterData);
+      if (!profileSnapshot) {
+        throw new Error('A valid public profile is required to build recommendations.');
+      }
       await rebuildMusicRecommendations(event.params.userId, {
         topArtistNames: [],
         topGenreNames: [],
-      }, after);
+      }, after, profileSnapshot);
     } catch (error) {
       logger.error('onUserMusicProfileCreated: unhandled error', {
         userId: event.params.userId,
@@ -889,9 +993,17 @@ export const onUserMusicProfileChanged = onDocumentUpdated(
       const afterData = event.data?.after.data();
       const before = readMusicProfile(beforeData);
       const after = readMusicProfile(afterData);
-      await rebuildMusicRecommendations(event.params.userId, before, after, {
+      const beforeSnapshot = readPublicProfileSnapshot(beforeData);
+      const afterSnapshot = readPublicProfileSnapshot(afterData);
+      if (!afterSnapshot) {
+        throw new Error('A valid public profile is required to update recommendations.');
+      }
+      await rebuildMusicRecommendations(event.params.userId, before, after, afterSnapshot, {
         forceSelfRefresh: recommendationRefreshRequested(beforeData, afterData),
       });
+      if (publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
+        await updateStoredProfileSnapshots(event.params.userId, afterSnapshot);
+      }
     } catch (error) {
       logger.error('onUserMusicProfileChanged: unhandled error', {
         userId: event.params.userId,

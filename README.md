@@ -140,7 +140,7 @@ Ejemplos:
 
 Antes de comparar se normalizan nombres con `trim`, lowercase y deduplicado para evitar que mayúsculas, espacios o valores repetidos distorsionen la puntuación.
 
-Las recomendaciones se almacenan en `users/{uid}/recommendations`, se limitan a 100 resultados, se muestran en páginas de 20 elementos y se cachean durante 30 minutos en `MusicProfileService`. Los usuarios bloqueados se filtran antes de mostrar resultados.
+Las recomendaciones se almacenan en `users/{uid}/recommendations`, se limitan a 100 resultados, se muestran en páginas de 20 elementos y se cachean durante 30 minutos en `MusicProfileService`. Cada recomendación incluye un snapshot público del candidato para evitar consultas adicionales a `users`. Los usuarios bloqueados se filtran antes de mostrar resultados. El procedimiento de backfill y despliegue está en [`docs/recommendation_snapshots_migration.md`](docs/recommendation_snapshots_migration.md).
 
 ## Flujo de Navegación
 

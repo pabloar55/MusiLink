@@ -25,30 +25,14 @@ AppUser createUser({
   );
 }
 
-MockQueryDocumentSnapshot buildUserDoc(
-  String uid, {
-  List<String> topArtistNames = const ['Artist A', 'Artist B'],
-  List<String> topGenreNames = const ['rock'],
-}) {
-  final doc = MockQueryDocumentSnapshot();
-  when(() => doc.id).thenReturn(uid);
-  when(() => doc.data()).thenReturn({
-    'email': '$uid@test.com',
-    'displayName': 'User $uid',
-    'photoUrl': '',
-    'createdAt': Timestamp.fromDate(DateTime(2025, 1, 1)),
-    'lastLogin': Timestamp.fromDate(DateTime(2025, 1, 1)),
-    'topArtistNames': topArtistNames,
-    'topGenreNames': topGenreNames,
-  });
-  return doc;
-}
-
 MockQueryDocumentSnapshot buildRecommendationDoc(
   String uid, {
   double score = 42,
   List<String> sharedArtistNames = const ['Artist A'],
   List<String> sharedGenreNames = const ['rock'],
+  List<String> topArtistNames = const ['Artist A', 'Artist B'],
+  List<String> topGenreNames = const ['rock'],
+  bool includeSnapshot = true,
 }) {
   final doc = MockQueryDocumentSnapshot();
   when(() => doc.id).thenReturn(uid);
@@ -57,6 +41,16 @@ MockQueryDocumentSnapshot buildRecommendationDoc(
     'score': score,
     'sharedArtistNames': sharedArtistNames,
     'sharedGenreNames': sharedGenreNames,
+    if (includeSnapshot) ...{
+      'snapshotVersion': 1,
+      'profileSnapshot': {
+        'displayName': 'User $uid',
+        'username': 'user_$uid',
+        'photoUrl': '',
+        'topArtistNames': topArtistNames,
+        'topGenreNames': topGenreNames,
+      },
+    },
   });
   return doc;
 }
@@ -351,7 +345,6 @@ void main() {
     late MockQuery mockRecommendationLimitQuery;
     late MockQuery mockRecommendationStartAfterQuery;
     late MockQuery mockRecommendationNextPageQuery;
-    late MockQuery mockUsersByIdQuery;
     late MockMusicCatalogService mockMusicCatalogService;
     late MusicProfileService service;
 
@@ -383,7 +376,6 @@ void main() {
 
     void stubStoredRecommendations({
       required List<MockQueryDocumentSnapshot> recommendationDocs,
-      required List<MockQueryDocumentSnapshot> userDocs,
     }) {
       var nextPageIndex = 1;
       List<MockQueryDocumentSnapshot> pageAt(int index) =>
@@ -401,12 +393,6 @@ void main() {
       when(
         () => mockRecommendationNextPageQuery.get(any()),
       ).thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
-      when(
-        () => mockUsersByIdQuery.get(),
-      ).thenAnswer((_) async => buildSnapshot(userDocs));
-      when(
-        () => mockUsersByIdQuery.get(any()),
-      ).thenAnswer((_) async => buildSnapshot(userDocs));
     }
 
     setUp(() {
@@ -423,7 +409,6 @@ void main() {
       mockRecommendationLimitQuery = MockQuery();
       mockRecommendationStartAfterQuery = MockQuery();
       mockRecommendationNextPageQuery = MockQuery();
-      mockUsersByIdQuery = MockQuery();
       mockMusicCatalogService = MockMusicCatalogService();
 
       registerFallbackValues();
@@ -453,10 +438,6 @@ void main() {
       when(
         () => mockRecommendationStartAfterQuery.limit(any()),
       ).thenReturn(mockRecommendationNextPageQuery);
-      when(
-        () => mockUsersRef.where(any(), whereIn: any(named: 'whereIn')),
-      ).thenReturn(mockUsersByIdQuery);
-
       service = MusicProfileService(
         mockMusicCatalogService,
         firestore: mockFirestore,
@@ -547,29 +528,16 @@ void main() {
             25,
             (i) => buildRecommendationDoc('user$i', score: 100 - i.toDouble()),
           );
-          final users = List.generate(25, (i) => buildUserDoc('user$i'));
-          stubStoredRecommendations(
-            recommendationDocs: recommendations,
-            userDocs: users,
-          );
+          stubStoredRecommendations(recommendationDocs: recommendations);
 
           final results = await service.readStoredDiscoveryUsers();
 
           expect(results.length, 20);
           expect(service.hasMoreDiscoveryUsers, isTrue);
           verify(() => mockRecommendationOrderQuery.limit(20)).called(1);
-          verify(
-            () => mockUsersRef.where(
-              FieldPath.documentId,
-              whereIn: List.generate(10, (i) => 'user$i'),
-            ),
-          ).called(1);
-          verify(
-            () => mockUsersRef.where(
-              FieldPath.documentId,
-              whereIn: List.generate(10, (i) => 'user${i + 10}'),
-            ),
-          ).called(1);
+          verifyNever(
+            () => mockUsersRef.where(any(), whereIn: any(named: 'whereIn')),
+          );
         },
       );
 
@@ -580,11 +548,7 @@ void main() {
             15,
             (i) => buildRecommendationDoc('user$i'),
           );
-          final users = List.generate(15, (i) => buildUserDoc('user$i'));
-          stubStoredRecommendations(
-            recommendationDocs: recommendations,
-            userDocs: users,
-          );
+          stubStoredRecommendations(recommendationDocs: recommendations);
 
           final results = await service.readStoredDiscoveryUsers();
 
@@ -594,7 +558,7 @@ void main() {
       );
 
       test('empty recommendation collection returns empty discovery', () async {
-        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+        stubStoredRecommendations(recommendationDocs: []);
 
         final results = await service.readStoredDiscoveryUsers();
 
@@ -608,11 +572,7 @@ void main() {
           buildRecommendationDoc('other1'),
           buildRecommendationDoc('other2'),
         ];
-        final users = [buildUserDoc('other1'), buildUserDoc('other2')];
-        stubStoredRecommendations(
-          recommendationDocs: recommendations,
-          userDocs: users,
-        );
+        stubStoredRecommendations(recommendationDocs: recommendations);
 
         final results = await service.readStoredDiscoveryUsers();
 
@@ -635,11 +595,7 @@ void main() {
             sharedGenreNames: [],
           ),
         ];
-        final users = [buildUserDoc('other1'), buildUserDoc('other2')];
-        stubStoredRecommendations(
-          recommendationDocs: recommendations,
-          userDocs: users,
-        );
+        stubStoredRecommendations(recommendationDocs: recommendations);
 
         final results = await service.readStoredDiscoveryUsers();
 
@@ -648,6 +604,23 @@ void main() {
         expect(results.first.sharedArtistNames, ['A', 'B']);
         expect(results.first.sharedGenreNames, ['rock']);
         expect(results.last.user.uid, 'other2');
+        expect(results.first.user.displayName, 'User other1');
+        expect(results.first.user.topArtistNames, ['Artist A', 'Artist B']);
+      });
+
+      test('does not hydrate legacy recommendations from users', () async {
+        final recommendations = [
+          buildRecommendationDoc('legacy', includeSnapshot: false),
+          buildRecommendationDoc('current'),
+        ];
+        stubStoredRecommendations(recommendationDocs: recommendations);
+
+        final results = await service.readStoredDiscoveryUsers();
+
+        expect(results.map((result) => result.user.uid), ['current']);
+        verifyNever(
+          () => mockUsersRef.where(any(), whereIn: any(named: 'whereIn')),
+        );
       });
 
       test('local read after server read serves in-memory cache', () async {
@@ -655,17 +628,12 @@ void main() {
           5,
           (i) => buildRecommendationDoc('user$i'),
         );
-        final users = List.generate(5, (i) => buildUserDoc('user$i'));
-        stubStoredRecommendations(
-          recommendationDocs: recommendations,
-          userDocs: users,
-        );
+        stubStoredRecommendations(recommendationDocs: recommendations);
 
         await service.readStoredDiscoveryUsers();
         await service.readDiscoveryUsersFromLocalCache();
 
         verify(() => mockRecommendationLimitQuery.get()).called(1);
-        verify(() => mockUsersByIdQuery.get()).called(1);
       });
 
       test(
@@ -675,22 +643,17 @@ void main() {
             5,
             (i) => buildRecommendationDoc('user$i'),
           );
-          final users = List.generate(5, (i) => buildUserDoc('user$i'));
-          stubStoredRecommendations(
-            recommendationDocs: recommendations,
-            userDocs: users,
-          );
+          stubStoredRecommendations(recommendationDocs: recommendations);
 
           await service.readStoredDiscoveryUsers();
           await service.readStoredDiscoveryUsers();
 
           verify(() => mockRecommendationLimitQuery.get()).called(2);
-          verify(() => mockUsersByIdQuery.get()).called(2);
         },
       );
 
       test('server read never requests a recommendation rebuild', () async {
-        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+        stubStoredRecommendations(recommendationDocs: []);
 
         await service.readStoredDiscoveryUsers();
 
@@ -699,7 +662,7 @@ void main() {
 
       test('generated empty result is a valid persistent cache hit', () async {
         stubMyUserDoc(recommendationCount: 0);
-        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+        stubStoredRecommendations(recommendationDocs: []);
 
         final results = await service.readDiscoveryUsersFromLocalCache();
 
@@ -708,7 +671,7 @@ void main() {
       });
 
       test('empty local query without generation metadata is a miss', () async {
-        stubStoredRecommendations(recommendationDocs: [], userDocs: []);
+        stubStoredRecommendations(recommendationDocs: []);
 
         final results = await service.readDiscoveryUsersFromLocalCache();
 
@@ -731,11 +694,7 @@ void main() {
             5,
             (i) => buildRecommendationDoc('user$i'),
           );
-          final users = List.generate(5, (i) => buildUserDoc('user$i'));
-          stubStoredRecommendations(
-            recommendationDocs: recommendations,
-            userDocs: users,
-          );
+          stubStoredRecommendations(recommendationDocs: recommendations);
           await service.readStoredDiscoveryUsers();
 
           final (results, hasMore) = await service.loadMoreDiscoveryUsers();
@@ -750,11 +709,7 @@ void main() {
           25,
           (i) => buildRecommendationDoc('user$i'),
         );
-        final users = List.generate(25, (i) => buildUserDoc('user$i'));
-        stubStoredRecommendations(
-          recommendationDocs: recommendations,
-          userDocs: users,
-        );
+        stubStoredRecommendations(recommendationDocs: recommendations);
 
         await service.readStoredDiscoveryUsers();
         expect(service.hasMoreDiscoveryUsers, isTrue);
@@ -777,11 +732,7 @@ void main() {
           50,
           (i) => buildRecommendationDoc('user$i'),
         );
-        final users = List.generate(50, (i) => buildUserDoc('user$i'));
-        stubStoredRecommendations(
-          recommendationDocs: recommendations,
-          userDocs: users,
-        );
+        stubStoredRecommendations(recommendationDocs: recommendations);
 
         await service.readStoredDiscoveryUsers();
         expect(service.hasMoreDiscoveryUsers, isTrue);

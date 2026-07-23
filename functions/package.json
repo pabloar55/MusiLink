@@ -4,7 +4,8 @@
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "migrate:recommendation-snapshots": "node scripts/backfill-recommendation-snapshots.cjs"
   },
   "engines": {
     "node": "24"
