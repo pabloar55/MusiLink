@@ -19,12 +19,15 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta id="app-theme-color" name="theme-color" content="#121212">
+  <meta id="app-color-scheme" name="color-scheme" content="dark">
   <meta name="description" content="A new Flutter project.">
   <meta name="google-signin-client_id" content="701824546350-1tkqdr8bl7eosggab56c79u097ragkhn.apps.googleusercontent.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta id="app-status-bar-style" name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MusiLink">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
@@ -33,6 +36,53 @@
 
   <title>MusiLink</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background-color: #121212;
+      color-scheme: dark;
+    }
+
+    html[data-app-theme="light"],
+    html[data-app-theme="light"] body {
+      background-color: #ffffff;
+      color-scheme: light;
+    }
+  </style>
+
+  <script>
+    (() => {
+      let savedTheme = null;
+      try {
+        savedTheme = JSON.parse(
+          window.localStorage.getItem('flutter.theme_mode'),
+        );
+      } catch (_) {
+        // Fall back to the system appearance when storage is unavailable.
+      }
+
+      const systemIsDark = window.matchMedia(
+        '(prefers-color-scheme: dark)',
+      ).matches;
+      const isDark =
+        savedTheme === 'dark' || (savedTheme !== 'light' && systemIsDark);
+      const color = isDark ? '#121212' : '#ffffff';
+
+      document.documentElement.dataset.appTheme = isDark ? 'dark' : 'light';
+      document
+        .getElementById('app-theme-color')
+        ?.setAttribute('content', color);
+      document
+        .getElementById('app-color-scheme')
+        ?.setAttribute('content', isDark ? 'dark' : 'light');
+      document
+        .getElementById('app-status-bar-style')
+        ?.setAttribute('content', isDark ? 'black-translucent' : 'default');
+    })();
+  </script>
 </head>
 <body>
   <!--

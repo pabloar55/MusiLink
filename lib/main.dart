@@ -23,6 +23,7 @@ import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
+import 'package:musi_link/widgets/theme_environment_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -288,6 +289,8 @@ class _BootstrapMaterialApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) =>
+          ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
       home: home,
     );
   }
@@ -311,6 +314,8 @@ class MainApp extends ConsumerWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
+      builder: (context, child) =>
+          ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
     );
   }
 }
