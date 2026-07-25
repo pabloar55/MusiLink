@@ -1209,7 +1209,7 @@ abstract class AppLocalizations {
   /// No description provided for @pushNotificationsInstallBody.
   ///
   /// In en, this message translates to:
-  /// **'On iPhone, open MusiLink in Safari, tap Share and choose “Add to Home Screen”. Then open the app from its icon.'**
+  /// **'On iPhone, open MusiLink in Safari, tap Share, then “More”, and choose “Add to Home Screen”. Then open the app from its icon.'**
   String get pushNotificationsInstallBody;
 
   /// No description provided for @pushNotificationsBlockedBody.
@@ -1229,6 +1229,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notifications could not be enabled. Please try again.'**
   String get pushNotificationsError;
+
+  /// No description provided for @pwaInstallTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install MusiLink on your iPhone'**
+  String get pwaInstallTitle;
+
+  /// No description provided for @pwaInstallBody.
+  ///
+  /// In en, this message translates to:
+  /// **'To receive notifications and enjoy the complete experience:'**
+  String get pwaInstallBody;
+
+  /// No description provided for @pwaInstallStepMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap More (···) in the bottom-right corner.'**
+  String get pwaInstallStepMore;
+
+  /// No description provided for @pwaInstallStepShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Share.'**
+  String get pwaInstallStepShare;
+
+  /// No description provided for @pwaInstallStepSeeMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap “More”.'**
+  String get pwaInstallStepSeeMore;
+
+  /// No description provided for @pwaInstallStepAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose “Add to Home Screen”.'**
+  String get pwaInstallStepAdd;
+
+  /// No description provided for @pwaInstallStepOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open MusiLink from its new icon.'**
+  String get pwaInstallStepOpen;
+
+  /// No description provided for @pwaInstallContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue in Safari'**
+  String get pwaInstallContinue;
 
   /// No description provided for @settingsLegal.
   ///

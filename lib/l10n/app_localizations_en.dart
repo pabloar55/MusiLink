@@ -621,7 +621,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pushNotificationsInstallBody =>
-      'On iPhone, open MusiLink in Safari, tap Share and choose “Add to Home Screen”. Then open the app from its icon.';
+      'On iPhone, open MusiLink in Safari, tap Share, then “More”, and choose “Add to Home Screen”. Then open the app from its icon.';
 
   @override
   String get pushNotificationsBlockedBody =>
@@ -634,6 +634,31 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pushNotificationsError =>
       'Notifications could not be enabled. Please try again.';
+
+  @override
+  String get pwaInstallTitle => 'Install MusiLink on your iPhone';
+
+  @override
+  String get pwaInstallBody =>
+      'To receive notifications and enjoy the complete experience:';
+
+  @override
+  String get pwaInstallStepMore => 'Tap More (···) in the bottom-right corner.';
+
+  @override
+  String get pwaInstallStepShare => 'Tap Share.';
+
+  @override
+  String get pwaInstallStepSeeMore => 'Tap “More”.';
+
+  @override
+  String get pwaInstallStepAdd => 'Choose “Add to Home Screen”.';
+
+  @override
+  String get pwaInstallStepOpen => 'Open MusiLink from its new icon.';
+
+  @override
+  String get pwaInstallContinue => 'Continue in Safari';
 
   @override
   String get settingsLegal => 'Legal';

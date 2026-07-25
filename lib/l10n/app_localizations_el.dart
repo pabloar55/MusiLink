@@ -628,7 +628,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get pushNotificationsInstallBody =>
-      'Στο iPhone, ανοίξτε το MusiLink στο Safari, πατήστε Κοινή χρήση και επιλέξτε «Προσθήκη στην οθόνη Αφετηρίας». Έπειτα ανοίξτε την εφαρμογή από το εικονίδιό της.';
+      'Στο iPhone, ανοίξτε το MusiLink στο Safari, πατήστε Κοινή χρήση, έπειτα «Περισσότερα» και επιλέξτε «Προσθήκη στην οθόνη Αφετηρίας». Έπειτα ανοίξτε την εφαρμογή από το εικονίδιό της.';
 
   @override
   String get pushNotificationsBlockedBody =>
@@ -641,6 +641,32 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pushNotificationsError =>
       'Δεν ήταν δυνατή η ενεργοποίηση των ειδοποιήσεων. Δοκιμάστε ξανά.';
+
+  @override
+  String get pwaInstallTitle => 'Εγκαταστήστε το MusiLink στο iPhone σας';
+
+  @override
+  String get pwaInstallBody =>
+      'Για να λαμβάνετε ειδοποιήσεις και να απολαμβάνετε την πλήρη εμπειρία:';
+
+  @override
+  String get pwaInstallStepMore => 'Πατήστε Περισσότερα (···), κάτω δεξιά.';
+
+  @override
+  String get pwaInstallStepShare => 'Πατήστε Κοινή χρήση.';
+
+  @override
+  String get pwaInstallStepSeeMore => 'Πατήστε «Περισσότερα».';
+
+  @override
+  String get pwaInstallStepAdd => 'Επιλέξτε «Προσθήκη στην οθόνη Αφετηρίας».';
+
+  @override
+  String get pwaInstallStepOpen =>
+      'Ανοίξτε το MusiLink από το νέο εικονίδιό του.';
+
+  @override
+  String get pwaInstallContinue => 'Συνέχεια στο Safari';
 
   @override
   String get settingsLegal => 'Νομικά';

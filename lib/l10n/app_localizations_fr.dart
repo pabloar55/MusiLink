@@ -633,7 +633,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pushNotificationsInstallBody =>
-      'Sur iPhone, ouvrez MusiLink dans Safari, touchez Partager puis « Sur l’écran d’accueil ». Ouvrez ensuite l’app depuis son icône.';
+      'Sur iPhone, ouvrez MusiLink dans Safari, touchez Partager, puis « Plus » et « Sur l’écran d’accueil ». Ouvrez ensuite l’app depuis son icône.';
 
   @override
   String get pushNotificationsBlockedBody =>
@@ -646,6 +646,31 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get pushNotificationsError =>
       'Impossible d’activer les notifications. Veuillez réessayer.';
+
+  @override
+  String get pwaInstallTitle => 'Installez MusiLink sur votre iPhone';
+
+  @override
+  String get pwaInstallBody =>
+      'Pour recevoir des notifications et profiter de l’expérience complète :';
+
+  @override
+  String get pwaInstallStepMore => 'Touchez Plus (···), en bas à droite.';
+
+  @override
+  String get pwaInstallStepShare => 'Touchez Partager.';
+
+  @override
+  String get pwaInstallStepSeeMore => 'Touchez « Plus ».';
+
+  @override
+  String get pwaInstallStepAdd => 'Sélectionnez « Sur l’écran d’accueil ».';
+
+  @override
+  String get pwaInstallStepOpen => 'Ouvrez MusiLink depuis sa nouvelle icône.';
+
+  @override
+  String get pwaInstallContinue => 'Continuer dans Safari';
 
   @override
   String get settingsLegal => 'Informations légales';

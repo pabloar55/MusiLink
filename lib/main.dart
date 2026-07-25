@@ -18,11 +18,14 @@ import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/mandatory_update_screen.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
+import 'package:musi_link/screens/pwa_install_screen.dart';
 import 'package:musi_link/services/app_update_service.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
+import 'package:musi_link/utils/pwa_environment.dart';
+import 'package:musi_link/utils/pwa_install_session.dart';
 import 'package:musi_link/widgets/theme_environment_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -125,11 +128,13 @@ class AppBootstrap extends StatefulWidget {
     this.updateChecker,
     this.immediateUpdateLauncher,
     this.mainAppBuilder,
+    this.showPwaInstallOverride,
   });
 
   final AppUpdateChecker? updateChecker;
   final ImmediateUpdateLauncher? immediateUpdateLauncher;
   final Widget Function()? mainAppBuilder;
+  final bool? showPwaInstallOverride;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -145,6 +150,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   bool _immediateUpdateInProgress = false;
   bool _immediateUpdateAttempted = false;
   bool _storeOpenFailed = false;
+  late bool _showPwaInstall;
 
   @override
   void initState() {
@@ -153,6 +159,12 @@ class _AppBootstrapState extends State<AppBootstrap>
     _updateChecker = widget.updateChecker ?? FirebaseAppUpdateService();
     _immediateUpdateLauncher =
         widget.immediateUpdateLauncher ?? const PlayImmediateUpdateLauncher();
+    _showPwaInstall =
+        widget.showPwaInstallOverride ??
+        (kIsWeb &&
+            isIosWebPlatform &&
+            !isRunningAsInstalledPwa &&
+            !hasDismissedPwaInstallForSession);
     _policySubscription = _updateChecker.policyUpdates.listen(
       _applyPolicy,
       onError: (_) {},
@@ -251,6 +263,11 @@ class _AppBootstrapState extends State<AppBootstrap>
     }
   }
 
+  void _continueInBrowser() {
+    dismissPwaInstallForSession();
+    setState(() => _showPwaInstall = false);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -270,6 +287,11 @@ class _AppBootstrapState extends State<AppBootstrap>
           isOpeningStore: _openingStore || _immediateUpdateInProgress,
           storeOpenFailed: _storeOpenFailed,
         ),
+      );
+    }
+    if (_showPwaInstall) {
+      return _BootstrapMaterialApp(
+        home: PwaInstallScreen(onContinueInBrowser: _continueInBrowser),
       );
     }
     return widget.mainAppBuilder?.call() ?? const MainApp();
