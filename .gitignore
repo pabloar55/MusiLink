@@ -56,5 +56,6 @@ pending.txt
 # Cloud functions
 /functions/node_modules/
 /node_modules/
+/functions/artist-key-migration-report.json
 
 firestore.rules.old

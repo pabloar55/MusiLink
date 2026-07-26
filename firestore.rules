@@ -66,8 +66,12 @@ service cloud.firestore {
           || data.topGenres is list && data.topGenres.size() <= 10)
         && (!('topArtistNames' in data)
           || data.topArtistNames is list && data.topArtistNames.size() <= 50)
+        && (!('topArtistKeys' in data)
+          || data.topArtistKeys is list && data.topArtistKeys.size() <= 50)
         && (!('topGenreNames' in data)
           || data.topGenreNames is list && data.topGenreNames.size() <= 10)
+        && (!('artistIdentityVersion' in data)
+          || data.artistIdentityVersion is int && data.artistIdentityVersion == 1)
         && (!('musicDataUpdatedAt' in data) || data.musicDataUpdatedAt is timestamp)
         && (!('dailySong' in data) || validTrackData(data.dailySong))
         && (!('dailySongUpdatedAt' in data) || data.dailySongUpdatedAt is timestamp)
@@ -167,7 +171,9 @@ service cloud.firestore {
           'topArtists',
           'topGenres',
           'topArtistNames',
+          'topArtistKeys',
           'topGenreNames',
+          'artistIdentityVersion',
           'musicDataUpdatedAt',
           'dailySong',
           'dailySongUpdatedAt',

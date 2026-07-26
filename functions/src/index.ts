@@ -50,6 +50,7 @@ interface MusicToken {
 
 interface UserMusicProfile {
   topArtistNames: string[];
+  topArtistKeys: string[];
   topGenreNames: string[];
 }
 
@@ -360,8 +361,11 @@ async function establishAcceptedFriendship(
 }
 
 function readMusicProfile(data: admin.firestore.DocumentData | undefined): UserMusicProfile {
+  const topArtistNames =
+    stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists);
   return {
-    topArtistNames: stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists),
+    topArtistNames,
+    topArtistKeys: readArtistIdentityKeys(data, topArtistNames),
     topGenreNames: stringList(data?.topGenreNames).slice(0, maxRecommendationInputGenres),
   };
 }
@@ -402,6 +406,7 @@ function musicProfileChanged(
   after: UserMusicProfile,
 ): boolean {
   return !sameStringList(before.topArtistNames, after.topArtistNames) ||
+    !sameStringList(before.topArtistKeys, after.topArtistKeys) ||
     !sameStringList(before.topGenreNames, after.topGenreNames);
 }
 
@@ -547,11 +552,141 @@ function recommendationRefreshRequested(
 }
 
 function tokenKey(type: TokenType, value: string): string {
-  return `${type}_${Buffer.from(value.toLowerCase(), 'utf8').toString('base64url')}`;
+  const tokenValue =
+    type === 'artist' && value.startsWith('spotify:')
+      ? value
+      : value.toLowerCase();
+  return `${type}_${Buffer.from(tokenValue, 'utf8').toString('base64url')}`;
 }
 
 function normalizedMusicKey(value: string): string {
   return value.trim().toLowerCase();
+}
+
+const artistDiacriticGroups: Record<string, string> = {
+  a: 'áàäâãåāăąæ',
+  c: 'çćčĉċ',
+  d: 'ďđð',
+  e: 'éèëêēĕėęě',
+  g: 'ğĝġģ',
+  h: 'ĥħ',
+  i: 'íìïîīĭįı',
+  j: 'ĵ',
+  k: 'ķ',
+  l: 'ĺļľŀł',
+  n: 'ñńņňŉŋ',
+  o: 'óòöôõōŏőøœ',
+  r: 'ŕŗř',
+  s: 'śşšŝșß',
+  t: 'ťţŧț',
+  u: 'úùüûūŭůűų',
+  w: 'ŵ',
+  y: 'ýÿŷ',
+  z: 'źżž',
+};
+
+const artistDiacriticReplacements = new Map<string, string>(
+  Object.entries(artistDiacriticGroups)
+    .flatMap(([replacement, characters]) =>
+      [...characters].map((character) => [character, replacement] as const)),
+);
+
+function normalizeArtistIdentityName(value: string): string {
+  const folded = [...value.trim().toLowerCase()]
+    .map((character) => artistDiacriticReplacements.get(character) ?? character)
+    .join('');
+  return folded
+    .replace(/['’]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[-_/.,:;!?()[\]{}"“”+*=|\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function fallbackArtistIdentityKey(name: string): string {
+  return `name:${normalizeArtistIdentityName(name)}`;
+}
+
+function normalizedStoredArtistKey(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('spotify:')) {
+    const spotifyId = trimmed.slice('spotify:'.length).trim();
+    return spotifyId ? `spotify:${spotifyId}` : undefined;
+  }
+  if (trimmed.startsWith('name:')) {
+    const name = normalizeArtistIdentityName(trimmed.slice('name:'.length));
+    return name ? `name:${name}` : undefined;
+  }
+  return undefined;
+}
+
+function readArtistIdentityKeys(
+  data: admin.firestore.DocumentData | undefined,
+  names: string[],
+): string[] {
+  const storedKeys = stringList(data?.topArtistKeys)
+    .slice(0, maxRecommendationInputArtists);
+  const storedArtists = Array.isArray(data?.topArtists) ? data.topArtists : [];
+
+  return names.map((name, index) => {
+    const rawArtist = storedArtists[index];
+    const rawName = typeof rawArtist?.name === 'string' ? rawArtist.name.trim() : '';
+    const spotifyId =
+      typeof rawArtist?.spotifyId === 'string' ? rawArtist.spotifyId.trim() : '';
+    if (normalizeArtistIdentityName(rawName) === normalizeArtistIdentityName(name)) {
+      return spotifyId
+        ? `spotify:${spotifyId}`
+        : fallbackArtistIdentityKey(name);
+    }
+
+    const storedKey = normalizedStoredArtistKey(storedKeys[index] ?? '');
+    if (storedKey) return storedKey;
+    return fallbackArtistIdentityKey(name);
+  });
+}
+
+interface ArtistIdentity {
+  name: string;
+  key: string;
+  normalizedName: string;
+}
+
+function artistIdentities(profile: UserMusicProfile): ArtistIdentity[] {
+  const artistsByKey = new Map<string, ArtistIdentity>();
+  profile.topArtistNames.forEach((rawName, index) => {
+    const name = rawName.trim();
+    const normalizedName = normalizeArtistIdentityName(name);
+    if (!normalizedName) return;
+    const key =
+      normalizedStoredArtistKey(profile.topArtistKeys[index] ?? '') ??
+      `name:${normalizedName}`;
+    if (!artistsByKey.has(key)) artistsByKey.set(key, { name, key, normalizedName });
+  });
+  return [...artistsByKey.values()];
+}
+
+function artistIdentitiesMatch(left: ArtistIdentity, right: ArtistIdentity): boolean {
+  const leftHasSpotifyId = left.key.startsWith('spotify:');
+  const rightHasSpotifyId = right.key.startsWith('spotify:');
+  if (leftHasSpotifyId && rightHasSpotifyId) return left.key === right.key;
+  return left.normalizedName === right.normalizedName;
+}
+
+function sharedArtistNames(
+  leftArtists: ArtistIdentity[],
+  rightArtists: ArtistIdentity[],
+): string[] {
+  const usedLeftIndexes = new Set<number>();
+  const shared: string[] = [];
+  for (const rightArtist of rightArtists) {
+    const leftIndex = leftArtists.findIndex((leftArtist, index) =>
+      !usedLeftIndexes.has(index) &&
+      artistIdentitiesMatch(leftArtist, rightArtist));
+    if (leftIndex < 0) continue;
+    usedLeftIndexes.add(leftIndex);
+    shared.push(rightArtist.name);
+  }
+  return shared;
 }
 
 function uniqueMusicNames(values: string[]): string[] {
@@ -580,18 +715,23 @@ function similarityScore(
 }
 
 function musicTokens(profile: UserMusicProfile): MusicToken[] {
-  return [
-    ...profile.topArtistNames.map((value) => ({
+  const tokens = [
+    ...artistIdentities(profile).flatMap((artist) => [
+      artist.key,
+      `name:${artist.normalizedName}`,
+      artist.name,
+    ].map((value) => ({
       key: tokenKey('artist', value),
       type: 'artist' as const,
       value,
-    })),
+    }))),
     ...profile.topGenreNames.map((value) => ({
       key: tokenKey('genre', value),
       type: 'genre' as const,
       value,
     })),
   ];
+  return [...new Map(tokens.map((token) => [token.key, token])).values()];
 }
 
 function indexUserRef(token: MusicToken, uid: string): admin.firestore.DocumentReference {
@@ -691,6 +831,7 @@ async function updateRecommendationIndex(
       tokenType: token.type,
       tokenValue: token.value,
       topArtistNames: after.topArtistNames,
+      topArtistKeys: after.topArtistKeys,
       topGenreNames: after.topGenreNames,
       updatedAt: now,
     }));
@@ -703,23 +844,21 @@ function calculateRecommendation(
   myProfile: UserMusicProfile,
   candidate: CandidateProfile,
 ): RecommendationResult | null {
-  const myArtistNames = uniqueMusicNames(myProfile.topArtistNames);
-  const candidateArtistNames = uniqueMusicNames(candidate.topArtistNames);
+  const myArtists = artistIdentities(myProfile);
+  const candidateArtists = artistIdentities(candidate);
   const myGenreNames = uniqueMusicNames(myProfile.topGenreNames);
   const candidateGenreNames = uniqueMusicNames(candidate.topGenreNames);
-  const myArtists = new Set(myArtistNames.map(normalizedMusicKey));
   const myGenres = new Set(myGenreNames.map(normalizedMusicKey));
-  const sharedArtistNames = candidateArtistNames.filter((artist) =>
-    myArtists.has(normalizedMusicKey(artist)));
+  const matchingArtistNames = sharedArtistNames(myArtists, candidateArtists);
   const sharedGenreNames = candidateGenreNames.filter((genre) =>
     myGenres.has(normalizedMusicKey(genre)));
 
-  if (sharedArtistNames.length === 0 && sharedGenreNames.length === 0) return null;
+  if (matchingArtistNames.length === 0 && sharedGenreNames.length === 0) return null;
 
   const artistScore = similarityScore(
-    sharedArtistNames.length,
-    myArtistNames.length,
-    candidateArtistNames.length,
+    matchingArtistNames.length,
+    myArtists.length,
+    candidateArtists.length,
     artistEvidenceTarget,
     artistScoreWeight,
   );
@@ -734,7 +873,7 @@ function calculateRecommendation(
   return {
     uid: candidate.uid,
     score: Math.round(artistScore + genreScore),
-    sharedArtistNames,
+    sharedArtistNames: matchingArtistNames,
     sharedGenreNames,
   };
 }
@@ -794,6 +933,7 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
       candidates.set(doc.id, {
         uid: doc.id,
         topArtistNames: stringList(data.topArtistNames),
+        topArtistKeys: stringList(data.topArtistKeys),
         topGenreNames: stringList(data.topGenreNames),
       });
     }
@@ -872,6 +1012,7 @@ async function matchingCandidateProfiles(
       candidates.set(doc.id, {
         uid: doc.id,
         topArtistNames: stringList(data.topArtistNames),
+        topArtistKeys: stringList(data.topArtistKeys),
         topGenreNames: stringList(data.topGenreNames),
       });
       if (candidates.size >= maxReciprocalRecommendationUsers) return candidates;
@@ -892,6 +1033,7 @@ async function updateReciprocalRecommendations(
     const recommendation = calculateRecommendation(candidate, {
       uid,
       topArtistNames: profile.topArtistNames,
+      topArtistKeys: profile.topArtistKeys,
       topGenreNames: profile.topGenreNames,
     });
     const ref = db.doc(`users/${candidate.uid}/${recommendationsCollection}/${uid}`);
@@ -1044,6 +1186,7 @@ export const onUserMusicProfileCreated = onDocumentCreated(
       }
       await rebuildMusicRecommendations(event.params.userId, {
         topArtistNames: [],
+        topArtistKeys: [],
         topGenreNames: [],
       }, after, profileSnapshot);
     } catch (error) {

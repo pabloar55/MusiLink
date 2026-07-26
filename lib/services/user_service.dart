@@ -253,7 +253,9 @@ class UserService {
         'topArtists': FieldValue.delete(),
         'topGenres': FieldValue.delete(),
         'topArtistNames': FieldValue.delete(),
+        'topArtistKeys': FieldValue.delete(),
         'topGenreNames': FieldValue.delete(),
+        'artistIdentityVersion': FieldValue.delete(),
         'dailySong': FieldValue.delete(),
         'dailySongUpdatedAt': FieldValue.delete(),
       });

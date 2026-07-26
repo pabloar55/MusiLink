@@ -6,6 +6,7 @@ import 'package:musi_link/models/artist.dart' as app;
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
+import 'package:musi_link/utils/artist_identity.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/genre_normalizer.dart';
@@ -85,7 +86,9 @@ class MusicProfileService with AuthenticatedService {
         'topArtists': artists.map((a) => a.toMap()).toList(),
         'topGenres': genres.map((g) => g.toMap()).toList(),
         'topArtistNames': artists.map((a) => a.name).toList(),
+        'topArtistKeys': artistIdentityKeys(artists),
         'topGenreNames': genres.map((g) => g.name).toList(),
+        'artistIdentityVersion': artistIdentityVersion,
         'musicDataUpdatedAt': Timestamp.now(),
       });
       clearCache();
@@ -378,34 +381,52 @@ class MusicProfileService with AuthenticatedService {
   ) async {
     return MusicProfileService.calculateCompatibility(
       myArtistNames: myUser.topArtistNames,
+      myArtistKeys: _effectiveArtistKeys(myUser),
       myGenreNames: myUser.topGenreNames,
-      otherUser: otherUser,
+      otherUser: otherUser.copyWith(
+        topArtistKeys: _effectiveArtistKeys(otherUser),
+      ),
     );
   }
 
   @visibleForTesting
   static DiscoveryResult calculateCompatibility({
     required List<String> myArtistNames,
+    List<String> myArtistKeys = const [],
     required List<String> myGenreNames,
     required AppUser otherUser,
   }) {
-    final myUniqueArtistNames = _uniqueMusicNames(myArtistNames);
-    final otherUniqueArtistNames = _uniqueMusicNames(otherUser.topArtistNames);
+    final myArtists = _uniqueArtistIdentities(myArtistNames, myArtistKeys);
+    final otherArtists = _uniqueArtistIdentities(
+      otherUser.topArtistNames,
+      otherUser.topArtistKeys,
+    );
     final myUniqueGenreNames = _uniqueGenreNames(myGenreNames);
     final otherUniqueGenreNames = _uniqueGenreNames(otherUser.topGenreNames);
-    final myArtists = myUniqueArtistNames.map(_normalizedMusicKey).toSet();
     final myGenres = myUniqueGenreNames.map(_normalizedMusicKey).toSet();
-    final sharedArtists = otherUniqueArtistNames
-        .where((artist) => myArtists.contains(_normalizedMusicKey(artist)))
-        .toList();
+    final usedMyArtistIndexes = <int>{};
+    final sharedArtists = <String>[];
+    for (final otherArtist in otherArtists) {
+      var myArtistIndex = -1;
+      for (var index = 0; index < myArtists.length; index++) {
+        if (usedMyArtistIndexes.contains(index)) continue;
+        if (_artistsMatch(myArtists[index], otherArtist)) {
+          myArtistIndex = index;
+          break;
+        }
+      }
+      if (myArtistIndex < 0) continue;
+      usedMyArtistIndexes.add(myArtistIndex);
+      sharedArtists.add(otherArtist.name);
+    }
     final sharedGenres = otherUniqueGenreNames
         .where((genre) => myGenres.contains(_normalizedMusicKey(genre)))
         .toList();
 
     final artistScore = _similarityScore(
       sharedCount: sharedArtists.length,
-      leftCount: myUniqueArtistNames.length,
-      rightCount: otherUniqueArtistNames.length,
+      leftCount: myArtists.length,
+      rightCount: otherArtists.length,
       evidenceTarget: _artistEvidenceTarget,
       weight: _artistScoreWeight,
     );
@@ -427,16 +448,46 @@ class MusicProfileService with AuthenticatedService {
 
   static String _normalizedMusicKey(String value) => value.trim().toLowerCase();
 
-  static List<String> _uniqueMusicNames(List<String> values) {
-    final namesByKey = <String, String>{};
-    for (final value in values) {
-      final trimmed = value.trim();
-      final key = _normalizedMusicKey(trimmed);
-      if (key.isNotEmpty && !namesByKey.containsKey(key)) {
-        namesByKey[key] = trimmed;
-      }
+  static List<String> _effectiveArtistKeys(AppUser user) {
+    if (user.topArtists.length == user.topArtistNames.length &&
+        user.topArtists.asMap().entries.every(
+          (entry) =>
+              normalizeArtistIdentityName(entry.value.name) ==
+              normalizeArtistIdentityName(user.topArtistNames[entry.key]),
+        )) {
+      return artistIdentityKeys(user.topArtists);
     }
-    return namesByKey.values.toList(growable: false);
+    return user.topArtistKeys;
+  }
+
+  static List<({String name, String key})> _uniqueArtistIdentities(
+    List<String> names,
+    List<String> keys,
+  ) {
+    final artistsByKey = <String, ({String name, String key})>{};
+    for (var index = 0; index < names.length; index++) {
+      final name = names[index].trim();
+      if (name.isEmpty) continue;
+      final storedKey = index < keys.length ? keys[index].trim() : '';
+      final key = storedKey.isNotEmpty
+          ? storedKey
+          : artistIdentityKey(name: name);
+      artistsByKey.putIfAbsent(key, () => (name: name, key: key));
+    }
+    return artistsByKey.values.toList(growable: false);
+  }
+
+  static bool _artistsMatch(
+    ({String name, String key}) left,
+    ({String name, String key}) right,
+  ) {
+    final leftHasSpotifyId = isSpotifyArtistIdentityKey(left.key);
+    final rightHasSpotifyId = isSpotifyArtistIdentityKey(right.key);
+    if (leftHasSpotifyId && rightHasSpotifyId) {
+      return left.key == right.key;
+    }
+    return normalizeArtistIdentityName(left.name) ==
+        normalizeArtistIdentityName(right.name);
   }
 
   static List<String> _uniqueGenreNames(List<String> values) =>

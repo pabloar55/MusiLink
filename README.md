@@ -138,9 +138,17 @@ Ejemplos:
 - 5 artistas compartidos entre perfiles de 15 artistas aportan `50` puntos: `min(5 / 7, 1) * 70`.
 - 5 artistas y 2 géneros compartidos aportan `65` puntos: `50` por artistas + `15` por géneros.
 
-Antes de comparar se normalizan nombres con `trim`, lowercase y deduplicado para evitar que mayúsculas, espacios o valores repetidos distorsionen la puntuación.
+Los artistas usan una identidad híbrida: `spotify:{spotifyId}` cuando el ID está
+disponible y `name:{nombreNormalizado}` como fallback para Last.fm y datos
+antiguos. Dos IDs de Spotify distintos nunca se consideran el mismo artista. Si
+solo uno de los registros tiene ID, el nombre normalizado actúa como puente.
+También se deduplican nombres y géneros antes de puntuar.
 
 Las recomendaciones se almacenan en `users/{uid}/recommendations`, se limitan a 100 resultados, se muestran en páginas de 20 elementos y se cachean durante 30 minutos en `MusicProfileService`. Cada recomendación incluye un snapshot público del candidato para evitar consultas adicionales a `users`. Los usuarios bloqueados se filtran antes de mostrar resultados. El procedimiento de backfill y despliegue está en [`docs/recommendation_snapshots_migration.md`](docs/recommendation_snapshots_migration.md).
+
+La migración determinista de identidades de artistas y su informe de cobertura
+están documentados en
+[`docs/artist_identity_migration.md`](docs/artist_identity_migration.md).
 
 ## Flujo de Navegación
 

@@ -14,6 +14,7 @@ class AppUser {
   final List<Artist> topArtists;
   final List<Genre> topGenres;
   final List<String> topArtistNames;
+  final List<String> topArtistKeys;
   final List<String> topGenreNames;
   final DateTime? musicDataUpdatedAt;
   final Track? dailySong;
@@ -27,6 +28,7 @@ class AppUser {
     this.topArtists = const [],
     this.topGenres = const [],
     this.topArtistNames = const [],
+    this.topArtistKeys = const [],
     this.topGenreNames = const [],
     this.musicDataUpdatedAt,
     this.dailySong,
@@ -61,6 +63,11 @@ class AppUser {
           [],
       topArtistNames:
           (data['topArtistNames'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      topArtistKeys:
+          (data['topArtistKeys'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -99,6 +106,7 @@ class AppUser {
     List<Artist>? topArtists,
     List<Genre>? topGenres,
     List<String>? topArtistNames,
+    List<String>? topArtistKeys,
     List<String>? topGenreNames,
     DateTime? musicDataUpdatedAt,
     Object? dailySong = _unset,
@@ -112,6 +120,7 @@ class AppUser {
       topArtists: topArtists ?? this.topArtists,
       topGenres: topGenres ?? this.topGenres,
       topArtistNames: topArtistNames ?? this.topArtistNames,
+      topArtistKeys: topArtistKeys ?? this.topArtistKeys,
       topGenreNames: topGenreNames ?? this.topGenreNames,
       musicDataUpdatedAt: musicDataUpdatedAt ?? this.musicDataUpdatedAt,
       dailySong: identical(dailySong, _unset)

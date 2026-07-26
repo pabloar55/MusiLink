@@ -14,6 +14,7 @@ void main() {
       List<Artist> topArtists = const [],
       List<Genre> topGenres = const [],
       List<String> topArtistNames = const [],
+      List<String> topArtistKeys = const [],
       List<String> topGenreNames = const [],
       Track? dailySong,
     }) {
@@ -25,6 +26,7 @@ void main() {
         topArtists: topArtists,
         topGenres: topGenres,
         topArtistNames: topArtistNames,
+        topArtistKeys: topArtistKeys,
         topGenreNames: topGenreNames,
         dailySong: dailySong,
       );
@@ -40,6 +42,7 @@ void main() {
       expect(user.topArtists, isEmpty);
       expect(user.topGenres, isEmpty);
       expect(user.topArtistNames, isEmpty);
+      expect(user.topArtistKeys, isEmpty);
       expect(user.topGenreNames, isEmpty);
       expect(user.dailySong, isNull);
     });
@@ -76,12 +79,28 @@ void main() {
       final original = createTestUser();
       final updated = original.copyWith(
         topArtistNames: ['Queen', 'Radiohead'],
+        topArtistKeys: ['spotify:queen', 'spotify:radiohead'],
         topGenreNames: ['rock', 'alternative'],
       );
 
       expect(updated.topArtistNames, ['Queen', 'Radiohead']);
+      expect(updated.topArtistKeys, ['spotify:queen', 'spotify:radiohead']);
       expect(updated.topGenreNames, ['rock', 'alternative']);
       expect(original.topArtistNames, isEmpty);
+    });
+
+    test('fromMap restaura claves de identidad de artistas', () {
+      final user = AppUser.fromMap(
+        uid: 'uid1',
+        data: {
+          'displayName': 'Test User',
+          'topArtistNames': ['Beyoncé'],
+          'topArtistKeys': ['spotify:6vWDO969PvNqNYHIOW5v0m'],
+        },
+      );
+
+      expect(user, isNotNull);
+      expect(user!.topArtistKeys, ['spotify:6vWDO969PvNqNYHIOW5v0m']);
     });
 
     test('copyWith actualiza dailySong', () {

@@ -15,12 +15,14 @@ class MockMusicCatalogService extends Mock implements MusicCatalogService {}
 AppUser createUser({
   String uid = 'other',
   List<String> topArtistNames = const [],
+  List<String> topArtistKeys = const [],
   List<String> topGenreNames = const [],
 }) {
   return AppUser(
     uid: uid,
     displayName: 'Test',
     topArtistNames: topArtistNames,
+    topArtistKeys: topArtistKeys,
     topGenreNames: topGenreNames,
   );
 }
@@ -329,6 +331,65 @@ void main() {
       expect(result.score, 30.0);
       expect(result.sharedGenreNames, ['hip hop', 'r&b']);
     });
+
+    test('mismo spotifyId coincide aunque cambie el nombre visible', () {
+      final result = MusicProfileService.calculateCompatibility(
+        myArtistNames: ['Nombre anterior'],
+        myArtistKeys: ['spotify:artist-123'],
+        myGenreNames: [],
+        otherUser: createUser(
+          topArtistNames: ['Nombre nuevo'],
+          topArtistKeys: ['spotify:artist-123'],
+        ),
+      );
+
+      expect(result.score, 70.0);
+      expect(result.sharedArtistNames, ['Nombre nuevo']);
+    });
+
+    test('spotifyIds distintos no coinciden aunque compartan nombre', () {
+      final result = MusicProfileService.calculateCompatibility(
+        myArtistNames: ['Phoenix'],
+        myArtistKeys: ['spotify:artist-a'],
+        myGenreNames: [],
+        otherUser: createUser(
+          topArtistNames: ['Phoenix'],
+          topArtistKeys: ['spotify:artist-b'],
+        ),
+      );
+
+      expect(result.score, 0.0);
+      expect(result.sharedArtistNames, isEmpty);
+    });
+
+    test(
+      'nombre normalizado conecta un artista sin ID con otro de Spotify',
+      () {
+        final result = MusicProfileService.calculateCompatibility(
+          myArtistNames: ['Beyoncé'],
+          myArtistKeys: ['spotify:beyonce-id'],
+          myGenreNames: [],
+          otherUser: createUser(topArtistNames: [' beyonce ']),
+        );
+
+        expect(result.score, 70.0);
+        expect(result.sharedArtistNames, ['beyonce']);
+      },
+    );
+
+    test('un fallback ambiguo solo puede coincidir con un artista', () {
+      final result = MusicProfileService.calculateCompatibility(
+        myArtistNames: ['Phoenix'],
+        myGenreNames: [],
+        otherUser: createUser(
+          topArtistNames: ['Phoenix', 'Phoenix'],
+          topArtistKeys: ['spotify:artist-a', 'spotify:artist-b'],
+        ),
+      );
+
+      expect(result.score, 70.0);
+      expect(result.sharedArtistNames, hasLength(1));
+    });
   });
 
   group('MusicProfileService discovery (backend recommendations)', () {
@@ -517,6 +578,11 @@ void main() {
         expect(artists[0]['genres'], ['alternative rock']);
         expect(artists[0]['spotifyId'], 'spotify-radiohead');
         expect(artists[1]['imageUrl'], 'https://example.com/queen.jpg');
+        expect(update['topArtistKeys'], [
+          'spotify:spotify-radiohead',
+          'name:queen',
+        ]);
+        expect(update['artistIdentityVersion'], 1);
       });
     });
 
