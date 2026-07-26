@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -46,6 +48,8 @@ class MusicProfileService with AuthenticatedService {
   }
 
   static const _cacheTtl = Duration(minutes: 30);
+  static const _recommendationGenerationWait = Duration(seconds: 15);
+  static const _recentRecommendationRequestWindow = Duration(minutes: 2);
   static const _pageSize = 20;
   static const _recommendationSnapshotVersion = 1;
   static const _artistScoreWeight = 70.0;
@@ -81,6 +85,7 @@ class MusicProfileService with AuthenticatedService {
         selectedArtists.take(50).toList(),
       );
       final genres = _musicCatalogService.getTopGenresFromArtists(artists, 10);
+      final updatedAt = FieldValue.serverTimestamp();
 
       await _usersRef.doc(uid).update({
         'topArtists': artists.map((a) => a.toMap()).toList(),
@@ -89,7 +94,10 @@ class MusicProfileService with AuthenticatedService {
         'topArtistKeys': artistIdentityKeys(artists),
         'topGenreNames': genres.map((g) => g.name).toList(),
         'artistIdentityVersion': artistIdentityVersion,
-        'musicDataUpdatedAt': Timestamp.now(),
+        'musicDataUpdatedAt': updatedAt,
+        // Permite distinguir un resultado vacío real del breve intervalo
+        // entre guardar el perfil y terminar la Cloud Function.
+        'recommendationsRefreshRequestedAt': updatedAt,
       });
       clearCache();
     } catch (e, stack) {
@@ -154,6 +162,7 @@ class MusicProfileService with AuthenticatedService {
       if (myUser.topArtistNames.isEmpty && myUser.topGenreNames.isEmpty) {
         return null;
       }
+      if (_recommendationRefreshIsPending(myDoc.data())) return null;
 
       _blockedUids = null;
       final stored = await _fetchStoredRecommendationsPage(options: opts);
@@ -182,9 +191,12 @@ class MusicProfileService with AuthenticatedService {
       _lastRecommendationDoc = null;
       _blockedUids = null;
       _hasMoreDiscoveryUsers = false;
-      final myDoc = await _usersRef.doc(currentUid).get();
+      var myDoc = await _usersRef.doc(currentUid).get();
       if (!myDoc.exists) {
         return _cacheFirstPage(const [], lastDocument: null, hasMore: false);
+      }
+      if (_shouldWaitForRecommendationRefresh(myDoc.data())) {
+        myDoc = await _waitForRecommendationRefresh(myDoc);
       }
 
       final myUser = AppUser.fromFirestore(myDoc);
@@ -204,6 +216,53 @@ class MusicProfileService with AuthenticatedService {
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
+    }
+  }
+
+  bool _recommendationRefreshIsPending(Map<String, dynamic>? data) {
+    if (data == null ||
+        !data.containsKey('recommendationsRefreshRequestedAt')) {
+      return false;
+    }
+
+    final requestedAt = data['recommendationsRefreshRequestedAt'];
+    final generatedAt = data['recommendationsGeneratedAt'];
+    if (requestedAt is! Timestamp) {
+      // A local serverTimestamp can temporarily resolve as null.
+      return true;
+    }
+    return generatedAt is! Timestamp ||
+        generatedAt.millisecondsSinceEpoch < requestedAt.millisecondsSinceEpoch;
+  }
+
+  bool _shouldWaitForRecommendationRefresh(Map<String, dynamic>? data) {
+    if (!_recommendationRefreshIsPending(data)) return false;
+
+    final requestedAt = data?['recommendationsRefreshRequestedAt'];
+    if (requestedAt is! Timestamp) return false;
+    final age = DateTime.now().difference(requestedAt.toDate());
+    return age < _recentRecommendationRequestWindow;
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> _waitForRecommendationRefresh(
+    DocumentSnapshot<Map<String, dynamic>> current,
+  ) async {
+    try {
+      return await _usersRef
+          .doc(currentUid)
+          .snapshots()
+          .firstWhere(
+            (snapshot) =>
+                snapshot.exists &&
+                !_recommendationRefreshIsPending(snapshot.data()),
+          )
+          .timeout(_recommendationGenerationWait);
+    } on TimeoutException {
+      // No convertimos un fallo de generación en un bloqueo permanente:
+      // tras el margen de espera se muestra el último estado disponible.
+      return current;
+    } on FirebaseException {
+      return current;
     }
   }
 

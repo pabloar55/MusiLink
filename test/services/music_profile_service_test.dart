@@ -415,6 +415,8 @@ void main() {
       List<String> topArtistNames = const ['Artist A'],
       List<String> topGenreNames = const ['rock'],
       int? recommendationCount,
+      Timestamp? recommendationsRefreshRequestedAt,
+      Timestamp? recommendationsGeneratedAt,
     }) {
       when(() => mockUsersRef.doc(myUid)).thenReturn(mockMyDocRef);
       when(() => mockMyDocRef.get()).thenAnswer((_) async => mockMyDocSnap);
@@ -432,6 +434,8 @@ void main() {
         'topArtistNames': topArtistNames,
         'topGenreNames': topGenreNames,
         'recommendationsCount': ?recommendationCount,
+        'recommendationsRefreshRequestedAt': ?recommendationsRefreshRequestedAt,
+        'recommendationsGeneratedAt': ?recommendationsGeneratedAt,
       });
     }
 
@@ -583,6 +587,11 @@ void main() {
           'name:queen',
         ]);
         expect(update['artistIdentityVersion'], 1);
+        expect(update['musicDataUpdatedAt'], isA<FieldValue>());
+        expect(
+          update['recommendationsRefreshRequestedAt'],
+          same(update['musicDataUpdatedAt']),
+        );
       });
     });
 
@@ -631,6 +640,46 @@ void main() {
         expect(results, isEmpty);
         expect(service.hasMoreDiscoveryUsers, isFalse);
       });
+
+      test(
+        'waits for a pending first recommendation generation before reading',
+        () async {
+          final requestedAt = Timestamp.now();
+          stubMyUserDoc(
+            recommendationCount: 0,
+            recommendationsRefreshRequestedAt: requestedAt,
+          );
+          final generatedDoc = MockDocumentSnapshot();
+          when(() => generatedDoc.exists).thenReturn(true);
+          when(() => generatedDoc.id).thenReturn(myUid);
+          when(() => generatedDoc.data()).thenReturn({
+            'email': 'me@test.com',
+            'displayName': 'Me',
+            'photoUrl': '',
+            'createdAt': Timestamp.fromDate(DateTime(2025, 1, 1)),
+            'lastLogin': Timestamp.fromDate(DateTime(2025, 1, 1)),
+            'topArtistNames': ['Artist A'],
+            'topGenreNames': ['rock'],
+            'recommendationsCount': 1,
+            'recommendationsRefreshRequestedAt': requestedAt,
+            'recommendationsGeneratedAt': Timestamp.fromMillisecondsSinceEpoch(
+              requestedAt.millisecondsSinceEpoch + 1,
+            ),
+          });
+          when(
+            () => mockMyDocRef.snapshots(),
+          ).thenAnswer((_) => Stream.value(generatedDoc));
+          stubStoredRecommendations(
+            recommendationDocs: [buildRecommendationDoc('other1')],
+          );
+
+          final results = await service.readStoredDiscoveryUsers();
+
+          expect(results.map((result) => result.user.uid), ['other1']);
+          verify(() => mockMyDocRef.snapshots()).called(1);
+          verify(() => mockRecommendationLimitQuery.get()).called(1);
+        },
+      );
 
       test('excludes current user from stored recommendations', () async {
         final recommendations = [
@@ -735,6 +784,22 @@ void main() {
         expect(results, isNotNull);
         expect(results, isEmpty);
       });
+
+      test(
+        'pending generation is never accepted as an empty cache hit',
+        () async {
+          stubMyUserDoc(
+            recommendationCount: 0,
+            recommendationsRefreshRequestedAt: Timestamp.now(),
+          );
+          stubStoredRecommendations(recommendationDocs: []);
+
+          final results = await service.readDiscoveryUsersFromLocalCache();
+
+          expect(results, isNull);
+          verifyNever(() => mockRecommendationLimitQuery.get(any()));
+        },
+      );
 
       test('empty local query without generation metadata is a miss', () async {
         stubStoredRecommendations(recommendationDocs: []);
