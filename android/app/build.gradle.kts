@@ -24,7 +24,8 @@ kotlin {
 
 android {
     namespace = "app.musilink"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 11.x requires Android API 37.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
