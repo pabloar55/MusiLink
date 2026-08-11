@@ -1,10 +1,21 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function isActiveUser(uid) {
+      return !firestore.exists(
+          /databases/(default)/documents/account_deletions/$(uid)
+        )
+        && firestore.exists(/databases/(default)/documents/users/$(uid))
+        && firestore.get(
+          /databases/(default)/documents/users/$(uid)
+        ).data.username != 'deleted_user';
+    }
+
     match /profile_photos/{uid} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null &&
                             request.auth.uid == uid &&
+                            isActiveUser(uid) &&
                             request.resource.size < 5 * 1024 * 1024 &&
                             request.resource.contentType == 'image/jpeg';
       allow delete: if request.auth != null && request.auth.uid == uid;

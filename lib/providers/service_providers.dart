@@ -6,6 +6,7 @@ import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/services/auth_service.dart';
+import 'package:musi_link/services/account_deletion_service.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
@@ -64,6 +65,14 @@ final userServiceProvider = Provider<UserService>((ref) {
 
 final storageServiceProvider = Provider<StorageService>((ref) {
   return StorageService(storage: ref.watch(firebaseStorageProvider));
+});
+
+final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
+  return AccountDeletionService(
+    auth: ref.watch(firebaseAuthProvider),
+    firestore: ref.watch(firebaseFirestoreProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
+  );
 });
 
 final chatServiceProvider = Provider<ChatService>((ref) {

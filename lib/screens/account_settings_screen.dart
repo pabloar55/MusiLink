@@ -161,36 +161,33 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
 
     if (!mounted) return;
 
-    // 3. Progreso — a partir de aquí no hay marcha atrás
+    // 3. Solicitud — a partir de aquí no hay marcha atrás. Solo bloqueamos la
+    // UI hasta que el backend confirma el job durable, no hasta que termina.
     DeletingAccountDialog.show(context);
 
-    final uid = firebaseUser.uid;
-
     try {
-      // 4. Datos de Firestore (user aún autenticado → reglas OK)
-      await ref.read(friendServiceProvider).deleteAllUserFriendData(uid);
-      await ref.read(chatServiceProvider).deleteAllUserChatData(uid);
-      await ref.read(storageServiceProvider).deleteProfilePhoto(uid);
-      await ref.read(userServiceProvider).anonymizeUser(uid);
-
-      // 5. Capturar servicios antes de borrar (delete() desmonta el widget)
+      // El backend crea/reanuda un job durable y elimina Firebase Auth al final.
+      // Cerrar sesión o la app no interrumpe el borrado.
       final authService = ref.read(authServiceProvider);
-      final chatService = ref.read(chatServiceProvider);
-      final musicProfileService = ref.read(musicProfileServiceProvider);
+      final deletionService = ref.read(accountDeletionServiceProvider);
 
-      await firebaseUser.delete();
-
-      // 7. Limpiar sesión Google + cachés
-      try {
-        await authService.signOut();
-      } catch (_) {}
-      chatService.clearCache();
-      musicProfileService.clearCache();
-      if (mounted) clearSessionState(ref);
-
+      await deletionService.requestDeletion();
       if (!mounted) return;
       Navigator.of(context).pop();
-      context.go('/auth');
+      final router = GoRouter.of(context);
+      clearSessionState(ref);
+
+      // Los tokens se eliminan desde el worker; intentar borrarlos desde el
+      // cliente ya está bloqueado por las reglas tras crear el job.
+      try {
+        await authService.signOut(clearNotificationToken: false);
+      } catch (e, st) {
+        reportError(e, st).ignore();
+        try {
+          await ref.read(firebaseAuthProvider).signOut();
+        } catch (_) {}
+      }
+      router.go('/auth?accountDeletion=requested');
     } catch (e, st) {
       reportError(e, st).ignore();
       if (!mounted) return;

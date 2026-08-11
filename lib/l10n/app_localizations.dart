@@ -1311,8 +1311,20 @@ abstract class AppLocalizations {
   /// No description provided for @deletingAccount.
   ///
   /// In en, this message translates to:
-  /// **'Deleting account...'**
+  /// **'Starting account deletion...'**
   String get deletingAccount;
+
+  /// No description provided for @accountDeletionRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account deletion has started. You can close the app; the process will continue in the background.'**
+  String get accountDeletionRequested;
+
+  /// No description provided for @accountDeletionPending.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is currently being deleted. Please try again later.'**
+  String get accountDeletionPending;
 
   /// No description provided for @reauthTitle.
   ///

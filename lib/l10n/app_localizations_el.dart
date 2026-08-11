@@ -685,7 +685,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteAccountConfirm => 'Διαγραφή';
 
   @override
-  String get deletingAccount => 'Διαγραφή λογαριασμού...';
+  String get deletingAccount => 'Έναρξη διαγραφής λογαριασμού...';
+
+  @override
+  String get accountDeletionRequested =>
+      'Η διαγραφή του λογαριασμού σας ξεκίνησε. Μπορείτε να κλείσετε την εφαρμογή· η διαδικασία θα συνεχιστεί στο παρασκήνιο.';
+
+  @override
+  String get accountDeletionPending =>
+      'Αυτός ο λογαριασμός διαγράφεται αυτήν τη στιγμή. Δοκιμάστε ξανά αργότερα.';
 
   @override
   String get reauthTitle => 'Επιβεβαιώστε την ταυτότητά σας';

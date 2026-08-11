@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.expireDailySongs = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.createUserProfile = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.expireDailySongs = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.createUserProfile = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
@@ -14,6 +14,9 @@ Object.defineProperty(exports, "searchSpotifyArtists", { enumerable: true, get: 
 Object.defineProperty(exports, "searchSpotifyTracks", { enumerable: true, get: function () { return spotify_1.searchSpotifyTracks; } });
 var lastfm_1 = require("./lastfm");
 Object.defineProperty(exports, "getSimilarArtists", { enumerable: true, get: function () { return lastfm_1.getSimilarArtists; } });
+var account_deletion_1 = require("./account_deletion");
+Object.defineProperty(exports, "requestAccountDeletion", { enumerable: true, get: function () { return account_deletion_1.requestAccountDeletion; } });
+Object.defineProperty(exports, "processAccountDeletion", { enumerable: true, get: function () { return account_deletion_1.processAccountDeletion; } });
 (0, app_1.initializeApp)();
 const db = (0, firestore_2.getFirestore)();
 const messaging = (0, messaging_1.getMessaging)();
@@ -619,6 +622,23 @@ function indexUserRef(token, uid) {
 function userDocRef(uid) {
     return db.collection('users').doc(uid);
 }
+async function keepDeletedProfileMinimal(uid, data) {
+    if (data?.username !== 'deleted_user')
+        return;
+    const current = await userDocRef(uid).get();
+    const currentData = current.data();
+    const minimal = currentData?.displayName === 'Deleted user' &&
+        currentData?.username === 'deleted_user' &&
+        currentData?.photoUrl === '' &&
+        Object.keys(currentData ?? {}).length === 3;
+    if (minimal)
+        return;
+    await userDocRef(uid).set({
+        displayName: 'Deleted user',
+        username: 'deleted_user',
+        photoUrl: '',
+    });
+}
 async function commitBatches(operations) {
     const batchSize = 400;
     for (let i = 0; i < operations.length; i += batchSize) {
@@ -962,6 +982,7 @@ exports.onUserMusicProfileCreated = (0, firestore_1.onDocumentCreated)({ documen
             topArtistKeys: [],
             topGenreNames: [],
         }, after, profileSnapshot);
+        await keepDeletedProfileMinimal(event.params.userId, afterData);
     }
     catch (error) {
         v2_1.logger.error('onUserMusicProfileCreated: unhandled error', {
@@ -988,6 +1009,7 @@ exports.onUserMusicProfileChanged = (0, firestore_1.onDocumentUpdated)({ documen
         if (publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
             await updateStoredProfileSnapshots(event.params.userId, afterSnapshot);
         }
+        await keepDeletedProfileMinimal(event.params.userId, afterData);
     }
     catch (error) {
         v2_1.logger.error('onUserMusicProfileChanged: unhandled error', {

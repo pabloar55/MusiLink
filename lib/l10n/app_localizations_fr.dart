@@ -689,7 +689,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deleteAccountConfirm => 'Supprimer';
 
   @override
-  String get deletingAccount => 'Suppression du compte...';
+  String get deletingAccount => 'Démarrage de la suppression du compte...';
+
+  @override
+  String get accountDeletionRequested =>
+      'La suppression de votre compte a commencé. Vous pouvez fermer l’application ; le processus continuera en arrière-plan.';
+
+  @override
+  String get accountDeletionPending =>
+      'Ce compte est en cours de suppression. Veuillez réessayer plus tard.';
 
   @override
   String get reauthTitle => 'Confirmez votre identité';

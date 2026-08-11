@@ -9,7 +9,8 @@
     "test:artist-keys": "node --test scripts/backfill-artist-identity-keys.test.cjs",
     "migrate:recommendation-snapshots": "node scripts/backfill-recommendation-snapshots.cjs",
     "migrate:usernames": "node scripts/backfill-username-reservations.cjs",
-    "test:usernames-migration": "node --test scripts/backfill-username-reservations.test.cjs"
+    "test:usernames-migration": "node --test scripts/backfill-username-reservations.test.cjs",
+    "test:account-deletion": "npm run build && node --test test/account_deletion.test.cjs"
   },
   "engines": {
     "node": "24"

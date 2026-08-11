@@ -164,15 +164,25 @@ class AuthService {
   }
 
   /// Cierra sesión de Firebase y Google.
-  /// Limpia el FCM token antes de cerrar sesión.
-  Future<void> signOut() async {
-    await _ensureGoogleInitialized();
+  /// Limpia el FCM token por defecto; durante una eliminación lo hace el
+  /// backend porque la cuenta ya está congelada para escrituras cliente.
+  Future<void> signOut({bool clearNotificationToken = true}) async {
+    if (clearNotificationToken) {
+      try {
+        await _notificationService.clearToken();
+      } catch (e, st) {
+        await reportError(e, st);
+      }
+    }
+    // Firebase must always be signed out locally. A Google SDK failure must
+    // not leave an authenticated session behind, especially for an account
+    // whose backend deletion has already been accepted.
     try {
-      await _notificationService.clearToken();
+      await _ensureGoogleInitialized();
+      await _googleSignIn.signOut();
     } catch (e, st) {
       await reportError(e, st);
     }
-    await _googleSignIn.signOut();
     await _auth.signOut();
   }
 

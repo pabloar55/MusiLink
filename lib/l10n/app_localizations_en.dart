@@ -677,7 +677,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteAccountConfirm => 'Delete';
 
   @override
-  String get deletingAccount => 'Deleting account...';
+  String get deletingAccount => 'Starting account deletion...';
+
+  @override
+  String get accountDeletionRequested =>
+      'Your account deletion has started. You can close the app; the process will continue in the background.';
+
+  @override
+  String get accountDeletionPending =>
+      'This account is currently being deleted. Please try again later.';
 
   @override
   String get reauthTitle => 'Confirm your identity';

@@ -8,6 +8,7 @@ typedef UserSetupState = ({
   bool artistsSelected,
   bool onboardingDone,
   bool photoSetupDone,
+  bool deletionPending,
 });
 
 typedef FetchUserSetupState = Future<UserSetupState> Function(String uid);
@@ -18,12 +19,14 @@ class AppRouterBootstrapState {
     required this.artistsSelected,
     required this.onboardingDone,
     required this.photoSetupDone,
+    required this.deletionPending,
   });
 
   final bool usernameSet;
   final bool artistsSelected;
   final bool onboardingDone;
   final bool photoSetupDone;
+  final bool deletionPending;
 }
 
 /// Notifier que dispara los redirects de GoRouter cuando cambia
@@ -42,6 +45,7 @@ class AppRouterNotifier extends ChangeNotifier {
         artistsSelected: initialState.artistsSelected,
         onboardingDone: initialState.onboardingDone,
         photoSetupDone: initialState.photoSetupDone,
+        deletionPending: initialState.deletionPending,
         fetchUserState: fetchUserState,
       );
     }
@@ -53,6 +57,7 @@ class AppRouterNotifier extends ChangeNotifier {
   bool _artistsSelected = false;
   bool _onboardingDone = false;
   bool _photoSetupDone = false;
+  bool _deletionPending = false;
 
   bool get isInitialized => _initialized;
   bool get isLoggedIn => _auth.currentUser != null;
@@ -60,6 +65,7 @@ class AppRouterNotifier extends ChangeNotifier {
   bool get artistsSelected => _artistsSelected;
   bool get onboardingDone => _onboardingDone;
   bool get photoSetupDone => _photoSetupDone;
+  bool get deletionPending => _deletionPending;
 
   FetchUserSetupState? _fetchUserState;
 
@@ -70,6 +76,7 @@ class AppRouterNotifier extends ChangeNotifier {
     required bool artistsSelected,
     required bool onboardingDone,
     required bool photoSetupDone,
+    bool deletionPending = false,
     FetchUserSetupState? fetchUserState,
   }) {
     _initialized = true;
@@ -77,6 +84,7 @@ class AppRouterNotifier extends ChangeNotifier {
     _artistsSelected = artistsSelected;
     _onboardingDone = onboardingDone;
     _photoSetupDone = photoSetupDone;
+    _deletionPending = deletionPending;
     _fetchUserState = fetchUserState;
     _sub?.cancel();
     _sub = _auth.authStateChanges().listen((user) async {
@@ -85,6 +93,7 @@ class AppRouterNotifier extends ChangeNotifier {
         _artistsSelected = false;
         _onboardingDone = false;
         _photoSetupDone = false;
+        _deletionPending = false;
         notifyListeners();
       } else if (_fetchUserState != null && !_usernameSet) {
         // Re-consultar Firestore al hacer login para evitar que usuarios
@@ -95,6 +104,7 @@ class AppRouterNotifier extends ChangeNotifier {
           _artistsSelected = state.artistsSelected;
           _onboardingDone = state.onboardingDone;
           _photoSetupDone = state.photoSetupDone;
+          _deletionPending = state.deletionPending;
         } catch (_) {}
         notifyListeners();
       } else {
@@ -145,6 +155,9 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
   }
   if (!notifier.isLoggedIn) {
     return location == '/auth' ? null : '/auth';
+  }
+  if (notifier.deletionPending) {
+    return location == '/deleting-account' ? null : '/deleting-account';
   }
   if (!notifier.onboardingDone) {
     return location == '/onboarding' ? null : '/onboarding';

@@ -21,6 +21,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { claimUsernameAndCreateProfile as claimUsername } from './username_claim';
 export { searchSpotifyArtists, searchSpotifyTracks } from './spotify';
 export { getSimilarArtists } from './lastfm';
+export { requestAccountDeletion, processAccountDeletion } from './account_deletion';
 
 initializeApp();
 
@@ -799,6 +800,26 @@ function userDocRef(uid: string): DocumentReference {
   return db.collection('users').doc(uid);
 }
 
+async function keepDeletedProfileMinimal(
+  uid: string,
+  data: DocumentData | undefined,
+): Promise<void> {
+  if (data?.username !== 'deleted_user') return;
+  const current = await userDocRef(uid).get();
+  const currentData = current.data();
+  const minimal =
+    currentData?.displayName === 'Deleted user' &&
+    currentData?.username === 'deleted_user' &&
+    currentData?.photoUrl === '' &&
+    Object.keys(currentData ?? {}).length === 3;
+  if (minimal) return;
+  await userDocRef(uid).set({
+    displayName: 'Deleted user',
+    username: 'deleted_user',
+    photoUrl: '',
+  });
+}
+
 async function commitBatches(
   operations: Array<(batch: WriteBatch) => void>,
 ): Promise<void> {
@@ -1242,6 +1263,7 @@ export const onUserMusicProfileCreated = onDocumentCreated(
         topArtistKeys: [],
         topGenreNames: [],
       }, after, profileSnapshot);
+      await keepDeletedProfileMinimal(event.params.userId, afterData);
     } catch (error) {
       logger.error('onUserMusicProfileCreated: unhandled error', {
         userId: event.params.userId,
@@ -1271,6 +1293,7 @@ export const onUserMusicProfileChanged = onDocumentUpdated(
       if (publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
         await updateStoredProfileSnapshots(event.params.userId, afterSnapshot);
       }
+      await keepDeletedProfileMinimal(event.params.userId, afterData);
     } catch (error) {
       logger.error('onUserMusicProfileChanged: unhandled error', {
         userId: event.params.userId,

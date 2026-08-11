@@ -42,6 +42,55 @@
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "senderId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactions.`❤️`",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactions.`🔥`",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactions.`👏`",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactions.`😍`",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactions.`💀`",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "uid",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
     }
   ]
 }

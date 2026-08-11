@@ -15,7 +15,9 @@ import 'package:musi_link/widgets/google_sign_in_web_button.dart';
 /// Permite login/registro con email+contraseña y Google Sign-In.
 /// El username se elige siempre en UsernameSetupScreen tras el registro.
 class AuthScreen extends ConsumerStatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({super.key, this.accountDeletionNotice});
+
+  final String? accountDeletionNotice;
 
   @override
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
@@ -41,6 +43,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.initState();
     if (kIsWeb) {
       unawaited(ref.read(authServiceProvider).initializeGoogleSignIn());
+    }
+    if (widget.accountDeletionNotice != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context)!;
+        _showError(
+          widget.accountDeletionNotice == 'requested'
+              ? l10n.accountDeletionRequested
+              : l10n.accountDeletionPending,
+        );
+      });
     }
   }
 

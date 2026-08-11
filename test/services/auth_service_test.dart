@@ -421,6 +421,18 @@ void main() {
         verify(() => mockGoogleSignIn.signOut()).called(1);
         verify(() => mockAuth.signOut()).called(1);
       });
+
+      test('permite omitir la limpieza cliente del token FCM', () async {
+        when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+        when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async {});
+        when(() => mockAuth.signOut()).thenAnswer((_) async {});
+
+        await authService.signOut(clearNotificationToken: false);
+
+        verifyNever(() => mockNotificationService.clearToken());
+        verify(() => mockGoogleSignIn.signOut()).called(1);
+        verify(() => mockAuth.signOut()).called(1);
+      });
     });
   });
 }

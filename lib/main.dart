@@ -23,6 +23,7 @@ import 'package:musi_link/services/app_update_service.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/utils/pwa_environment.dart';
 import 'package:musi_link/utils/pwa_install_session.dart';
@@ -46,10 +47,16 @@ Future<AppRouterBootstrapState> _loadRouterBootstrapState(
   final uid = authUser?.uid;
   bool usernameSet = false;
   bool artistsSelected = false;
+  bool deletionPending = false;
 
   if (uid != null) {
     try {
       await authUser?.getIdToken();
+      final deletionJob = await FirebaseFirestore.instance
+          .collection(FirestoreCollections.accountDeletions)
+          .doc(uid)
+          .get();
+      deletionPending = deletionJob.exists;
       final user = await UserService(
         firestore: FirebaseFirestore.instance,
       ).getUser(uid, reportErrors: false);
@@ -75,6 +82,7 @@ Future<AppRouterBootstrapState> _loadRouterBootstrapState(
     artistsSelected: artistsSelected,
     onboardingDone: onboardingDone,
     photoSetupDone: photoSetupDone,
+    deletionPending: deletionPending,
   );
 }
 

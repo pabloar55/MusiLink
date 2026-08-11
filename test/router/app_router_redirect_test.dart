@@ -75,6 +75,24 @@ void main() {
     });
   });
 
+  group('account deletion pending', () {
+    setUp(() => when(() => mockAuth.currentUser).thenReturn(mockUser));
+
+    test('cualquier ruta queda bloqueada en progreso de eliminación', () {
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: true,
+        );
+      expect(appRedirect(n, '/'), '/deleting-account');
+      expect(appRedirect(n, '/deleting-account'), isNull);
+      n.dispose();
+    });
+  });
+
   // ── Estado 3: autenticado, sin onboarding ─────────────────────
   // Nuevo flujo: onboarding es el primer paso tras login
 

@@ -7,6 +7,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
+import 'package:musi_link/screens/deleting_account_screen.dart';
 import 'package:musi_link/screens/blocked_users_screen.dart';
 import 'package:musi_link/screens/auth_screen.dart';
 import 'package:musi_link/screens/privacy_policy_screen.dart';
@@ -18,6 +19,7 @@ import 'package:musi_link/screens/artist_selector_screen.dart';
 import 'package:musi_link/screens/username_setup_screen.dart';
 import 'package:musi_link/screens/user_profile_screen.dart';
 import 'package:musi_link/screens/user_search_screen.dart';
+import 'package:musi_link/utils/firestore_collections.dart';
 
 // ── Router ──────────────────────────────────────────────────────
 
@@ -33,6 +35,11 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
     auth: ref.watch(firebaseAuthProvider),
     initialState: ref.watch(routerBootstrapStateProvider),
     fetchUserState: (loginUid) async {
+      final deletionJob = await ref
+          .read(firebaseFirestoreProvider)
+          .collection(FirestoreCollections.accountDeletions)
+          .doc(loginUid)
+          .get();
       final profile = await userService.getUser(loginUid, reportErrors: false);
       final hasUsername = profile != null && profile.username.isNotEmpty;
       final hasArtists = profile != null && profile.topArtistNames.isNotEmpty;
@@ -41,6 +48,7 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
         artistsSelected: hasArtists,
         onboardingDone: hasArtists,
         photoSetupDone: hasArtists,
+        deletionPending: deletionJob.exists,
       );
     },
   );
@@ -56,7 +64,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     observers: [appRouteObserver],
     redirect: (context, state) => appRedirect(notifier, state.matchedLocation),
     routes: [
-      GoRoute(path: '/auth', builder: (context, state) => const AuthScreen()),
+      GoRoute(
+        path: '/auth',
+        builder: (context, state) => AuthScreen(
+          accountDeletionNotice: state.uri.queryParameters['accountDeletion'],
+        ),
+      ),
+      GoRoute(
+        path: '/deleting-account',
+        builder: (context, state) => const DeletingAccountScreen(),
+      ),
       GoRoute(
         path: '/username-setup',
         builder: (context, state) => const UsernameSetupScreen(),
