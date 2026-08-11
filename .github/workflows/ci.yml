@@ -46,3 +46,30 @@ jobs:
         with:
           name: coverage-report
           path: coverage/html/
+
+  functions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test:artist-keys
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

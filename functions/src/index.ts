@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { initializeApp } from 'firebase-admin/app';
 import {
   onDocumentCreated,
   onDocumentDeleted,
@@ -7,14 +7,24 @@ import {
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import {
+  DocumentData,
+  DocumentReference,
+  FieldValue,
+  QueryDocumentSnapshot,
+  Timestamp,
+  UpdateData,
+  WriteBatch,
+  getFirestore,
+} from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 export { searchSpotifyArtists, searchSpotifyTracks } from './spotify';
 export { getSimilarArtists } from './lastfm';
 
-admin.initializeApp();
+initializeApp();
 
-const db = admin.firestore();
-const messaging = admin.messaging();
+const db = getFirestore();
+const messaging = getMessaging();
 
 const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
@@ -127,7 +137,7 @@ function notificationPath(data: Record<string, string>): string {
 }
 
 async function expireDailySong(
-  userRef: admin.firestore.DocumentReference,
+  userRef: DocumentReference,
   expiresBefore: Timestamp,
 ): Promise<boolean> {
   return db.runTransaction(async (transaction) => {
@@ -161,7 +171,7 @@ async function expireDailySong(
 // one entry per conversation instead of an unbounded stack.
 async function sendNotification(
   recipientUid: string,
-  recipientPrivateData: admin.firestore.DocumentData | undefined,
+  recipientPrivateData: DocumentData | undefined,
   notification: { title: string; body: string },
   data: Record<string, string>,
   tag?: string,
@@ -177,7 +187,7 @@ async function sendNotification(
     .get();
   const targets = new Map<
     string,
-    admin.firestore.DocumentReference | undefined
+    DocumentReference | undefined
   >();
   const legacyToken = recipientPrivateData?.fcmToken;
   if (typeof legacyToken === 'string' && legacyToken.length > 0) {
@@ -271,7 +281,7 @@ async function sendNotification(
   );
 }
 
-function preferredLocale(data: admin.firestore.DocumentData | undefined): SupportedLocale {
+function preferredLocale(data: DocumentData | undefined): SupportedLocale {
   const locale = data?.preferredLocale;
   if (typeof locale !== 'string') return defaultLocale;
 
@@ -319,7 +329,7 @@ function stringList(value: unknown): string[] {
 }
 
 function userHasBlocked(
-  data: admin.firestore.DocumentData | undefined,
+  data: DocumentData | undefined,
   otherUid: string,
 ): boolean {
   return stringList(data?.blockedUsers).includes(otherUid);
@@ -402,7 +412,7 @@ async function establishAcceptedFriendship(
   });
 }
 
-function readMusicProfile(data: admin.firestore.DocumentData | undefined): UserMusicProfile {
+function readMusicProfile(data: DocumentData | undefined): UserMusicProfile {
   const topArtistNames =
     stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists);
   return {
@@ -413,7 +423,7 @@ function readMusicProfile(data: admin.firestore.DocumentData | undefined): UserM
 }
 
 function readPublicProfileSnapshot(
-  data: admin.firestore.DocumentData | undefined,
+  data: DocumentData | undefined,
 ): PublicProfileSnapshot | undefined {
   const displayName = typeof data?.displayName === 'string' ? data.displayName.trim() : '';
   const username = typeof data?.username === 'string' ? data.username.trim() : '';
@@ -460,7 +470,7 @@ function timestampValue(value: unknown): Timestamp | undefined {
   return value instanceof Timestamp ? value : undefined;
 }
 
-function messageSummary(data: admin.firestore.DocumentData): string {
+function messageSummary(data: DocumentData): string {
   if (data.type === 'track') {
     const title = data.trackData?.title;
     if (typeof title === 'string' && title.length > 0) return `🎵 ${title}`;
@@ -468,12 +478,12 @@ function messageSummary(data: admin.firestore.DocumentData): string {
   return typeof data.text === 'string' ? data.text : '';
 }
 
-function chatParticipants(data: admin.firestore.DocumentData | undefined): string[] {
+function chatParticipants(data: DocumentData | undefined): string[] {
   if (!Array.isArray(data?.participants)) return [];
   return data.participants.filter((value: unknown): value is string => typeof value === 'string');
 }
 
-function fullySoftDeletedChat(data: admin.firestore.DocumentData | undefined): boolean {
+function fullySoftDeletedChat(data: DocumentData | undefined): boolean {
   const participants = chatParticipants(data);
   if (participants.length !== 2) return false;
 
@@ -488,7 +498,7 @@ function fullySoftDeletedChat(data: admin.firestore.DocumentData | undefined): b
 }
 
 function allParticipantsDeletedBefore(
-  data: admin.firestore.DocumentData | undefined,
+  data: DocumentData | undefined,
 ): Timestamp | undefined {
   const participants = chatParticipants(data);
   if (participants.length !== 2) return undefined;
@@ -507,7 +517,7 @@ function allParticipantsDeletedBefore(
 }
 
 async function deleteChatMessages(
-  chatRef: admin.firestore.DocumentReference,
+  chatRef: DocumentReference,
 ): Promise<void> {
   const messagesRef = chatRef.collection(messagesCollection);
   while (true) {
@@ -523,15 +533,15 @@ async function deleteChatMessages(
 }
 
 async function hardDeleteChat(
-  chatRef: admin.firestore.DocumentReference,
+  chatRef: DocumentReference,
 ): Promise<void> {
   await deleteChatMessages(chatRef);
   await chatRef.delete();
 }
 
 async function pruneMessagesDeletedForAllParticipants(
-  chatRef: admin.firestore.DocumentReference,
-  chatData: admin.firestore.DocumentData | undefined,
+  chatRef: DocumentReference,
+  chatData: DocumentData | undefined,
 ): Promise<number> {
   const pruneBefore = allParticipantsDeletedBefore(chatData);
   if (!pruneBefore) return 0;
@@ -557,8 +567,8 @@ async function pruneMessagesDeletedForAllParticipants(
 }
 
 async function latestMessageSnapshot(
-  chatRef: admin.firestore.DocumentReference,
-): Promise<admin.firestore.QueryDocumentSnapshot | undefined> {
+  chatRef: DocumentReference,
+): Promise<QueryDocumentSnapshot | undefined> {
   const snapshot = await chatRef
     .collection(messagesCollection)
     .orderBy('timestamp', 'desc')
@@ -568,7 +578,7 @@ async function latestMessageSnapshot(
 }
 
 async function refreshChatSummaryFromLatestMessage(
-  chatRef: admin.firestore.DocumentReference,
+  chatRef: DocumentReference,
 ): Promise<boolean> {
   const latest = await latestMessageSnapshot(chatRef);
   if (!latest) {
@@ -585,8 +595,8 @@ async function refreshChatSummaryFromLatestMessage(
 }
 
 function recommendationRefreshRequested(
-  before: admin.firestore.DocumentData | undefined,
-  after: admin.firestore.DocumentData | undefined,
+  before: DocumentData | undefined,
+  after: DocumentData | undefined,
 ): boolean {
   const beforeMillis = timestampMillis(before?.recommendationsRefreshRequestedAt);
   const afterMillis = timestampMillis(after?.recommendationsRefreshRequestedAt);
@@ -663,7 +673,7 @@ function normalizedStoredArtistKey(value: string): string | undefined {
 }
 
 function readArtistIdentityKeys(
-  data: admin.firestore.DocumentData | undefined,
+  data: DocumentData | undefined,
   names: string[],
 ): string[] {
   const storedKeys = stringList(data?.topArtistKeys)
@@ -776,7 +786,7 @@ function musicTokens(profile: UserMusicProfile): MusicToken[] {
   return [...new Map(tokens.map((token) => [token.key, token])).values()];
 }
 
-function indexUserRef(token: MusicToken, uid: string): admin.firestore.DocumentReference {
+function indexUserRef(token: MusicToken, uid: string): DocumentReference {
   return db
     .collection(recommendationIndexCollection)
     .doc(token.key)
@@ -784,12 +794,12 @@ function indexUserRef(token: MusicToken, uid: string): admin.firestore.DocumentR
     .doc(uid);
 }
 
-function userDocRef(uid: string): admin.firestore.DocumentReference {
+function userDocRef(uid: string): DocumentReference {
   return db.collection('users').doc(uid);
 }
 
 async function commitBatches(
-  operations: Array<(batch: admin.firestore.WriteBatch) => void>,
+  operations: Array<(batch: WriteBatch) => void>,
 ): Promise<void> {
   const batchSize = 400;
   for (let i = 0; i < operations.length; i += batchSize) {
@@ -802,7 +812,7 @@ async function commitBatches(
 function recommendationSnapshotData(
   snapshot: PublicProfileSnapshot,
   generatedAt: Timestamp,
-): admin.firestore.DocumentData {
+): DocumentData {
   return {
     snapshotVersion: recommendationSnapshotVersion,
     profileSnapshot: {
@@ -859,7 +869,7 @@ async function updateRecommendationIndex(
   const previousTokens = new Map(musicTokens(before).map((token) => [token.key, token]));
   const nextTokens = new Map(musicTokens(after).map((token) => [token.key, token]));
   const now = FieldValue.serverTimestamp();
-  const operations: Array<(batch: admin.firestore.WriteBatch) => void> = [];
+  const operations: Array<(batch: WriteBatch) => void> = [];
 
   for (const [key, token] of previousTokens) {
     if (!nextTokens.has(key)) {
@@ -1155,7 +1165,7 @@ export const onNewMessage = onDocumentCreated(
         const messageTime = timestampValue(currentMessage.timestamp);
         if (!recipientId || !messageTime) return undefined;
 
-        const updates: admin.firestore.UpdateData<admin.firestore.DocumentData> = {};
+        const updates: UpdateData<DocumentData> = {};
         const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
         const summary = messageSummary(currentMessage);
         const legacyClientAlreadyAppliedSummary =
