@@ -46,7 +46,7 @@ android {
     defaultConfig {
         applicationId = "app.musilink"
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
