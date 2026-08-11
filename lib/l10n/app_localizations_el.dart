@@ -497,6 +497,21 @@ class AppLocalizationsEl extends AppLocalizations {
       'Προσθέστε φίλους για να δείτε το τραγούδι τους της ημέρας';
 
   @override
+  String get dailySongSaveError =>
+      'Δεν ήταν δυνατή η δημοσίευση του τραγουδιού. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get dailySongRefreshError =>
+      'Δεν ήταν δυνατή η ανανέωση από τον διακομιστή. Εμφανίζονται τα προηγούμενα δεδομένα.';
+
+  @override
+  String get dailySongLoadError =>
+      'Δεν ήταν δυνατή η φόρτωση των τραγουδιών της ημέρας.';
+
+  @override
+  String get dailySongRetry => 'Δοκιμάστε ξανά';
+
+  @override
   String get onboardingDiscoverTitle => 'Ανακαλύψτε ανθρώπους';
 
   @override

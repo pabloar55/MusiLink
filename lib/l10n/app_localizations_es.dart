@@ -492,6 +492,21 @@ class AppLocalizationsEs extends AppLocalizations {
       'Añade amigos para ver sus canciones del día';
 
   @override
+  String get dailySongSaveError =>
+      'No se pudo publicar la canción. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get dailySongRefreshError =>
+      'No se pudo actualizar desde el servidor. Se mantienen los datos anteriores.';
+
+  @override
+  String get dailySongLoadError =>
+      'No se pudieron cargar las canciones del día.';
+
+  @override
+  String get dailySongRetry => 'Reintentar';
+
+  @override
   String get onboardingDiscoverTitle => 'Descubre personas';
 
   @override

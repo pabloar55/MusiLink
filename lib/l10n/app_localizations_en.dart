@@ -491,6 +491,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dailySongNoFriends => 'Add friends to see their song of the day';
 
   @override
+  String get dailySongSaveError =>
+      'The song couldn\'t be published. Check your connection and try again.';
+
+  @override
+  String get dailySongRefreshError =>
+      'Couldn\'t refresh from the server. Previous data is still shown.';
+
+  @override
+  String get dailySongLoadError => 'Couldn\'t load the songs of the day.';
+
+  @override
+  String get dailySongRetry => 'Try again';
+
+  @override
   String get onboardingDiscoverTitle => 'Discover people';
 
   @override

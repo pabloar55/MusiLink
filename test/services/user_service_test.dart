@@ -146,6 +146,36 @@ void main() {
         expect(user, isNull);
       });
 
+      test('serverOnly ignora la caché y espera al servidor', () async {
+        final mockDocRef = MockDocumentReference();
+        final cachedSnapshot = MockDocumentSnapshot();
+        final serverSnapshot = MockDocumentSnapshot();
+        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
+        when(() => mockDocRef.get()).thenAnswer((_) async => cachedSnapshot);
+        when(
+          () => mockDocRef.get(const GetOptions(source: Source.server)),
+        ).thenAnswer((_) async => serverSnapshot);
+        for (final snapshot in [cachedSnapshot, serverSnapshot]) {
+          when(() => snapshot.exists).thenReturn(true);
+          when(() => snapshot.id).thenReturn('uid123');
+        }
+        when(
+          () => cachedSnapshot.data(),
+        ).thenReturn({'displayName': 'Cached name', 'username': 'cached'});
+        when(
+          () => serverSnapshot.data(),
+        ).thenReturn({'displayName': 'Server name', 'username': 'server'});
+
+        final cached = await userService.getUser('uid123');
+        final fresh = await userService.getUser('uid123', serverOnly: true);
+
+        expect(cached?.displayName, 'Cached name');
+        expect(fresh?.displayName, 'Server name');
+        verify(
+          () => mockDocRef.get(const GetOptions(source: Source.server)),
+        ).called(1);
+      });
+
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
@@ -387,6 +417,24 @@ void main() {
         expect(captured.containsKey('dailySongUpdatedAt'), true);
       });
 
+      test('propaga el error si Firestore rechaza la publicación', () async {
+        final mockDocRef = MockDocumentReference();
+        final exception = FirebaseException(plugin: 'firestore');
+        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
+        when(() => mockDocRef.update(any())).thenThrow(exception);
+
+        const track = Track(
+          title: 'Bohemian Rhapsody',
+          artist: 'Queen',
+          imageUrl: 'https://img.url',
+        );
+
+        expect(
+          () => userService.setDailySong('uid123', track),
+          throwsA(same(exception)),
+        );
+      });
+
       test('invalida la cachÃ© del usuario tras guardar la canciÃ³n', () async {
         final mockDocRef = MockDocumentReference();
         final oldSnapshot = MockDocumentSnapshot();
@@ -621,6 +669,57 @@ void main() {
         expect(first.map((user) => user.uid), ['u2', 'u1']);
         expect(second.map((user) => user.uid), ['u1', 'u2']);
         verify(() => initialQuery.get()).called(1);
+      });
+    });
+
+    group('watchUsersByIds', () {
+      test('emite cambios remotos sin reutilizar la caché temporal', () async {
+        final query = MockQuery();
+        final snapshots =
+            StreamController<QuerySnapshot<Map<String, dynamic>>>();
+        final firstSnapshot = MockQuerySnapshot();
+        final secondSnapshot = MockQuerySnapshot();
+        final firstDoc = MockQueryDocumentSnapshot();
+        final secondDoc = MockQueryDocumentSnapshot();
+        const friendIds = ['friend'];
+
+        when(
+          () => mockUsersRef.where(FieldPath.documentId, whereIn: friendIds),
+        ).thenReturn(query);
+        when(() => query.snapshots()).thenAnswer((_) => snapshots.stream);
+        when(() => firstSnapshot.docs).thenReturn([firstDoc]);
+        when(() => secondSnapshot.docs).thenReturn([secondDoc]);
+        when(() => firstDoc.id).thenReturn('friend');
+        when(() => secondDoc.id).thenReturn('friend');
+        when(
+          () => firstDoc.data(),
+        ).thenReturn({'displayName': 'Friend', 'username': 'friend'});
+        when(() => secondDoc.data()).thenReturn({
+          'displayName': 'Friend',
+          'username': 'friend',
+          'dailySong': {
+            'title': 'New song',
+            'artist': 'Artist',
+            'imageUrl': '',
+            'spotifyUrl': '',
+          },
+          'dailySongUpdatedAt': Timestamp.now(),
+        });
+
+        final valuesFuture = userService
+            .watchUsersByIds(friendIds)
+            .take(2)
+            .toList();
+        await Future<void>.delayed(Duration.zero);
+        snapshots
+          ..add(firstSnapshot)
+          ..add(secondSnapshot);
+
+        final values = await valuesFuture;
+        await snapshots.close();
+
+        expect(values.first.single.dailySong, isNull);
+        expect(values.last.single.dailySong?.title, 'New song');
       });
     });
   });

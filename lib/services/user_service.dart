@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -83,8 +84,9 @@ class UserService {
     String uid, {
     bool reportErrors = true,
     bool bypassCache = false,
+    bool serverOnly = false,
   }) {
-    if (!bypassCache) {
+    if (!bypassCache && !serverOnly) {
       final cached = _getFromCache(uid);
       if (cached != null) {
         return Future.value(cached.user);
@@ -95,18 +97,30 @@ class UserService {
     }
 
     late final Future<AppUser?> request;
-    request = _fetchUser(uid, reportErrors: reportErrors).whenComplete(() {
-      if (identical(_pendingUserRequests[uid], request)) {
-        _pendingUserRequests.remove(uid);
-      }
-    });
-    if (!bypassCache) _pendingUserRequests[uid] = request;
+    request =
+        _fetchUser(
+          uid,
+          reportErrors: reportErrors,
+          serverOnly: serverOnly,
+        ).whenComplete(() {
+          if (identical(_pendingUserRequests[uid], request)) {
+            _pendingUserRequests.remove(uid);
+          }
+        });
+    if (!bypassCache && !serverOnly) _pendingUserRequests[uid] = request;
     return request;
   }
 
-  Future<AppUser?> _fetchUser(String uid, {required bool reportErrors}) async {
+  Future<AppUser?> _fetchUser(
+    String uid, {
+    required bool reportErrors,
+    required bool serverOnly,
+  }) async {
     try {
-      final doc = await _usersRef.doc(uid).get();
+      final docRef = _usersRef.doc(uid);
+      final doc = serverOnly
+          ? await docRef.get(const GetOptions(source: Source.server))
+          : await docRef.get();
       if (!doc.exists) return null;
       final user = AppUser.fromFirestore(doc);
       if (user != null) {
@@ -244,6 +258,7 @@ class UserService {
       _userCache.remove(uid);
     } catch (e, stack) {
       await reportError(e, stack);
+      rethrow;
     }
   }
 
@@ -319,12 +334,29 @@ class UserService {
     return request;
   }
 
-  Future<List<AppUser>> _fetchUsersByIds(List<String> uids) async {
+  /// Obtiene perfiles directamente del servidor, ignorando la caché en memoria.
+  ///
+  /// Se usa para que un refresco manual solo termine cuando Firestore haya
+  /// confirmado los datos actuales. Si no hay conexión, propaga el error.
+  Future<List<AppUser>> getUsersByIdsFromServer(List<String> uids) {
+    final uniqueUids = uids
+        .where((uid) => uid.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueUids.isEmpty) return Future.value(const []);
+    return _fetchUsersByIds(uniqueUids, bypassCache: true, serverOnly: true);
+  }
+
+  Future<List<AppUser>> _fetchUsersByIds(
+    List<String> uids, {
+    bool bypassCache = false,
+    bool serverOnly = false,
+  }) async {
     try {
       final usersById = <String, AppUser>{};
       final missingUids = <String>[];
       for (final uid in uids) {
-        final cached = _getFromCache(uid);
+        final cached = bypassCache ? null : _getFromCache(uid);
         if (cached != null) {
           usersById[uid] = cached.user;
         } else {
@@ -338,8 +370,11 @@ class UserService {
           i,
           (i + 10).clamp(0, missingUids.length),
         );
+        final query = _usersRef.where(FieldPath.documentId, whereIn: chunk);
         futures.add(
-          _usersRef.where(FieldPath.documentId, whereIn: chunk).get(),
+          serverOnly
+              ? query.get(const GetOptions(source: Source.server))
+              : query.get(),
         );
       }
       final snapshots = await Future.wait(futures);
@@ -357,5 +392,74 @@ class UserService {
       await reportError(e, stack);
       rethrow;
     }
+  }
+
+  /// Stream reactivo de perfiles, agrupado para respetar el límite de `whereIn`.
+  ///
+  /// No usa la caché de diez minutos: los cambios remotos llegan desde los
+  /// listeners de Firestore y se combinan conservando el orden de [uids].
+  Stream<List<AppUser>> watchUsersByIds(List<String> uids) {
+    final uniqueUids = uids
+        .where((uid) => uid.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueUids.isEmpty) return Stream.value(const <AppUser>[]);
+
+    final chunks = <List<String>>[];
+    for (var i = 0; i < uniqueUids.length; i += 10) {
+      chunks.add(uniqueUids.sublist(i, (i + 10).clamp(0, uniqueUids.length)));
+    }
+
+    late final StreamController<List<AppUser>> controller;
+    final subscriptions =
+        <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+    final latestUsersByChunk = List<Map<String, AppUser>?>.filled(
+      chunks.length,
+      null,
+    );
+
+    void emitIfReady() {
+      if (latestUsersByChunk.any((users) => users == null)) return;
+      final usersById = <String, AppUser>{
+        for (final users in latestUsersByChunk) ...users!,
+      };
+      controller.add([for (final uid in uniqueUids) ?usersById[uid]]);
+    }
+
+    controller = StreamController<List<AppUser>>(
+      onListen: () {
+        for (var index = 0; index < chunks.length; index++) {
+          final query = _usersRef.where(
+            FieldPath.documentId,
+            whereIn: chunks[index],
+          );
+          subscriptions.add(
+            query.snapshots().listen(
+              (snapshot) {
+                final usersById = <String, AppUser>{};
+                for (final doc in snapshot.docs) {
+                  final user = AppUser.fromFirestore(doc);
+                  if (user == null) continue;
+                  usersById[user.uid] = user;
+                  _addToCache(user.uid, user);
+                }
+                latestUsersByChunk[index] = usersById;
+                emitIfReady();
+              },
+              onError: (Object error, StackTrace stack) {
+                unawaited(reportError(error, stack));
+                controller.addError(error, stack);
+              },
+            ),
+          );
+        }
+      },
+      onCancel: () async {
+        await Future.wait([
+          for (final subscription in subscriptions) subscription.cancel(),
+        ]);
+      },
+    );
+    return controller.stream;
   }
 }

@@ -177,6 +177,10 @@
   "dailySongFriendsTitle": "Canciones de tus amigos",
   "dailySongFriendsNone": "Tus amigos aún no han elegido una canción del día",
   "dailySongNoFriends": "Añade amigos para ver sus canciones del día",
+  "dailySongSaveError": "No se pudo publicar la canción. Comprueba tu conexión e inténtalo de nuevo.",
+  "dailySongRefreshError": "No se pudo actualizar desde el servidor. Se mantienen los datos anteriores.",
+  "dailySongLoadError": "No se pudieron cargar las canciones del día.",
+  "dailySongRetry": "Reintentar",
 
   "onboardingDiscoverTitle": "Descubre personas",
   "onboardingDiscoverDesc": "MusiLink te conecta con personas que comparten tus gustos musicales. Descubre lo compatibles que sois según vuestros artistas favoritos.",

@@ -972,6 +972,30 @@ abstract class AppLocalizations {
   /// **'Add friends to see their song of the day'**
   String get dailySongNoFriends;
 
+  /// No description provided for @dailySongSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'The song couldn\'t be published. Check your connection and try again.'**
+  String get dailySongSaveError;
+
+  /// No description provided for @dailySongRefreshError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh from the server. Previous data is still shown.'**
+  String get dailySongRefreshError;
+
+  /// No description provided for @dailySongLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the songs of the day.'**
+  String get dailySongLoadError;
+
+  /// No description provided for @dailySongRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get dailySongRetry;
+
   /// No description provided for @onboardingDiscoverTitle.
   ///
   /// In en, this message translates to:

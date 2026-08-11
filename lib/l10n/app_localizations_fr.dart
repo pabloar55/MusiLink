@@ -502,6 +502,21 @@ class AppLocalizationsFr extends AppLocalizations {
       'Ajoutez des amis pour voir leurs chansons du jour';
 
   @override
+  String get dailySongSaveError =>
+      'Impossible de publier la chanson. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get dailySongRefreshError =>
+      'Impossible d\'actualiser depuis le serveur. Les données précédentes restent affichées.';
+
+  @override
+  String get dailySongLoadError =>
+      'Impossible de charger les chansons du jour.';
+
+  @override
+  String get dailySongRetry => 'Réessayer';
+
+  @override
   String get onboardingDiscoverTitle => 'Découvrez des personnes';
 
   @override

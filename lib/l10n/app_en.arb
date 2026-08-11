@@ -212,6 +212,10 @@
   "dailySongFriendsTitle": "Your friends' songs",
   "dailySongFriendsNone": "Your friends haven't chosen a song of the day yet",
   "dailySongNoFriends": "Add friends to see their song of the day",
+  "dailySongSaveError": "The song couldn't be published. Check your connection and try again.",
+  "dailySongRefreshError": "Couldn't refresh from the server. Previous data is still shown.",
+  "dailySongLoadError": "Couldn't load the songs of the day.",
+  "dailySongRetry": "Try again",
 
   "onboardingDiscoverTitle": "Discover people",
   "onboardingDiscoverDesc": "MusiLink connects you with people who share your music taste. See how compatible you are based on your favourite artists.",

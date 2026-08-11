@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
@@ -24,58 +26,16 @@ class DailySongTab extends ConsumerStatefulWidget {
 
 class _DailySongTabState extends ConsumerState<DailySongTab>
     with AutomaticKeepAliveClientMixin<DailySongTab> {
-  Track? _dailySong;
-  DateTime? _dailySongExpiresAt;
   Timer? _expiryTimer;
-  bool _loading = true;
-  List<AppUser> _friendsWithSongs = [];
-  List<String> _friendIds = [];
+  DateTime? _scheduledExpiry;
 
   /// UID of the authenticated user from the Riverpod provider.
-  /// Returns empty string on session loss — _loadData guards against this.
+  /// Returns empty string on session loss; actions stop until routing completes.
   String get _currentUid =>
       ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final uid = _currentUid;
-    if (uid.isEmpty) {
-      // Session lost — GoRouter will redirect; bail out without crashing.
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final user = await ref.read(userServiceProvider).getUser(uid);
-    if (!mounted) return;
-
-    final friendIds = await ref.read(friendServiceProvider).getFriends();
-    List<AppUser> friendsWithSongs = [];
-
-    if (friendIds.isNotEmpty) {
-      final friends = await ref
-          .read(userServiceProvider)
-          .getUsersByIds(friendIds);
-      friendsWithSongs = friends.where((f) => f.dailySong != null).toList();
-    }
-
-    setState(() {
-      _dailySong = user?.dailySong;
-      _dailySongExpiresAt = user?.dailySong == null
-          ? null
-          : user?.dailySongUpdatedAt?.add(AppUser.dailySongLifetime);
-      _friendIds = friendIds;
-      _friendsWithSongs = friendsWithSongs;
-      _loading = false;
-    });
-    _scheduleExpiryRefresh();
-  }
 
   Future<void> _chooseDailySong() async {
     final uid = _currentUid;
@@ -88,42 +48,81 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
       builder: (_) => const DailySongSearchSheet(),
     );
     if (track == null || !mounted) return;
-    await ref.read(userServiceProvider).setDailySong(uid, track);
-    if (!mounted) return;
-    setState(() {
-      _dailySong = track;
-      _dailySongExpiresAt = DateTime.now().add(AppUser.dailySongLifetime);
-    });
-    _scheduleExpiryRefresh();
+    await _saveDailySong(uid, track);
   }
 
-  void _scheduleExpiryRefresh() {
-    _expiryTimer?.cancel();
+  Future<void> _saveDailySong(String uid, Track track) async {
+    final saved = await ref
+        .read(dailySongSaveProvider.notifier)
+        .save(uid, track);
+    if (!saved && mounted) _showSaveError();
+  }
+
+  Future<void> _retrySave() async {
+    final uid = _currentUid;
+    if (uid.isEmpty) return;
+    final saved = await ref.read(dailySongSaveProvider.notifier).retry(uid);
+    if (!saved && mounted) _showSaveError();
+  }
+
+  void _showSaveError() {
+    final l10n = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(l10n.dailySongSaveError)));
+  }
+
+  Future<void> _refreshData() async {
+    final uid = _currentUid;
+    if (uid.isEmpty) return;
+    try {
+      final friendIds = await ref
+          .read(friendServiceProvider)
+          .getFriends(serverOnly: true);
+      await Future.wait([
+        ref
+            .read(userServiceProvider)
+            .getUser(uid, bypassCache: true, serverOnly: true),
+        ref.read(userServiceProvider).getUsersByIdsFromServer(friendIds),
+      ]);
+    } catch (_) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n.dailySongRefreshError)));
+    }
+  }
+
+  Future<void> _retryLoad() async {
+    ref.invalidate(currentUserProvider);
+    ref.invalidate(friendsStreamProvider);
+    ref.invalidate(friendProfilesStreamProvider);
+    await _refreshData();
+  }
+
+  void _scheduleExpiryRefresh(AppUser? currentUser, List<AppUser> friends) {
     final now = DateTime.now();
     final expirations = <DateTime>[
-      if (_dailySong != null && _dailySongExpiresAt != null)
-        _dailySongExpiresAt!,
-      for (final friend in _friendsWithSongs)
+      if (currentUser?.dailySong != null &&
+          currentUser?.dailySongUpdatedAt != null)
+        currentUser!.dailySongUpdatedAt!.add(AppUser.dailySongLifetime),
+      for (final friend in friends)
         if (friend.dailySong != null && friend.dailySongUpdatedAt != null)
           friend.dailySongUpdatedAt!.add(AppUser.dailySongLifetime),
     ].where((expiry) => expiry.isAfter(now)).toList();
-    if (expirations.isEmpty) return;
     expirations.sort();
+    final nextExpiry = expirations.firstOrNull;
+    if (_scheduledExpiry == nextExpiry) return;
 
-    _expiryTimer = Timer(expirations.first.difference(now), () {
+    _expiryTimer?.cancel();
+    _scheduledExpiry = nextExpiry;
+    if (nextExpiry == null) return;
+
+    _expiryTimer = Timer(nextExpiry.difference(now), () {
       if (!mounted) return;
-      final expiredAt = DateTime.now();
-      setState(() {
-        if (_dailySongExpiresAt != null &&
-            !_dailySongExpiresAt!.isAfter(expiredAt)) {
-          _dailySong = null;
-          _dailySongExpiresAt = null;
-        }
-        _friendsWithSongs = _friendsWithSongs
-            .where((friend) => friend.isDailySongActiveAt(expiredAt))
-            .toList();
-      });
-      _scheduleExpiryRefresh();
+      _scheduledExpiry = null;
+      setState(() {});
     });
   }
 
@@ -145,17 +144,70 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
     super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
+    final currentUserAsync = ref.watch(currentUserProvider);
+    final friendIdsAsync = ref.watch(friendsStreamProvider);
+    final friendProfilesAsync = ref.watch(friendProfilesStreamProvider);
+    final saveState = ref.watch(dailySongSaveProvider);
 
-    if (_loading) {
+    final currentUser = currentUserAsync.asData?.value;
+    final friendIds = friendIdsAsync.asData?.value;
+    final friends = friendProfilesAsync.asData?.value;
+    final loadError =
+        currentUserAsync.asError?.error ??
+        friendIdsAsync.asError?.error ??
+        friendProfilesAsync.asError?.error;
+
+    if (loadError == null &&
+        (currentUserAsync.asData == null ||
+            friendIds == null ||
+            friends == null)) {
       return const SkeletonShimmer(child: SkeletonDailySongTab());
     }
 
+    if (loadError != null &&
+        currentUserAsync.asData == null &&
+        friendIds == null &&
+        friends == null) {
+      return RefreshIndicator(
+        onRefresh: _retryLoad,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 120),
+            Icon(LucideIcons.triangleAlert, size: 48, color: colorScheme.error),
+            const SizedBox(height: 12),
+            Text(
+              l10n.dailySongLoadError,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: FilledButton(
+                onPressed: _retryLoad,
+                child: Text(l10n.dailySongRetry),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final loadedFriends = friends ?? const <AppUser>[];
+    final friendsWithSongs = loadedFriends
+        .where((friend) => friend.dailySong != null)
+        .toList();
+    final dailySong = currentUser?.dailySong;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleExpiryRefresh(currentUser, loadedFriends);
+    });
+
     return RefreshIndicator(
-      onRefresh: () async {
-        setState(() => _loading = true);
-        await _loadData();
-      },
+      onRefresh: _refreshData,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         children: [
           // ─── Mi canción del día ───
@@ -168,12 +220,12 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
             ),
           ),
           const SizedBox(height: 12),
-          if (_dailySong != null) ...[
-            DailySongCard(song: _dailySong!),
+          if (dailySong != null) ...[
+            DailySongCard(song: dailySong),
             const SizedBox(height: 8),
             Center(
               child: TextButton.icon(
-                onPressed: _chooseDailySong,
+                onPressed: saveState.isSaving ? null : _chooseDailySong,
                 icon: const Icon(LucideIcons.pencil, size: 18),
                 label: Text(l10n.dailySongChoose),
               ),
@@ -209,9 +261,59 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: _chooseDailySong,
+                      onPressed: saveState.isSaving ? null : _chooseDailySong,
                       icon: const Icon(LucideIcons.music),
                       label: Text(l10n.dailySongChoose),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (saveState.hasError) ...[
+            const SizedBox(height: 12),
+            Card(
+              color: colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.triangleAlert, color: colorScheme.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        l10n.dailySongSaveError,
+                        style: TextStyle(color: colorScheme.onErrorContainer),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _retrySave,
+                      child: Text(l10n.dailySongRetry),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (loadError != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              color: colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.wifiOff, color: colorScheme.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        l10n.dailySongLoadError,
+                        style: TextStyle(color: colorScheme.onErrorContainer),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _retryLoad,
+                      child: Text(l10n.dailySongRetry),
                     ),
                   ],
                 ),
@@ -230,7 +332,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
             ),
           ),
           const SizedBox(height: 12),
-          if (_friendIds.isEmpty)
+          if ((friendIds ?? const <String>[]).isEmpty)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -246,7 +348,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                 ),
               ),
             )
-          else if (_friendsWithSongs.isEmpty)
+          else if (friendsWithSongs.isEmpty)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -263,8 +365,8 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
               ),
             )
           else
-            ...List.generate(_friendsWithSongs.length, (index) {
-              final friend = _friendsWithSongs[index];
+            ...List.generate(friendsWithSongs.length, (index) {
+              final friend = friendsWithSongs[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: FriendDailySongCard(

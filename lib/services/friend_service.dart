@@ -226,9 +226,12 @@ class FriendService with AuthenticatedService {
   }
 
   /// Obtiene la lista privada de amigos del usuario actual.
-  Future<List<String>> getFriends() async {
+  Future<List<String>> getFriends({bool serverOnly = false}) async {
     try {
-      final doc = await _privateUsersRef.doc(currentUid).get();
+      final docRef = _privateUsersRef.doc(currentUid);
+      final doc = serverOnly
+          ? await docRef.get(const GetOptions(source: Source.server))
+          : await docRef.get();
       if (!doc.exists) return const <String>[];
       return List<String>.from(doc.data()?['friends'] as List? ?? []);
     } catch (e, stack) {
