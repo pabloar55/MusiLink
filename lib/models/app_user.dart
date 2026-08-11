@@ -6,6 +6,7 @@ import 'package:musi_link/models/track.dart';
 class AppUser {
   static const deletedDisplayName = 'Deleted user';
   static const deletedUsername = 'deleted_user';
+  static const dailySongLifetime = Duration(hours: 24);
 
   final String uid;
   final String displayName;
@@ -17,7 +18,7 @@ class AppUser {
   final List<String> topArtistKeys;
   final List<String> topGenreNames;
   final DateTime? musicDataUpdatedAt;
-  final Track? dailySong;
+  final Track? _dailySong;
   final DateTime? dailySongUpdatedAt;
 
   const AppUser({
@@ -31,9 +32,23 @@ class AppUser {
     this.topArtistKeys = const [],
     this.topGenreNames = const [],
     this.musicDataUpdatedAt,
-    this.dailySong,
+    Track? dailySong,
     this.dailySongUpdatedAt,
-  });
+  }) : _dailySong = dailySong;
+
+  /// Returns the song only while its 24-hour publication window is active.
+  ///
+  /// Profiles written by older clients without [dailySongUpdatedAt] remain
+  /// visible until the backend can normalize them.
+  Track? get dailySong =>
+      isDailySongActiveAt(DateTime.now()) ? _dailySong : null;
+
+  bool isDailySongActiveAt(DateTime now) {
+    if (_dailySong == null) return false;
+    final updatedAt = dailySongUpdatedAt;
+    if (updatedAt == null) return true;
+    return now.isBefore(updatedAt.add(dailySongLifetime));
+  }
 
   static AppUser? fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
@@ -124,7 +139,7 @@ class AppUser {
       topGenreNames: topGenreNames ?? this.topGenreNames,
       musicDataUpdatedAt: musicDataUpdatedAt ?? this.musicDataUpdatedAt,
       dailySong: identical(dailySong, _unset)
-          ? this.dailySong
+          ? _dailySong
           : dailySong as Track?,
       dailySongUpdatedAt: dailySongUpdatedAt ?? this.dailySongUpdatedAt,
     );

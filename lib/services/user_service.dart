@@ -227,7 +227,9 @@ class UserService {
     try {
       await _usersRef.doc(uid).update({
         'dailySong': track.toMap(),
-        'dailySongUpdatedAt': Timestamp.fromDate(DateTime.now()),
+        // Server time keeps the 24-hour window independent from the device
+        // clock and is also the timestamp used by the expiry job.
+        'dailySongUpdatedAt': FieldValue.serverTimestamp(),
       });
       _userCache.remove(uid);
     } catch (e, stack) {

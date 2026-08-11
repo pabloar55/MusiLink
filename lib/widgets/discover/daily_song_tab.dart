@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +25,8 @@ class DailySongTab extends ConsumerStatefulWidget {
 class _DailySongTabState extends ConsumerState<DailySongTab>
     with AutomaticKeepAliveClientMixin<DailySongTab> {
   Track? _dailySong;
+  DateTime? _dailySongExpiresAt;
+  Timer? _expiryTimer;
   bool _loading = true;
   List<AppUser> _friendsWithSongs = [];
   List<String> _friendIds = [];
@@ -63,10 +67,14 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
 
     setState(() {
       _dailySong = user?.dailySong;
+      _dailySongExpiresAt = user?.dailySong == null
+          ? null
+          : user?.dailySongUpdatedAt?.add(AppUser.dailySongLifetime);
       _friendIds = friendIds;
       _friendsWithSongs = friendsWithSongs;
       _loading = false;
     });
+    _scheduleExpiryRefresh();
   }
 
   Future<void> _chooseDailySong() async {
@@ -82,7 +90,47 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
     if (track == null || !mounted) return;
     await ref.read(userServiceProvider).setDailySong(uid, track);
     if (!mounted) return;
-    setState(() => _dailySong = track);
+    setState(() {
+      _dailySong = track;
+      _dailySongExpiresAt = DateTime.now().add(AppUser.dailySongLifetime);
+    });
+    _scheduleExpiryRefresh();
+  }
+
+  void _scheduleExpiryRefresh() {
+    _expiryTimer?.cancel();
+    final now = DateTime.now();
+    final expirations = <DateTime>[
+      if (_dailySong != null && _dailySongExpiresAt != null)
+        _dailySongExpiresAt!,
+      for (final friend in _friendsWithSongs)
+        if (friend.dailySong != null && friend.dailySongUpdatedAt != null)
+          friend.dailySongUpdatedAt!.add(AppUser.dailySongLifetime),
+    ].where((expiry) => expiry.isAfter(now)).toList();
+    if (expirations.isEmpty) return;
+    expirations.sort();
+
+    _expiryTimer = Timer(expirations.first.difference(now), () {
+      if (!mounted) return;
+      final expiredAt = DateTime.now();
+      setState(() {
+        if (_dailySongExpiresAt != null &&
+            !_dailySongExpiresAt!.isAfter(expiredAt)) {
+          _dailySong = null;
+          _dailySongExpiresAt = null;
+        }
+        _friendsWithSongs = _friendsWithSongs
+            .where((friend) => friend.isDailySongActiveAt(expiredAt))
+            .toList();
+      });
+      _scheduleExpiryRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _openSpotifyUrl(String url) async {

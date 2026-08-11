@@ -40,6 +40,9 @@ class UserProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
+  Timer? _dailySongExpiryTimer;
+  DateTime? _scheduledDailySongExpiry;
+
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string on session loss — _isOwnProfile then evaluates to
   /// false (safe: shows the other-user view, actions are gated by GoRouter).
@@ -179,6 +182,31 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
   }
 
+  void _scheduleDailySongExpiryRefresh(AppUser user) {
+    final updatedAt = user.dailySongUpdatedAt;
+    final expiry = user.dailySong == null || updatedAt == null
+        ? null
+        : updatedAt.add(AppUser.dailySongLifetime);
+    if (expiry == _scheduledDailySongExpiry) return;
+
+    _dailySongExpiryTimer?.cancel();
+    _scheduledDailySongExpiry = expiry;
+    if (expiry == null) return;
+    final delay = expiry.difference(DateTime.now());
+    if (delay <= Duration.zero) return;
+    _dailySongExpiryTimer = Timer(delay, () {
+      if (!mounted) return;
+      _scheduledDailySongExpiry = null;
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _dailySongExpiryTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -188,6 +216,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final hasMusicalData =
         user.topArtists.isNotEmpty || user.topGenres.isNotEmpty;
     final isDeletedProfile = user.isDeleted;
+    _scheduleDailySongExpiryRefresh(user);
 
     return Scaffold(
       appBar: AppBar(

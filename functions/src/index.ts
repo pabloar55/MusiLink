@@ -6,6 +6,7 @@ import {
 } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 export { searchSpotifyArtists, searchSpotifyTracks } from './spotify';
 export { getSimilarArtists } from './lastfm';
@@ -22,6 +23,8 @@ const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationsCollection = 'recommendations';
 const chatsCollection = 'chats';
 const messagesCollection = 'messages';
+const dailySongLifetimeMs = 24 * 60 * 60 * 1000;
+const dailySongExpiryBatchSize = 200;
 const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
 const maxRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
@@ -86,6 +89,11 @@ const notificationText = {
     es: (name: string) => `${name} aceptó tu solicitud de amistad`,
     fr: (name: string) => `${name} a accepté votre demande d'amitié`,
   },
+  dailySongExpired: {
+    en: () => 'Your song of the day has expired. Share a new one!',
+    es: () => '¡Tu canción del día ha caducado! Publica una nueva.',
+    fr: () => 'Votre chanson du jour a expiré. Partagez-en une nouvelle !',
+  },
 } satisfies Record<string, Record<SupportedLocale, (name: string) => string>>;
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -112,7 +120,41 @@ function notificationPath(data: Record<string, string>): string {
   ) {
     return '/?tab=friends';
   }
+  if (data.type === 'daily_song_expired') {
+    return '/?tab=daily-song';
+  }
   return '/';
+}
+
+async function expireDailySong(
+  userRef: admin.firestore.DocumentReference,
+  expiresBefore: Timestamp,
+): Promise<boolean> {
+  return db.runTransaction(async (transaction) => {
+    const current = await transaction.get(userRef);
+    const data = current.data();
+    const updatedAt = data?.dailySongUpdatedAt;
+    if (
+      !(updatedAt instanceof Timestamp) ||
+      updatedAt.toMillis() > expiresBefore.toMillis()
+    ) {
+      return false;
+    }
+
+    // Avoid an orphaned legacy timestamp blocking the oldest-results query.
+    if (!data?.dailySong) {
+      transaction.update(userRef, {
+        dailySongUpdatedAt: FieldValue.delete(),
+      });
+      return false;
+    }
+
+    transaction.update(userRef, {
+      dailySong: FieldValue.delete(),
+      dailySongUpdatedAt: FieldValue.delete(),
+    });
+    return true;
+  });
 }
 
 // Notifications with the same tag replace each other in the drawer, keeping
@@ -1344,6 +1386,68 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       logger.error('onFriendRequestAccepted: unhandled error', { requestId: event.params.requestId, error });
       throw error;
     }
+  },
+);
+
+// ── Caducidad de canciones del día ──────────────────────────────────────────
+
+// Firestore keeps the publication time on the public profile. This job removes
+// every song whose 24-hour window has ended and then reminds its owner to post
+// another one. The transaction protects a replacement song published while
+// this query is running.
+export const expireDailySongs = onSchedule(
+  {
+    schedule: 'every 1 minutes',
+    // Cloud Scheduler is not available in europe-southwest1 (Madrid).
+    // Keep this scheduled function in the nearest broadly supported EU region.
+    region: 'europe-west1',
+    timeZone: 'UTC',
+    timeoutSeconds: 300,
+    retryCount: 3,
+  },
+  async () => {
+    const expiresBefore = Timestamp.fromMillis(
+      Date.now() - dailySongLifetimeMs,
+    );
+    const expiredProfiles = await db
+      .collection('users')
+      .where('dailySongUpdatedAt', '<=', expiresBefore)
+      .orderBy('dailySongUpdatedAt')
+      .limit(dailySongExpiryBatchSize)
+      .get();
+
+    let expiredCount = 0;
+    const concurrency = 20;
+    for (let index = 0; index < expiredProfiles.docs.length; index += concurrency) {
+      const chunk = expiredProfiles.docs.slice(index, index + concurrency);
+      await Promise.all(chunk.map(async (profile) => {
+        const expired = await expireDailySong(profile.ref, expiresBefore);
+        if (!expired) return;
+
+        expiredCount += 1;
+        const privateProfile = await db
+          .doc(`${userPrivateCollection}/${profile.id}`)
+          .get();
+        const privateData = privateProfile.data();
+        const locale = preferredLocale(privateData);
+        await sendNotification(
+          profile.id,
+          privateData,
+          {
+            title: 'MusiLink',
+            body: notificationText.dailySongExpired[locale](),
+          },
+          { type: 'daily_song_expired' },
+          'daily_song_expired',
+        );
+      }));
+    }
+
+    logger.info('expireDailySongs: expiry cycle completed', {
+      candidates: expiredProfiles.size,
+      expired: expiredCount,
+      expiresBefore: expiresBefore.toDate().toISOString(),
+    });
   },
 );
 

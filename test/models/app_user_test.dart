@@ -17,6 +17,7 @@ void main() {
       List<String> topArtistKeys = const [],
       List<String> topGenreNames = const [],
       Track? dailySong,
+      DateTime? dailySongUpdatedAt,
     }) {
       return AppUser(
         uid: uid,
@@ -29,6 +30,7 @@ void main() {
         topArtistKeys: topArtistKeys,
         topGenreNames: topGenreNames,
         dailySong: dailySong,
+        dailySongUpdatedAt: dailySongUpdatedAt,
       );
     }
 
@@ -115,6 +117,42 @@ void main() {
       expect(updated.dailySong, isNotNull);
       expect(updated.dailySong!.title, 'New Song');
       expect(original.dailySong, isNull);
+    });
+
+    test('mantiene la cancion activa durante las primeras 24 horas', () {
+      final publishedAt = DateTime.utc(2026, 8, 10, 12);
+      final user = createTestUser(
+        dailySong: const Track(
+          title: 'New Song',
+          artist: 'New Artist',
+          imageUrl: 'url',
+        ),
+        dailySongUpdatedAt: publishedAt,
+      );
+
+      expect(
+        user.isDailySongActiveAt(
+          publishedAt.add(const Duration(hours: 23, minutes: 59)),
+        ),
+        true,
+      );
+    });
+
+    test('caduca la cancion al cumplirse exactamente 24 horas', () {
+      final publishedAt = DateTime.utc(2026, 8, 10, 12);
+      final user = createTestUser(
+        dailySong: const Track(
+          title: 'New Song',
+          artist: 'New Artist',
+          imageUrl: 'url',
+        ),
+        dailySongUpdatedAt: publishedAt,
+      );
+
+      expect(
+        user.isDailySongActiveAt(publishedAt.add(AppUser.dailySongLifetime)),
+        false,
+      );
     });
 
     test('copyWith mantiene todos los campos si no se pasan parametros', () {

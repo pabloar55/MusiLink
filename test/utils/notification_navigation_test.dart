@@ -12,6 +12,13 @@ void main() {
       );
     });
 
+    test('routes an expired daily song to the daily-song tab', () {
+      expect(
+        notificationLocationFromData(const {'type': 'daily_song_expired'}),
+        '/?tab=daily-song',
+      );
+    });
+
     test('builds a chat location from a message notification', () {
       expect(
         notificationLocationFromData(const {

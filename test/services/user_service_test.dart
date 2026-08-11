@@ -399,7 +399,7 @@ void main() {
             'imageUrl': 'https://img.url',
             'spotifyUrl': 'https://spotify.url',
           },
-          'dailySongUpdatedAt': Timestamp.fromDate(DateTime(2026)),
+          'dailySongUpdatedAt': Timestamp.now(),
         });
         when(() => mockDocRef.get()).thenAnswer((_) async {
           getCalls++;

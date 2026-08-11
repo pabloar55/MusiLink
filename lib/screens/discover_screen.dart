@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/widgets/discover/people_tab.dart';
@@ -13,8 +14,11 @@ class DiscoverScreen extends ConsumerStatefulWidget {
 }
 
 class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
-    with AutomaticKeepAliveClientMixin<DiscoverScreen>, TickerProviderStateMixin {
+    with
+        AutomaticKeepAliveClientMixin<DiscoverScreen>,
+        TickerProviderStateMixin {
   late TabController _tabController;
+  String? _lastRequestedTab;
 
   @override
   bool get wantKeepAlive => true;
@@ -25,6 +29,19 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(discoverProvider.notifier).loadDiscovery();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final requestedTab = GoRouterState.of(context).uri.queryParameters['tab'];
+    if (requestedTab == _lastRequestedTab) return;
+    _lastRequestedTab = requestedTab;
+    if (requestedTab != 'daily-song' || _tabController.index == 1) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tabController.animateTo(1);
     });
   }
 
