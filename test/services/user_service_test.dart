@@ -12,88 +12,103 @@ import '../helpers/mocks.dart';
 
 void main() {
   late MockFirebaseFirestore mockFirestore;
+  late MockFirebaseFunctions mockFunctions;
+  late MockHttpsCallable mockCallable;
   late MockCollectionReference mockUsersRef;
+  late MockCollectionReference mockUsernamesRef;
   late MockCollectionReference mockPrivateUsersRef;
   late MockWriteBatch mockBatch;
   late UserService userService;
 
   setUp(() {
     mockFirestore = MockFirebaseFirestore();
+    mockFunctions = MockFirebaseFunctions();
+    mockCallable = MockHttpsCallable();
     mockUsersRef = MockCollectionReference();
+    mockUsernamesRef = MockCollectionReference();
     mockPrivateUsersRef = MockCollectionReference();
     mockBatch = MockWriteBatch();
     when(() => mockFirestore.collection('users')).thenReturn(mockUsersRef);
+    when(
+      () => mockFirestore.collection('usernames'),
+    ).thenReturn(mockUsernamesRef);
     when(
       () => mockFirestore.collection('user_private'),
     ).thenReturn(mockPrivateUsersRef);
     when(() => mockFirestore.batch()).thenReturn(mockBatch);
     when(() => mockBatch.commit()).thenAnswer((_) async {});
-    userService = UserService(firestore: mockFirestore);
+    userService = UserService(
+      firestore: mockFirestore,
+      functions: mockFunctions,
+    );
     registerFallbackValues();
   });
 
   group('UserService', () {
     group('createUserProfile', () {
-      test('crea perfil correctamente en Firestore', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockPrivateDocRef = MockDocumentReference();
-        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
+      test('delega el alta atómica en la callable', () async {
         when(
-          () => mockPrivateUsersRef.doc('uid123'),
-        ).thenReturn(mockPrivateDocRef);
+          () => mockFunctions.httpsCallable('createUserProfile'),
+        ).thenReturn(mockCallable);
+        when(
+          () => mockCallable.call<void>(any()),
+        ).thenAnswer((_) async => MockHttpsCallableResult<void>());
 
         await userService.createUserProfile(
-          uid: 'uid123',
-          email: 'test@test.com',
-          displayName: 'Test User',
-          username: 'testuser',
+          displayName: ' Test User ',
+          username: ' TestUser ',
         );
 
-        final publicProfile =
-            verify(
-                  () => mockBatch.set<Map<String, dynamic>>(
-                    mockDocRef,
-                    captureAny(),
-                    null,
-                  ),
-                ).captured.single
+        final payload =
+            verify(() => mockCallable.call<void>(captureAny())).captured.single
                 as Map<String, dynamic>;
-        final privateProfile =
-            verify(
-                  () => mockBatch.set<Map<String, dynamic>>(
-                    mockPrivateDocRef,
-                    captureAny(),
-                    null,
-                  ),
-                ).captured.single
-                as Map<String, dynamic>;
-        expect(publicProfile['displayName'], 'Test User');
-        expect(publicProfile['username'], 'testuser');
-        expect(publicProfile.containsKey('email'), isFalse);
-        expect(privateProfile['email'], 'test@test.com');
-        expect(privateProfile['friends'], isEmpty);
+        expect(payload, {'displayName': 'Test User', 'username': 'testuser'});
       });
 
-      test('propaga error si Firestore falla', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockPrivateDocRef = MockDocumentReference();
-        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
-        when(
-          () => mockPrivateUsersRef.doc('uid123'),
-        ).thenReturn(mockPrivateDocRef);
-        when(
-          () => mockBatch.commit(),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+      test(
+        'convierte already-exists en UsernameAlreadyTakenException',
+        () async {
+          final exception = MockFirebaseFunctionsException();
+          when(() => exception.code).thenReturn('already-exists');
+          when(
+            () => mockFunctions.httpsCallable('createUserProfile'),
+          ).thenReturn(mockCallable);
+          when(() => mockCallable.call<void>(any())).thenThrow(exception);
 
+          expect(
+            () => userService.createUserProfile(
+              displayName: 'Test',
+              username: 'testuser',
+            ),
+            throwsA(isA<UsernameAlreadyTakenException>()),
+          );
+        },
+      );
+    });
+
+    group('usernameExists', () {
+      test('consulta el documento del username normalizado', () async {
+        final reservationRef = MockDocumentReference();
+        final reservation = MockDocumentSnapshot();
+        when(() => mockUsernamesRef.doc('testuser')).thenReturn(reservationRef);
+        when(() => reservationRef.get()).thenAnswer((_) async => reservation);
+        when(() => reservation.exists).thenReturn(true);
+
+        expect(await userService.usernameExists(' TestUser '), isTrue);
+        verify(() => mockUsernamesRef.doc('testuser')).called(1);
+      });
+
+      test('considera deleted_user siempre reservado', () async {
         expect(
-          () => userService.createUserProfile(
-            uid: 'uid123',
-            email: 'test@test.com',
-            displayName: 'Test',
-            username: 'testuser',
-          ),
-          throwsA(isA<FirebaseException>()),
+          await userService.usernameExists(AppUser.deletedUsername),
+          isTrue,
         );
+        verifyNever(() => mockUsernamesRef.doc(any()));
+      });
+
+      test('no consulta Firestore para un username inválido', () async {
+        expect(await userService.usernameExists('ab'), isTrue);
+        verifyNever(() => mockUsernamesRef.doc(any()));
       });
     });
 
@@ -427,9 +442,30 @@ void main() {
       test('no borra rate_limits al anonimizar usuario', () async {
         final mockUserDocRef = MockDocumentReference();
         final mockPrivateDocRef = MockDocumentReference();
+        final mockReservationRef = MockDocumentReference();
+        final mockUserSnapshot = MockDocumentSnapshot();
+        final mockReservationSnapshot = MockDocumentSnapshot();
         final mockPushTokensRef = MockCollectionReference();
         final mockPushTokensSnapshot = MockQuerySnapshot();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockUserDocRef);
+        when(
+          () => mockUserDocRef.get(),
+        ).thenAnswer((_) async => mockUserSnapshot);
+        when(
+          () => mockUserSnapshot.data(),
+        ).thenReturn({'username': 'testuser'});
+        when(
+          () => mockUsernamesRef.doc('testuser'),
+        ).thenReturn(mockReservationRef);
+        when(
+          () => mockReservationRef.get(),
+        ).thenAnswer((_) async => mockReservationSnapshot);
+        when(
+          () => mockReservationSnapshot.data(),
+        ).thenReturn({'uid': 'uid123'});
+        when(
+          () => mockReservationSnapshot.reference,
+        ).thenReturn(mockReservationRef);
         when(
           () => mockPrivateUsersRef.doc('uid123'),
         ).thenReturn(mockPrivateDocRef);
@@ -441,6 +477,7 @@ void main() {
         ).thenAnswer((_) async => mockPushTokensSnapshot);
         when(() => mockPushTokensSnapshot.docs).thenReturn([]);
         when(() => mockBatch.update(mockUserDocRef, any())).thenReturn(null);
+        when(() => mockBatch.delete(mockReservationRef)).thenReturn(null);
         when(() => mockBatch.delete(mockPrivateDocRef)).thenReturn(null);
 
         await userService.anonymizeUser('uid123');
@@ -456,6 +493,7 @@ void main() {
         );
         expect(publicUpdate['displayName'], AppUser.deletedDisplayName);
         expect(publicUpdate['username'], AppUser.deletedUsername);
+        verify(() => mockBatch.delete(mockReservationRef)).called(1);
         verify(() => mockBatch.delete(mockPrivateDocRef)).called(1);
         verifyNever(() => mockFirestore.collection('rate_limits'));
       });

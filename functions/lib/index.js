@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.expireDailySongs = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onFriendRequestDeleted = exports.onChatMessageDeleted = exports.onChatDeleted = exports.onChatSoftDeleted = exports.expireDailySongs = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.createUserProfile = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.onNewMessage = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
@@ -8,6 +8,7 @@ const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_2 = require("firebase-admin/firestore");
 const messaging_1 = require("firebase-admin/messaging");
+const username_claim_1 = require("./username_claim");
 var spotify_1 = require("./spotify");
 Object.defineProperty(exports, "searchSpotifyArtists", { enumerable: true, get: function () { return spotify_1.searchSpotifyArtists; } });
 Object.defineProperty(exports, "searchSpotifyTracks", { enumerable: true, get: function () { return spotify_1.searchSpotifyTracks; } });
@@ -994,6 +995,25 @@ exports.onUserMusicProfileChanged = (0, firestore_1.onDocumentUpdated)({ documen
             error,
         });
         throw error;
+    }
+});
+// ── Alta atómica de perfil y reserva de username ─────────────────────────────
+exports.createUserProfile = (0, https_1.onCall)({ region: 'europe-southwest1' }, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new https_1.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const email = typeof request.auth?.token.email === 'string'
+        ? request.auth.token.email
+        : '';
+    try {
+        return await (0, username_claim_1.claimUsernameAndCreateProfile)(db, uid, email, request.data);
+    }
+    catch (error) {
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        v2_1.logger.error('createUserProfile: unhandled error', { uid, error });
+        throw new https_1.HttpsError('internal', 'Could not create the user profile.');
     }
 });
 // ── Función 3 — Aceptación privilegiada de amistad ───────────────────────────

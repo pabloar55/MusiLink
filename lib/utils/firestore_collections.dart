@@ -5,6 +5,7 @@
 /// hasta que una operación falla.
 abstract final class FirestoreCollections {
   static const String users = 'users';
+  static const String usernames = 'usernames';
   static const String userPrivate = 'user_private';
   static const String pushTokens = 'push_tokens';
   static const String recommendations = 'recommendations';

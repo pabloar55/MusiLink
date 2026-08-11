@@ -7,7 +7,9 @@
     "logs": "firebase functions:log",
     "migrate:artist-keys": "node scripts/backfill-artist-identity-keys.cjs",
     "test:artist-keys": "node --test scripts/backfill-artist-identity-keys.test.cjs",
-    "migrate:recommendation-snapshots": "node scripts/backfill-recommendation-snapshots.cjs"
+    "migrate:recommendation-snapshots": "node scripts/backfill-recommendation-snapshots.cjs",
+    "migrate:usernames": "node scripts/backfill-username-reservations.cjs",
+    "test:usernames-migration": "node --test scripts/backfill-username-reservations.test.cjs"
   },
   "engines": {
     "node": "24"

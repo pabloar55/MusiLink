@@ -2,7 +2,8 @@
   "name": "musilink-firestore-rules",
   "private": true,
   "scripts": {
-    "test:rules": "firebase emulators:exec --project musilink-rules-test --only firestore \"node --test tests/firestore.rules.test.cjs\""
+    "test:rules": "firebase emulators:exec --project musilink-rules-test --only firestore \"node --test tests/firestore.rules.test.cjs\"",
+    "test:functions:usernames": "npm --prefix functions run build && firebase emulators:exec --project musilink-functions-test --only firestore \"node --test functions/test/username_claim.test.cjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",

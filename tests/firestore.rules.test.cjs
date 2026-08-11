@@ -8,9 +8,11 @@ const {
 } = require('@firebase/rules-unit-testing');
 const {
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } = require('firebase/firestore');
 
 const projectId = 'musilink-rules-test';
@@ -44,6 +46,10 @@ async function seed(path, data) {
 }
 
 async function seedActiveUser(uid, friends = []) {
+  await seed(`usernames/${uid}_name`, {
+    uid,
+    createdAt: new Date(),
+  });
   await seed(`users/${uid}`, {
     displayName: uid,
     username: `${uid}_name`,
@@ -57,6 +63,62 @@ async function seedActiveUser(uid, friends = []) {
     blockedUsers: [],
   });
 }
+
+test('el cliente puede consultar reservas pero no crearlas', async () => {
+  await seedActiveUser('alice');
+
+  await assertSucceeds(getDoc(doc(dbFor('alice'), 'usernames/alice_name')));
+  await assertFails(setDoc(doc(dbFor('alice'), 'usernames/new_name'), {
+    uid: 'alice',
+    createdAt: serverTimestamp(),
+  }));
+});
+
+test('el cliente no puede saltarse la callable al crear el perfil', async () => {
+  await assertFails(setDoc(doc(dbFor('alice'), 'users/alice'), {
+    displayName: 'Alice',
+    username: 'alice_name',
+    photoUrl: '',
+  }));
+  await assertFails(setDoc(doc(dbFor('alice'), 'user_private/alice'), {
+    email: 'alice@example.com',
+    createdAt: serverTimestamp(),
+    lastLogin: serverTimestamp(),
+    friends: [],
+  }));
+});
+
+test('un usuario no puede cambiar su username activo', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+
+  await assertFails(updateDoc(doc(dbFor('alice'), 'users/alice'), {
+    username: 'bob_name',
+  }));
+});
+
+test('la anonimización libera la reserva en el mismo batch', async () => {
+  await seedActiveUser('alice');
+  const db = dbFor('alice');
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users/alice'), {
+    displayName: 'Deleted user',
+    username: 'deleted_user',
+    photoUrl: '',
+  });
+  batch.delete(doc(db, 'usernames/alice_name'));
+
+  await assertSucceeds(batch.commit());
+});
+
+test('una reserva no se puede liberar sin anonimizar el perfil', async () => {
+  await seedActiveUser('alice');
+  const db = dbFor('alice');
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'usernames/alice_name'));
+
+  await assertFails(batch.commit());
+});
 
 async function seedChat({ friends = true, read = false, reactions = {} } = {}) {
   await seedActiveUser('alice', friends ? ['bob'] : []);

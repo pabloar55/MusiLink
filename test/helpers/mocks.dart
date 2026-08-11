@@ -22,6 +22,9 @@ class MockHttpsCallable extends Mock implements HttpsCallable {}
 class MockHttpsCallableResult<T> extends Mock
     implements HttpsCallableResult<T> {}
 
+class MockFirebaseFunctionsException extends Mock
+    implements FirebaseFunctionsException {}
+
 // ── Google Sign-In ───────────────────────────────────────────
 class MockGoogleSignIn extends Mock implements GoogleSignIn {
   @override

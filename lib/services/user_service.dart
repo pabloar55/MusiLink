@@ -1,21 +1,35 @@
 import 'dart:collection';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 
+/// El username solicitado ya pertenece a otro usuario.
+class UsernameAlreadyTakenException implements Exception {
+  const UsernameAlreadyTakenException();
+}
+
 /// Servicio para gestionar perfiles de usuario en Firestore.
 class UserService {
-  UserService({required FirebaseFirestore firestore}) : _firestore = firestore;
+  UserService({
+    required FirebaseFirestore firestore,
+    FirebaseFunctions? functions,
+  }) : _firestore = firestore,
+       _functions = functions;
 
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions? _functions;
   late final CollectionReference<Map<String, dynamic>> _usersRef = _firestore
       .collection(FirestoreCollections.users);
+  late final CollectionReference<Map<String, dynamic>> _usernamesRef =
+      _firestore.collection(FirestoreCollections.usernames);
   late final CollectionReference<Map<String, dynamic>> _privateUsersRef =
       _firestore.collection(FirestoreCollections.userPrivate);
   static const int _maxCacheSize = 200;
+  static final RegExp _validUsername = RegExp(r'^[a-z0-9_]{3,20}$');
   static const _userCacheTtl = Duration(minutes: 10);
   final LinkedHashMap<String, ({AppUser user, DateTime cachedAt})> _userCache =
       LinkedHashMap();
@@ -24,29 +38,30 @@ class UserService {
 
   void clearCache() => _userCache.clear();
 
-  /// Crea un perfil de usuario nuevo en Firestore.
+  /// Reserva el username y crea el perfil mediante una callable transaccional.
   Future<void> createUserProfile({
-    required String uid,
-    required String email,
     required String displayName,
     required String username,
   }) async {
-    try {
-      final now = DateTime.now();
-      final user = AppUser(
-        uid: uid,
-        displayName: displayName,
-        username: username,
+    final functions = _functions;
+    if (functions == null) {
+      throw StateError(
+        'FirebaseFunctions is required to create a user profile.',
       );
-      final batch = _firestore.batch();
-      batch.set(_usersRef.doc(uid), user.toFirestore());
-      batch.set(_privateUsersRef.doc(uid), {
-        'email': email,
-        'createdAt': Timestamp.fromDate(now),
-        'lastLogin': Timestamp.fromDate(now),
-        'friends': <String>[],
+    }
+
+    try {
+      final callable = functions.httpsCallable('createUserProfile');
+      await callable.call<void>({
+        'displayName': displayName.trim(),
+        'username': normalizeUsername(username),
       });
-      await batch.commit();
+    } on FirebaseFunctionsException catch (e, stack) {
+      if (e.code == 'already-exists') {
+        throw const UsernameAlreadyTakenException();
+      }
+      await reportError(e, stack);
+      rethrow;
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
@@ -141,28 +156,23 @@ class UserService {
 
   /// Comprueba si un username ya está en uso.
   Future<bool> usernameExists(String username) async {
+    final normalized = normalizeUsername(username);
+    if (!_validUsername.hasMatch(normalized) ||
+        normalized == AppUser.deletedUsername) {
+      return true;
+    }
+
     try {
-      final snapshot = await _usersRef
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
-      return snapshot.docs.isNotEmpty;
+      final reservation = await _usernamesRef.doc(normalized).get();
+      return reservation.exists;
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
     }
   }
 
-  /// Establece el username de un usuario existente (migración o Google sign-in).
-  Future<void> setUsername(String uid, String username) async {
-    try {
-      await _usersRef.doc(uid).update({'username': username});
-      _userCache.remove(uid);
-    } catch (e, stack) {
-      await reportError(e, stack);
-      rethrow;
-    }
-  }
+  static String normalizeUsername(String username) =>
+      username.trim().toLowerCase();
 
   /// Actualiza la fecha de último login.
   Future<void> updateLastLogin(String uid) async {
@@ -242,10 +252,18 @@ class UserService {
   /// un autor reconocible ("Deleted user") en lugar de romperse.
   Future<void> anonymizeUser(String uid) async {
     try {
+      final publicProfile = await _usersRef.doc(uid).get();
+      final username = normalizeUsername(
+        (publicProfile.data()?['username'] ?? '').toString(),
+      );
       final pushTokens = await _privateUsersRef
           .doc(uid)
           .collection(FirestoreCollections.pushTokens)
           .get();
+      final reservation =
+          username.isNotEmpty && username != AppUser.deletedUsername
+          ? await _usernamesRef.doc(username).get()
+          : null;
       final batch = _firestore.batch();
       batch.update(_usersRef.doc(uid), {
         'displayName': AppUser.deletedDisplayName,
@@ -263,6 +281,9 @@ class UserService {
       });
       for (final token in pushTokens.docs) {
         batch.delete(token.reference);
+      }
+      if (reservation?.data()?['uid'] == uid) {
+        batch.delete(reservation!.reference);
       }
       batch.delete(_privateUsersRef.doc(uid));
       await batch.commit();

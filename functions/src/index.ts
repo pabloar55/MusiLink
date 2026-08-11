@@ -18,6 +18,7 @@ import {
   getFirestore,
 } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
+import { claimUsernameAndCreateProfile as claimUsername } from './username_claim';
 export { searchSpotifyArtists, searchSpotifyTracks } from './spotify';
 export { getSimilarArtists } from './lastfm';
 
@@ -1276,6 +1277,30 @@ export const onUserMusicProfileChanged = onDocumentUpdated(
         error,
       });
       throw error;
+    }
+  },
+);
+
+// ── Alta atómica de perfil y reserva de username ─────────────────────────────
+
+export const createUserProfile = onCall(
+  { region: 'europe-southwest1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Authentication is required.');
+    }
+
+    const email = typeof request.auth?.token.email === 'string'
+      ? request.auth.token.email
+      : '';
+
+    try {
+      return await claimUsername(db, uid, email, request.data);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error('createUserProfile: unhandled error', { uid, error });
+      throw new HttpsError('internal', 'Could not create the user profile.');
     }
   },
 );

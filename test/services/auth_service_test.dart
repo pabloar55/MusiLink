@@ -81,8 +81,6 @@ void main() {
           // El perfil Firestore lo crea UsernameSetupScreen, no aquí.
           verifyNever(
             () => mockUserService.createUserProfile(
-              uid: any(named: 'uid'),
-              email: any(named: 'email'),
               displayName: any(named: 'displayName'),
               username: any(named: 'username'),
             ),
@@ -285,8 +283,6 @@ void main() {
           verifyNever(() => mockGoogleSignIn.authenticate());
           verifyNever(
             () => mockUserService.createUserProfile(
-              uid: any(named: 'uid'),
-              email: any(named: 'email'),
               displayName: any(named: 'displayName'),
               username: any(named: 'username'),
             ),
@@ -367,8 +363,6 @@ void main() {
         verify(() => mockUserService.updateLastLogin('google_uid')).called(1);
         verifyNever(
           () => mockUserService.createUserProfile(
-            uid: any(named: 'uid'),
-            email: any(named: 'email'),
             displayName: any(named: 'displayName'),
             username: any(named: 'username'),
           ),

@@ -56,7 +56,10 @@ final pendingNotificationProvider =
 // ── Servicios sin dependencias ──────────────────────────────────
 
 final userServiceProvider = Provider<UserService>((ref) {
-  return UserService(firestore: ref.watch(firebaseFirestoreProvider));
+  return UserService(
+    firestore: ref.watch(firebaseFirestoreProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
+  );
 });
 
 final storageServiceProvider = Provider<StorageService>((ref) {

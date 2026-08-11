@@ -8,6 +8,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/services/user_service.dart';
 
 class UsernameSetupScreen extends ConsumerStatefulWidget {
   const UsernameSetupScreen({super.key});
@@ -29,6 +30,7 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
   bool? _isAvailable;
   String _lastChecked = '';
   Timer? _debounce;
+  int _usernameCheckGeneration = 0;
 
   @override
   void initState() {
@@ -47,8 +49,10 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
   }
 
   void _onUsernameChanged(String value) {
+    final generation = ++_usernameCheckGeneration;
     _debounce?.cancel();
     setState(() {
+      _isChecking = false;
       _isAvailable = null;
       _lastChecked = '';
     });
@@ -59,34 +63,36 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
     _debounce = Timer(const Duration(milliseconds: 600), () async {
       if (!mounted) return;
       try {
-        final taken =
-            await ref.read(userServiceProvider).usernameExists(value);
-        if (!mounted) return;
+        final taken = await ref.read(userServiceProvider).usernameExists(value);
+        if (!mounted ||
+            generation != _usernameCheckGeneration ||
+            _usernameController.text != value) {
+          return;
+        }
         setState(() {
           _isChecking = false;
           _isAvailable = !taken;
           _lastChecked = value;
         });
       } catch (_) {
-        if (mounted) setState(() => _isChecking = false);
+        if (mounted && generation == _usernameCheckGeneration) {
+          setState(() => _isChecking = false);
+        }
       }
     });
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_isAvailable != true) return;
+    final username = _usernameController.text.trim();
+    if (_isAvailable != true || _lastChecked != username) return;
 
     setState(() => _isLoading = true);
     try {
-      final username = _usernameController.text.trim();
       final displayName = _displayNameController.text.trim();
-      final authUser = ref.read(firebaseAuthProvider).currentUser!;
       final userService = ref.read(userServiceProvider);
 
       await userService.createUserProfile(
-        uid: authUser.uid,
-        email: authUser.email ?? '',
         displayName: displayName,
         username: username,
       );
@@ -94,12 +100,23 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
       if (mounted) {
         ref.read(appRouterNotifierProvider).setUsernameSet();
       }
+    } on UsernameAlreadyTakenException {
+      if (mounted) {
+        setState(() {
+          _isAvailable = false;
+          _lastChecked = username;
+        });
+        _formKey.currentState?.validate();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.authUsernameTaken),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.genericError),
-          ),
+          SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
         );
       }
     } finally {
@@ -126,8 +143,10 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
           ),
         );
       } else if (_isAvailable == true) {
-        usernameSuffix =
-            Icon(LucideIcons.circleCheck, color: colorScheme.primary);
+        usernameSuffix = Icon(
+          LucideIcons.circleCheck,
+          color: colorScheme.primary,
+        );
       } else if (_isAvailable == false) {
         usernameSuffix = Icon(LucideIcons.circleX, color: colorScheme.error);
       }
@@ -154,8 +173,8 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                   child: Text(
                     l10n.usernameSetupTitle,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -175,6 +194,7 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                       // Nombre editable (pre-relleno con el nombre de Google)
                       TextFormField(
                         controller: _displayNameController,
+                        enabled: !_isLoading,
                         textCapitalization: TextCapitalization.words,
                         decoration: InputDecoration(
                           labelText: l10n.authName,
@@ -192,11 +212,13 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                       // Username
                       TextFormField(
                         controller: _usernameController,
+                        enabled: !_isLoading,
                         autofocus: false,
                         autocorrect: false,
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
-                              RegExp(r'[a-z0-9_]')),
+                            RegExp(r'[a-z0-9_]'),
+                          ),
                         ],
                         decoration: InputDecoration(
                           labelText: l10n.authUsername,
@@ -221,7 +243,9 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                     ],
                   ),
                 ),
-                if (username.isNotEmpty && isFormatValid && _isAvailable == true)
+                if (username.isNotEmpty &&
+                    isFormatValid &&
+                    _isAvailable == true)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, left: 12),
                     child: Text(
@@ -249,9 +273,12 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                   height: 52,
                   child: FilledButton(
                     onPressed:
-                        _isLoading || _isChecking || _isAvailable != true
-                            ? null
-                            : _submit,
+                        _isLoading ||
+                            _isChecking ||
+                            _isAvailable != true ||
+                            _lastChecked != username
+                        ? null
+                        : _submit,
                     child: _isLoading
                         ? const SizedBox(
                             width: 20,

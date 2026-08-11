@@ -79,6 +79,28 @@ service cloud.firestore {
           || data.recommendationsRefreshRequestedAt is timestamp);
     }
 
+    function ownsUsernameAfter(userId, username) {
+      return existsAfter(/databases/$(database)/documents/usernames/$(username))
+        && getAfter(/databases/$(database)/documents/usernames/$(username)).data.uid == userId;
+    }
+
+    function keepsUsernameOrAnonymizes(userId) {
+      let before = resource.data.username;
+      let after = request.resource.data.username;
+      return (
+          after == before
+          && after != 'deleted_user'
+          && ownsUsernameAfter(userId, after)
+        ) || (
+          before != 'deleted_user'
+          && after == 'deleted_user'
+          && (
+            !existsAfter(/databases/$(database)/documents/usernames/$(before))
+            || getAfter(/databases/$(database)/documents/usernames/$(before)).data.uid != userId
+          )
+        );
+    }
+
     function validBlockedUsers(userId, data) {
       return !('blockedUsers' in data)
         || (
@@ -147,20 +169,26 @@ service cloud.firestore {
         && before.size() <= after.size() + 1;
     }
 
+    // ─── Reservas únicas de username ───────────────────
+    match /usernames/{username} {
+      // La existencia es visible para mostrar disponibilidad. Las reservas se
+      // crean exclusivamente desde la callable privilegiada.
+      allow read: if request.auth != null;
+      allow create, update: if false;
+      // La baja libera la reserva en el mismo batch que anonimiza el perfil.
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && getAfter(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.username == 'deleted_user';
+    }
+
     // ─── Usuarios ───────────────────────────────────────
     match /users/{userId} {
       // Cualquier usuario autenticado puede leer perfiles (necesario para búsqueda y avatares)
       allow read: if request.auth != null;
-      // El propio usuario puede crear su perfil
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly([
-          'displayName',
-          'username',
-          'photoUrl',
-        ])
-        && request.resource.data.keys().hasAll(['displayName', 'username', 'photoUrl'])
-        && validPublicProfile(request.resource.data);
+      // El alta se realiza exclusivamente desde createUserProfile (Admin SDK).
+      allow create: if false;
       allow update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -179,7 +207,8 @@ service cloud.firestore {
           'dailySongUpdatedAt',
           'recommendationsRefreshRequestedAt',
         ])
-        && validPublicProfile(request.resource.data);
+        && validPublicProfile(request.resource.data)
+        && keepsUsernameOrAnonymizes(userId);
       allow delete: if false;
 
       match /recommendations/{recommendationId} {
@@ -190,21 +219,8 @@ service cloud.firestore {
 
     match /user_private/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly([
-          'email',
-          'createdAt',
-          'lastLogin',
-          'friends',
-          'blockedUsers',
-          'fcmToken',
-          'preferredLocale',
-          'notifSound',
-          'notifVibration',
-        ])
-        && validPrivateProfile(userId, request.resource.data)
-        && request.resource.data.get('friends', []).size() == 0;
+      // Se crea junto al perfil público desde la callable transaccional.
+      allow create: if false;
       allow update: if request.auth != null && (
         (
           request.auth.uid == userId
