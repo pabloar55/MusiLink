@@ -12,7 +12,8 @@
     "migrate:usernames": "node scripts/backfill-username-reservations.cjs",
     "test:usernames-migration": "node --test scripts/backfill-username-reservations.test.cjs",
     "test:account-deletion": "npm run build && node --test test/account_deletion.test.cjs",
-    "test:recommendation-index-migration": "node --test test/recommendation_index_migration.test.cjs"
+    "test:recommendation-index-migration": "node --test test/recommendation_index_migration.test.cjs",
+    "test:unit": "npm run build && node --test test/unit/*.test.cjs"
   },
   "engines": {
     "node": "24"
