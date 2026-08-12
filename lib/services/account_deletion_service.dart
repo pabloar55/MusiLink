@@ -21,12 +21,10 @@ class AccountDeletionProgress {
 
 class AccountDeletionService {
   AccountDeletionService({
-    required FirebaseAuth auth,
-    required FirebaseFirestore firestore,
-    required FirebaseFunctions functions,
-  }) : _auth = auth,
-       _firestore = firestore,
-       _functions = functions;
+    required this._auth,
+    required this._firestore,
+    required this._functions,
+  });
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;

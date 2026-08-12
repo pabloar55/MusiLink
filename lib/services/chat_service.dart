@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
@@ -10,11 +11,7 @@ import 'package:musi_link/utils/firestore_collections.dart';
 
 /// Servicio para gestionar chats y mensajes en Firestore.
 class ChatService with AuthenticatedService {
-  ChatService({
-    required FirebaseFirestore firestore,
-    required FirebaseAuth auth,
-  }) : _firestore = firestore,
-       _auth = auth;
+  ChatService({required this._firestore, required this._auth});
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;

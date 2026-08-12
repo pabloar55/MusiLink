@@ -33,9 +33,9 @@ class AppUser {
     this.topArtistKeys = const [],
     this.topGenreNames = const [],
     this.musicDataUpdatedAt,
-    Track? dailySong,
+    this._dailySong,
     this.dailySongUpdatedAt,
-  }) : _dailySong = dailySong;
+  });
 
   /// Returns the song only while its 24-hour publication window is active.
   ///

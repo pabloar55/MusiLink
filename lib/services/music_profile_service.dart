@@ -17,10 +17,9 @@ import 'package:musi_link/utils/music_profile_limits.dart';
 class MusicProfileService with AuthenticatedService {
   MusicProfileService(
     this._musicCatalogService, {
-    required FirebaseFirestore firestore,
-    required FirebaseAuth auth,
-  }) : _firestore = firestore,
-       _auth = auth;
+    required this._firestore,
+    required this._auth,
+  });
 
   final MusicCatalogService _musicCatalogService;
   final FirebaseFirestore _firestore;

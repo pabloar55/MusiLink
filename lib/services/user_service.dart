@@ -15,11 +15,7 @@ class UsernameAlreadyTakenException implements Exception {
 
 /// Servicio para gestionar perfiles de usuario en Firestore.
 class UserService {
-  UserService({
-    required FirebaseFirestore firestore,
-    FirebaseFunctions? functions,
-  }) : _firestore = firestore,
-       _functions = functions;
+  UserService({required this._firestore, this._functions});
 
   final FirebaseFirestore _firestore;
   final FirebaseFunctions? _functions;

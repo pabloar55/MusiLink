@@ -24,12 +24,10 @@ class RelationshipResult {
 /// Servicio para gestionar solicitudes de amistad y amigos en Firestore.
 class FriendService with AuthenticatedService {
   FriendService({
-    required FirebaseFirestore firestore,
-    required FirebaseAuth auth,
-    required FirebaseFunctions functions,
-  }) : _firestore = firestore,
-       _auth = auth,
-       _functions = functions;
+    required this._firestore,
+    required this._auth,
+    required this._functions,
+  });
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;

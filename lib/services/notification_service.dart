@@ -16,18 +16,13 @@ enum PushPermissionState { unsupported, notDetermined, denied, enabled }
 
 class NotificationService {
   NotificationService({
-    required FirebaseMessaging messaging,
-    required FirebaseFirestore firestore,
-    required FirebaseAuth auth,
-    required SharedPreferences prefs,
-    required void Function(Map<String, dynamic>) onNotificationTapped,
-    required String? Function() getActiveChatId,
-  }) : _messaging = messaging,
-       _firestore = firestore,
-       _auth = auth,
-       _prefs = prefs,
-       _onNotificationTapped = onNotificationTapped,
-       _getActiveChatId = getActiveChatId;
+    required this._messaging,
+    required this._firestore,
+    required this._auth,
+    required this._prefs,
+    required this._onNotificationTapped,
+    required this._getActiveChatId,
+  });
 
   final FirebaseMessaging _messaging;
   final FirebaseFirestore _firestore;

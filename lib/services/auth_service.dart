@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:musi_link/utils/error_reporter.dart';
@@ -17,12 +18,10 @@ class GoogleAccountMismatchException implements Exception {
 class AuthService {
   AuthService(
     this._userService, {
-    required FirebaseAuth auth,
-    required GoogleSignIn googleSignIn,
-    required NotificationService notificationService,
-  }) : _auth = auth,
-       _googleSignIn = googleSignIn,
-       _notificationService = notificationService;
+    required this._auth,
+    required this._googleSignIn,
+    required this._notificationService,
+  });
 
   final UserService _userService;
   final FirebaseAuth _auth;
@@ -116,7 +115,7 @@ class AuthService {
 
       if (googleUser == null) return null; // Usuario canceló
 
-      return _signInToFirebaseWithGoogleAccount(googleUser);
+      return await _signInToFirebaseWithGoogleAccount(googleUser);
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
       rethrow;

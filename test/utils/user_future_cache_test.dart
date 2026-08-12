@@ -15,8 +15,7 @@ class _Cache with UserFutureCache {
 
   Duration _ttl;
 
-  _Cache(this.userService, {Duration ttl = const Duration(minutes: 5)})
-    : _ttl = ttl;
+  _Cache(this.userService) : _ttl = const Duration(minutes: 5);
 
   @override
   Duration get cacheTtl => _ttl;
@@ -75,9 +74,8 @@ void main() {
       'reutiliza el mismo Future mientras la petición está pendiente',
       () async {
         final completer = Completer<AppUser?>();
-        when(
-          () => mockUserService.getUser('u1'),
-        ).thenAnswer((_) => completer.future);
+        when(() => mockUserService.getUser('u1'))
+            .thenAnswer((_) => completer.future);
 
         final first = cache.getUserFuture('u1');
         final second = cache.getUserFuture('u1');

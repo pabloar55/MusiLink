@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 
 class StorageService {
-  StorageService({required FirebaseStorage storage}) : _storage = storage;
+  StorageService({required this._storage});
 
   final FirebaseStorage _storage;
 

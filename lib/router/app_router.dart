@@ -35,10 +35,10 @@ class AppRouterNotifier extends ChangeNotifier {
   final FirebaseAuth _auth;
 
   AppRouterNotifier({
-    required FirebaseAuth auth,
+    required this._auth,
     AppRouterBootstrapState? initialState,
     FetchUserSetupState? fetchUserState,
-  }) : _auth = auth {
+  }) {
     if (initialState != null) {
       setInitialized(
         usernameSet: initialState.usernameSet,
