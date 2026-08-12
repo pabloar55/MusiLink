@@ -188,4 +188,63 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('las sugerencias solo consultan el artista recién añadido', (
+    tester,
+  ) async {
+    const firstArtist = Artist(
+      name: 'First selected artist',
+      imageUrl: '',
+      genres: [],
+    );
+    const secondArtist = Artist(
+      name: 'Second selected artist',
+      imageUrl: '',
+      genres: [],
+    );
+    final relatedCalls = <String>[];
+
+    when(
+      () => musicCatalogService.searchArtists('first', limit: 20),
+    ).thenAnswer((_) async => const [firstArtist]);
+    when(
+      () => musicCatalogService.searchArtists('second', limit: 20),
+    ).thenAnswer((_) async => const [secondArtist]);
+    when(
+      () => musicCatalogService.searchArtists(firstArtist.name, limit: 1),
+    ).thenAnswer((_) async => const [firstArtist]);
+    when(
+      () => musicCatalogService.searchArtists(secondArtist.name, limit: 1),
+    ).thenAnswer((_) async => const [secondArtist]);
+    when(() => musicCatalogService.getRelatedArtists(any())).thenAnswer((call) {
+      relatedCalls.add(call.positionalArguments.first as String);
+      return Future.value(const []);
+    });
+
+    await tester.pumpWidget(
+      _app(
+        musicCatalogService: musicCatalogService,
+        child: const ArtistSelectorScreen(),
+      ),
+    );
+    final searchField = find.byType(TextField);
+
+    await tester.enterText(searchField, 'first');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.tap(find.text(firstArtist.name));
+    await tester.pump();
+
+    await tester.enterText(searchField, 'second');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.tap(find.text(secondArtist.name));
+    await tester.pump();
+
+    expect(relatedCalls, [firstArtist.name, secondArtist.name]);
+
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pump();
+    expect(relatedCalls, [firstArtist.name, secondArtist.name]);
+  });
 }

@@ -212,8 +212,11 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   List<Artist> _searchResults = [];
   List<Artist> _suggestions = [];
   final List<Artist> _selected = [];
+  final Map<String, List<Artist>> _relatedArtistsByKey = {};
+  final Set<String> _loadingRelatedArtistKeys = {};
   GlobalKey<AnimatedListState> _suggestionsListKey = GlobalKey();
   List<String> _originalArtistKeys = [];
+  String? _preferredSuggestionArtistKey;
 
   bool _isSearching = false;
   bool _isSaving = false;
@@ -223,6 +226,8 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
   static const _minArtists = 4;
   static const _maxArtists = MusicProfileLimits.maxArtists;
+  static const _initialSuggestionSeedLimit = 5;
+  static const _maxSuggestions = 20;
 
   @override
   void initState() {
@@ -255,7 +260,13 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
           ),
         );
         _originalArtistKeys = _selected.map(_artistKey).toList();
+        _preferredSuggestionArtistKey = _selected.isEmpty
+            ? null
+            : _artistKey(_selected.first);
       });
+      await _loadSuggestions(
+        artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
+      );
     } catch (e, st) {
       reportError(e, st).ignore();
     }
@@ -308,31 +319,99 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     }
   }
 
-  Future<void> _loadSuggestions() async {
-    if (_selected.isEmpty) return;
-    try {
-      final service = ref.read(musicCatalogServiceProvider);
-      final results = await Future.wait(
-        _selected.map((a) => service.getRelatedArtists(a.name)),
-      );
-      if (!mounted) return;
-      final selectedKeys = _selected.map(_artistKey).toSet();
-      final seen = {...selectedKeys};
-      final merged = <Artist>[];
-      for (final list in results) {
-        for (final a in list) {
-          if (seen.add(_artistKey(a))) {
-            merged.add(a);
-            if (merged.length >= 20) break;
-          }
-        }
-        if (merged.length >= 20) break;
+  Future<void> _loadSuggestions({
+    Iterable<Artist> artistsToFetch = const [],
+  }) async {
+    if (_selected.isEmpty) {
+      _replaceSuggestions(const []);
+      return;
+    }
+
+    final selectedKeys = _selected.map(_artistKey).toSet();
+    final missingByKey = <String, Artist>{};
+    for (final artist in artistsToFetch) {
+      final key = _artistKey(artist);
+      if (selectedKeys.contains(key) &&
+          !_relatedArtistsByKey.containsKey(key) &&
+          !_loadingRelatedArtistKeys.contains(key)) {
+        missingByKey[key] = artist;
       }
-      setState(() {
-        _suggestions = merged;
-        _suggestionsListKey = GlobalKey();
-      });
-    } catch (_) {}
+    }
+
+    if (missingByKey.isEmpty) {
+      _refreshSuggestions();
+      return;
+    }
+
+    _loadingRelatedArtistKeys.addAll(missingByKey.keys);
+    final service = ref.read(musicCatalogServiceProvider);
+    await Future.wait(
+      missingByKey.entries.map((entry) async {
+        try {
+          final related = await service.getRelatedArtists(entry.value.name);
+          _relatedArtistsByKey[entry.key] = related;
+        } catch (e, st) {
+          reportError(e, st).ignore();
+        } finally {
+          _loadingRelatedArtistKeys.remove(entry.key);
+        }
+      }),
+    );
+    if (mounted) _refreshSuggestions();
+  }
+
+  void _refreshSuggestions() {
+    if (!mounted) return;
+    if (_selected.isEmpty) {
+      _replaceSuggestions(const []);
+      return;
+    }
+
+    final orderedSeeds = List<Artist>.from(_selected);
+    final preferredKey = _preferredSuggestionArtistKey;
+    if (preferredKey != null) {
+      final preferredIndex = orderedSeeds.indexWhere(
+        (artist) => _artistKey(artist) == preferredKey,
+      );
+      if (preferredIndex > 0) {
+        final preferred = orderedSeeds.removeAt(preferredIndex);
+        orderedSeeds.insert(0, preferred);
+      }
+    }
+
+    final relatedLists = orderedSeeds
+        .map(
+          (artist) =>
+              _relatedArtistsByKey[_artistKey(artist)] ?? const <Artist>[],
+        )
+        .where((artists) => artists.isNotEmpty)
+        .toList();
+    final seen = _selected.map(_artistKey).toSet();
+    final merged = <Artist>[];
+    for (
+      var relatedIndex = 0;
+      merged.length < _maxSuggestions;
+      relatedIndex++
+    ) {
+      var foundCandidate = false;
+      for (final related in relatedLists) {
+        if (relatedIndex >= related.length) continue;
+        foundCandidate = true;
+        final candidate = related[relatedIndex];
+        if (seen.add(_artistKey(candidate))) merged.add(candidate);
+        if (merged.length >= _maxSuggestions) break;
+      }
+      if (!foundCandidate) break;
+    }
+    _replaceSuggestions(merged);
+  }
+
+  void _replaceSuggestions(List<Artist> suggestions) {
+    if (!mounted) return;
+    setState(() {
+      _suggestions = suggestions;
+      _suggestionsListKey = GlobalKey();
+    });
   }
 
   void _onReorder(int oldIndex, int newIndex) {
@@ -340,6 +419,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       final item = _selected.removeAt(oldIndex);
       _selected.insert(newIndex, item);
     });
+    _refreshSuggestions();
   }
 
   void _toggleArtist(Artist artist) {
@@ -349,18 +429,23 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       setState(() {
         _selected.removeWhere((a) => _artistKey(a) == artistKey);
         _searchResults = _dedupeArtists(_searchResults);
+        if (_preferredSuggestionArtistKey == artistKey) {
+          _preferredSuggestionArtistKey = null;
+        }
       });
+      _refreshSuggestions();
     } else {
       if (_selected.length >= _maxArtists) return;
       setState(() {
         _selected.add(artist);
         _searchResults.removeWhere((a) => _artistKey(a) == artistKey);
         _suggestions.removeWhere((a) => _artistKey(a) == artistKey);
+        _preferredSuggestionArtistKey = artistKey;
       });
       if (artist.imageUrl.isEmpty) _enrichFromSpotify(artist);
       _searchController.clear();
+      unawaited(_loadSuggestions(artistsToFetch: [artist]));
     }
-    _loadSuggestions();
   }
 
   static String _artistKey(Artist artist) {
@@ -672,10 +757,11 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     setState(() {
       _selected.add(artist);
       _searchResults.removeWhere((a) => _artistKey(a) == _artistKey(artist));
+      _preferredSuggestionArtistKey = _artistKey(artist);
     });
     if (artist.imageUrl.isEmpty) _enrichFromSpotify(artist);
     _searchController.clear();
-    _loadSuggestions();
+    unawaited(_loadSuggestions(artistsToFetch: [artist]));
   }
 
   Widget _buildAnimatingChip(Artist artist, Animation<double> animation) {
