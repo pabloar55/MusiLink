@@ -28,6 +28,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
   List<AppUser> _results = [];
   bool _isLoading = false;
   bool _hasSearched = false;
+  int _searchGeneration = 0;
 
   // Cache de relaciones para los resultados actuales
   final Map<String, RelationshipResult> _relationships = {};
@@ -47,7 +48,9 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
 
   void _onSearchChanged(String query) {
     _debounce?.cancel();
-    if (query.trim().isEmpty) {
+    final generation = ++_searchGeneration;
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
       setState(() {
         _results = [];
         _hasSearched = false;
@@ -58,13 +61,13 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
       return;
     }
     setState(() => _isLoading = true);
-    _debounce = Timer(const Duration(milliseconds: 400), _search);
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _search(normalizedQuery, generation),
+    );
   }
 
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty) return;
-
+  Future<void> _search(String query, int generation) async {
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -75,16 +78,14 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
       final users = await ref
           .read(userServiceProvider)
           .searchUsers(query, excludeUid: _currentUid);
+      if (!mounted || generation != _searchGeneration) return;
 
       // Cargar relaciones para todos los resultados
-      final relationships = <String, RelationshipResult>{};
-      for (final user in users) {
-        relationships[user.uid] = await ref
-            .read(friendServiceProvider)
-            .getRelationship(user.uid);
-      }
+      final relationships = await ref
+          .read(friendServiceProvider)
+          .getRelationships(users.map((user) => user.uid));
 
-      if (mounted) {
+      if (mounted && generation == _searchGeneration) {
         setState(() {
           _results = users;
           _relationships
@@ -94,7 +95,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && generation == _searchGeneration) {
         setState(() {
           _isLoading = false;
           _hasError = true;
@@ -148,17 +149,17 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
   }
 
   Future<void> _refreshRelationships() async {
-    for (final user in _results) {
-      try {
-        final rel = await ref
-            .read(friendServiceProvider)
-            .getRelationship(user.uid);
-        if (mounted) {
-          setState(() => _relationships[user.uid] = rel);
-        }
-      } catch (_) {
-        // Silencioso: si falla una relación en el refresh, se mantiene el valor anterior
+    final generation = _searchGeneration;
+    final uids = _results.map((user) => user.uid).toList(growable: false);
+    try {
+      final relationships = await ref
+          .read(friendServiceProvider)
+          .getRelationships(uids);
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _relationships.addAll(relationships));
       }
+    } catch (_) {
+      // Silencioso: si falla el refresh, se mantienen los valores anteriores.
     }
   }
 
@@ -184,10 +185,13 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
                   icon: const Icon(LucideIcons.x),
                   onPressed: () {
                     _debounce?.cancel();
+                    _searchGeneration++;
                     _searchController.clear();
                     setState(() {
                       _results = [];
                       _hasSearched = false;
+                      _isLoading = false;
+                      _hasError = false;
                       _relationships.clear();
                     });
                   },

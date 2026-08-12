@@ -472,6 +472,182 @@ void main() {
       });
     });
 
+    group('getRelationships', () {
+      test('no consulta Firestore si no hay UIDs válidos', () async {
+        final result = await friendService.getRelationships([
+          '',
+          'current_uid',
+          'current_uid',
+        ]);
+
+        expect(result, isEmpty);
+        verifyNever(() => mockUsersRef.doc(any()));
+      });
+
+      test('resuelve todas las relaciones con consultas agrupadas', () async {
+        final currentUserRef = MockDocumentReference();
+        final currentUserSnap = MockDocumentSnapshot();
+        when(() => mockUsersRef.doc('current_uid')).thenReturn(currentUserRef);
+        when(
+          () => currentUserRef.get(),
+        ).thenAnswer((_) async => currentUserSnap);
+        when(() => currentUserSnap.data()).thenReturn({
+          'friends': ['friend_uid'],
+          'blockedUsers': ['blocked_uid'],
+        });
+
+        final sentQ1 = MockQuery();
+        final sentQ2 = MockQuery();
+        final sentQ3 = MockQuery();
+        final sentSnap = MockQuerySnapshot();
+        final sentDoc = MockQueryDocumentSnapshot();
+        final sentForFriendDoc = MockQueryDocumentSnapshot();
+        when(
+          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
+        ).thenReturn(sentQ1);
+        when(
+          () => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')),
+        ).thenReturn(sentQ2);
+        when(
+          () => sentQ2.where('status', isEqualTo: 'pending'),
+        ).thenReturn(sentQ3);
+        when(() => sentQ3.get()).thenAnswer((_) async => sentSnap);
+        when(() => sentSnap.docs).thenReturn([sentDoc, sentForFriendDoc]);
+        when(() => sentDoc.id).thenReturn('current_uid_sent_uid');
+        when(() => sentDoc.data()).thenReturn({'receiverId': 'sent_uid'});
+        when(() => sentForFriendDoc.id).thenReturn('current_uid_friend_uid');
+        when(
+          () => sentForFriendDoc.data(),
+        ).thenReturn({'receiverId': 'friend_uid'});
+
+        final receivedQ1 = MockQuery();
+        final receivedQ2 = MockQuery();
+        final receivedQ3 = MockQuery();
+        final receivedSnap = MockQuerySnapshot();
+        final receivedDoc = MockQueryDocumentSnapshot();
+        final receivedForSentDoc = MockQueryDocumentSnapshot();
+        when(
+          () => mockRequestsRef.where('receiverId', isEqualTo: 'current_uid'),
+        ).thenReturn(receivedQ1);
+        when(
+          () => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')),
+        ).thenReturn(receivedQ2);
+        when(
+          () => receivedQ2.where('status', isEqualTo: 'pending'),
+        ).thenReturn(receivedQ3);
+        when(() => receivedQ3.get()).thenAnswer((_) async => receivedSnap);
+        when(
+          () => receivedSnap.docs,
+        ).thenReturn([receivedDoc, receivedForSentDoc]);
+        when(() => receivedDoc.id).thenReturn('received_uid_current_uid');
+        when(() => receivedDoc.data()).thenReturn({'senderId': 'received_uid'});
+        when(() => receivedForSentDoc.id).thenReturn('sent_uid_current_uid');
+        when(
+          () => receivedForSentDoc.data(),
+        ).thenReturn({'senderId': 'sent_uid'});
+
+        final result = await friendService.getRelationships([
+          'friend_uid',
+          'blocked_uid',
+          'sent_uid',
+          'received_uid',
+          'none_uid',
+          'sent_uid',
+        ]);
+
+        expect(result, hasLength(5));
+        expect(result['friend_uid']?.status, RelationshipStatus.friends);
+        expect(result['blocked_uid']?.status, RelationshipStatus.blocked);
+        expect(result['sent_uid']?.status, RelationshipStatus.requestSent);
+        expect(result['sent_uid']?.requestId, 'current_uid_sent_uid');
+        expect(
+          result['received_uid']?.status,
+          RelationshipStatus.requestReceived,
+        );
+        expect(result['received_uid']?.requestId, 'received_uid_current_uid');
+        expect(result['none_uid']?.status, RelationshipStatus.none);
+        verify(() => currentUserRef.get()).called(1);
+
+        final sentUids =
+            verify(
+                  () => sentQ1.where(
+                    'receiverId',
+                    whereIn: captureAny(named: 'whereIn'),
+                  ),
+                ).captured.single
+                as List<String>;
+        final receivedUids =
+            verify(
+                  () => receivedQ1.where(
+                    'senderId',
+                    whereIn: captureAny(named: 'whereIn'),
+                  ),
+                ).captured.single
+                as List<String>;
+        expect(sentUids, hasLength(5));
+        expect(receivedUids, unorderedEquals(sentUids));
+      });
+
+      test('divide listas mayores de 30 UIDs en varias consultas', () async {
+        final currentUserRef = MockDocumentReference();
+        final currentUserSnap = MockDocumentSnapshot();
+        when(() => mockUsersRef.doc('current_uid')).thenReturn(currentUserRef);
+        when(
+          () => currentUserRef.get(),
+        ).thenAnswer((_) async => currentUserSnap);
+        when(() => currentUserSnap.data()).thenReturn({});
+
+        final sentQ1 = MockQuery();
+        final sentQ2 = MockQuery();
+        final sentQ3 = MockQuery();
+        final sentSnap = MockQuerySnapshot();
+        when(
+          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
+        ).thenReturn(sentQ1);
+        when(
+          () => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')),
+        ).thenReturn(sentQ2);
+        when(
+          () => sentQ2.where('status', isEqualTo: 'pending'),
+        ).thenReturn(sentQ3);
+        when(() => sentQ3.get()).thenAnswer((_) async => sentSnap);
+        when(() => sentSnap.docs).thenReturn([]);
+
+        final receivedQ1 = MockQuery();
+        final receivedQ2 = MockQuery();
+        final receivedQ3 = MockQuery();
+        final receivedSnap = MockQuerySnapshot();
+        when(
+          () => mockRequestsRef.where('receiverId', isEqualTo: 'current_uid'),
+        ).thenReturn(receivedQ1);
+        when(
+          () => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')),
+        ).thenReturn(receivedQ2);
+        when(
+          () => receivedQ2.where('status', isEqualTo: 'pending'),
+        ).thenReturn(receivedQ3);
+        when(() => receivedQ3.get()).thenAnswer((_) async => receivedSnap);
+        when(() => receivedSnap.docs).thenReturn([]);
+
+        final uids = List.generate(31, (index) => 'user_$index');
+        final result = await friendService.getRelationships(uids);
+
+        expect(result, hasLength(31));
+        final sentChunks = verify(
+          () =>
+              sentQ1.where('receiverId', whereIn: captureAny(named: 'whereIn')),
+        ).captured.cast<List<String>>();
+        final receivedChunks = verify(
+          () => receivedQ1.where(
+            'senderId',
+            whereIn: captureAny(named: 'whereIn'),
+          ),
+        ).captured.cast<List<String>>();
+        expect(sentChunks.map((chunk) => chunk.length), [30, 1]);
+        expect(receivedChunks.map((chunk) => chunk.length), [30, 1]);
+      });
+    });
+
     group('getRelationship', () {
       test('devuelve friends si están en la lista de amigos', () async {
         final mockDocRef = MockDocumentReference();

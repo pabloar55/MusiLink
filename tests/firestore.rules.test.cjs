@@ -7,12 +7,16 @@ const {
   initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
 const {
+  collection,
   doc,
   getDoc,
+  getDocs,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
 } = require('firebase/firestore');
 
@@ -204,6 +208,41 @@ test('las solicitudes solo se aceptan mediante la callable', async () => {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   }));
+});
+
+test('un usuario puede consultar sus solicitudes en bloque', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+  await seedActiveUser('carol');
+  await seed('friend_requests/alice_bob', {
+    senderId: 'alice',
+    receiverId: 'bob',
+    status: 'pending',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await seed('friend_requests/carol_alice', {
+    senderId: 'carol',
+    receiverId: 'alice',
+    status: 'pending',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const db = dbFor('alice');
+  const requests = collection(db, 'friend_requests');
+
+  await assertSucceeds(getDocs(query(
+    requests,
+    where('senderId', '==', 'alice'),
+    where('receiverId', 'in', ['bob', 'carol']),
+    where('status', '==', 'pending'),
+  )));
+  await assertSucceeds(getDocs(query(
+    requests,
+    where('receiverId', '==', 'alice'),
+    where('senderId', 'in', ['bob', 'carol']),
+    where('status', '==', 'pending'),
+  )));
 });
 
 test('un usuario activo puede crear su primera solicitud y su rate limit atómicamente', async () => {

@@ -276,6 +276,105 @@ class FriendService with AuthenticatedService {
     }
   }
 
+  /// Obtiene en bloque el estado de la relación con cada UID de [otherUids].
+  ///
+  /// Lee una sola vez el perfil privado actual y agrupa las solicitudes en
+  /// consultas `in`, evitando las tres lecturas por usuario de
+  /// [getRelationship].
+  Future<Map<String, RelationshipResult>> getRelationships(
+    Iterable<String> otherUids,
+  ) async {
+    final authenticatedUid = currentUid;
+    final uids = otherUids
+        .where((uid) => uid.isNotEmpty && uid != authenticatedUid)
+        .toSet()
+        .toList(growable: false);
+    if (uids.isEmpty) return const <String, RelationshipResult>{};
+
+    try {
+      const whereInLimit = 30;
+      final chunks = <List<String>>[];
+      for (var i = 0; i < uids.length; i += whereInLimit) {
+        chunks.add(uids.sublist(i, (i + whereInLimit).clamp(0, uids.length)));
+      }
+
+      final privateUserFuture = _privateUsersRef.doc(authenticatedUid).get();
+      final sentFuture = Future.wait(
+        chunks.map(
+          (chunk) => _requestsRef
+              .where('senderId', isEqualTo: authenticatedUid)
+              .where('receiverId', whereIn: chunk)
+              .where('status', isEqualTo: FriendRequestStatus.pending.name)
+              .get(),
+        ),
+      );
+      final receivedFuture = Future.wait(
+        chunks.map(
+          (chunk) => _requestsRef
+              .where('receiverId', isEqualTo: authenticatedUid)
+              .where('senderId', whereIn: chunk)
+              .where('status', isEqualTo: FriendRequestStatus.pending.name)
+              .get(),
+        ),
+      );
+
+      final results = await Future.wait<Object>([
+        privateUserFuture,
+        sentFuture,
+        receivedFuture,
+      ]);
+      final privateUser = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final sentSnapshots =
+          results[1] as List<QuerySnapshot<Map<String, dynamic>>>;
+      final receivedSnapshots =
+          results[2] as List<QuerySnapshot<Map<String, dynamic>>>;
+
+      final privateData = privateUser.data() ?? const <String, dynamic>{};
+      final blocked = Set<String>.from(
+        privateData['blockedUsers'] as List? ?? const [],
+      );
+      final friends = Set<String>.from(
+        privateData['friends'] as List? ?? const [],
+      );
+      final sentByUid = <String, String>{};
+      for (final snapshot in sentSnapshots) {
+        for (final doc in snapshot.docs) {
+          final receiverId = doc.data()['receiverId'];
+          if (receiverId is String) sentByUid[receiverId] = doc.id;
+        }
+      }
+      final receivedByUid = <String, String>{};
+      for (final snapshot in receivedSnapshots) {
+        for (final doc in snapshot.docs) {
+          final senderId = doc.data()['senderId'];
+          if (senderId is String) receivedByUid[senderId] = doc.id;
+        }
+      }
+
+      return {
+        for (final uid in uids)
+          uid: blocked.contains(uid)
+              ? const RelationshipResult(RelationshipStatus.blocked)
+              : friends.contains(uid)
+              ? const RelationshipResult(RelationshipStatus.friends)
+              : sentByUid.containsKey(uid)
+              ? RelationshipResult(
+                  RelationshipStatus.requestSent,
+                  sentByUid[uid],
+                )
+              : receivedByUid.containsKey(uid)
+              ? RelationshipResult(
+                  RelationshipStatus.requestReceived,
+                  receivedByUid[uid],
+                )
+              : const RelationshipResult(RelationshipStatus.none),
+      };
+    } catch (e, stack) {
+      await reportError(e, stack);
+      rethrow;
+    }
+  }
+
   /// Obtiene el estado de la relación con [otherUid].
   Future<RelationshipResult> getRelationship(String otherUid) async {
     try {
