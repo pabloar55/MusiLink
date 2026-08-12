@@ -6,6 +6,21 @@ if (keyPropertiesFile.exists()) {
     keyProperties.load(keyPropertiesFile.inputStream())
 }
 
+val releaseSigningProperties =
+    listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+val hasReleaseSigning =
+    keyPropertiesFile.exists() &&
+        releaseSigningProperties.all { !keyProperties.getProperty(it).isNullOrBlank() }
+val isReleaseBuildRequested =
+    gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+
+if (isReleaseBuildRequested && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing is not configured. Add android/key.properties with " +
+            releaseSigningProperties.joinToString() + ".",
+    )
+}
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -35,11 +50,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = keyProperties.getProperty("keyAlias")
-            keyPassword = keyProperties.getProperty("keyPassword")
-            storeFile = keyProperties.getProperty("storeFile")?.let { file(it) }
-            storePassword = keyProperties.getProperty("storePassword")
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+                storeFile = keyProperties.getProperty("storeFile").let { file(it) }
+                storePassword = keyProperties.getProperty("storePassword")
+            }
         }
     }
 
@@ -54,7 +71,9 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
