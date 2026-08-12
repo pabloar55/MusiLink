@@ -185,7 +185,7 @@ test('cada usuario solo puede gestionar sus propios tokens push válidos', async
   ));
 });
 
-test('solo el receptor puede aceptar una solicitud pendiente', async () => {
+test('las solicitudes solo se aceptan mediante la callable', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');
   await seed('friend_requests/alice_bob', {
@@ -200,7 +200,7 @@ test('solo el receptor puede aceptar una solicitud pendiente', async () => {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   }));
-  await assertSucceeds(updateDoc(doc(dbFor('bob'), 'friend_requests/alice_bob'), {
+  await assertFails(updateDoc(doc(dbFor('bob'), 'friend_requests/alice_bob'), {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   }));

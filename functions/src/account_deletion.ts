@@ -50,7 +50,6 @@ const phases = [
   'chats',
   'owned_recommendations',
   'referencing_recommendations',
-  'recommendation_index',
   'recommendation_profile',
   'username_reservations',
   'rate_limits',
@@ -409,10 +408,6 @@ async function verifyCleanup(uid: string): Promise<DeletionPhase | undefined> {
       query: db.collectionGroup('recommendations').where('userId', '==', uid),
     },
     {
-      phase: 'recommendation_index',
-      query: db.collectionGroup('users').where('uid', '==', uid),
-    },
-    {
       phase: 'username_reservations',
       query: db.collection('usernames').where('uid', '==', uid),
     },
@@ -515,11 +510,7 @@ async function processPhase(uid: string, job: DeletionJob): Promise<PhaseResult>
       const count = await commitDeletes(
         db.collectionGroup('recommendations').where('userId', '==', uid),
       );
-      return { nextPhase: count === batchSize ? 'referencing_recommendations' : 'recommendation_index', processed: count };
-    }
-    case 'recommendation_index': {
-      const count = await commitDeletes(db.collectionGroup('users').where('uid', '==', uid));
-      return { nextPhase: count === batchSize ? 'recommendation_index' : 'recommendation_profile', processed: count };
+      return { nextPhase: count === batchSize ? 'referencing_recommendations' : 'recommendation_profile', processed: count };
     }
     case 'recommendation_profile':
       await db.doc(`music_recommendation_profiles/${uid}`).delete();

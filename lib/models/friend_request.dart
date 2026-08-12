@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum FriendRequestStatus { pending, accepted, rejected }
+enum FriendRequestStatus { pending }
 
 class FriendRequest {
   final String id;
@@ -29,10 +29,8 @@ class FriendRequest {
         (e) => e.name == (data['status'] ?? 'pending').toString(),
         orElse: () => FriendRequestStatus.pending,
       ),
-      createdAt:
-          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt:
-          (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 

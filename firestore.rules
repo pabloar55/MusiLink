@@ -122,8 +122,6 @@ service cloud.firestore {
         && (!('createdAt' in data) || data.createdAt is timestamp)
         && (!('lastLogin' in data) || data.lastLogin is timestamp)
         && (!('deletedAt' in data) || data.deletedAt is timestamp)
-        && (!('fcmToken' in data)
-          || data.fcmToken is string && data.fcmToken.toUtf8().size() <= 4096)
         && (!('preferredLocale' in data)
           || data.preferredLocale in ['en', 'es', 'fr'])
         && (!('notifSound' in data) || data.notifSound is bool)
@@ -235,7 +233,6 @@ service cloud.firestore {
             'lastLogin',
             'friends',
             'blockedUsers',
-            'fcmToken',
             'preferredLocale',
             'deletedAt',
             'notifSound',
@@ -301,15 +298,8 @@ service cloud.firestore {
         && canUsersInteract(request.resource.data.senderId, request.resource.data.receiverId)
         && requestId == request.resource.data.senderId + '_' + request.resource.data.receiverId
         && !exists(/databases/$(database)/documents/friend_requests/$(request.resource.data.receiverId + '_' + request.resource.data.senderId));
-      // Solo el destinatario puede aceptar una solicitud pendiente. Rechazar y
-      // cancelar se implementan borrando el documento.
-      allow update: if request.auth != null
-        && request.auth.uid == resource.data.receiverId
-        && resource.data.status == 'pending'
-        && request.resource.data.status == 'accepted'
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
-        && canUsersInteract(resource.data.senderId, resource.data.receiverId);
+      // La aceptación se realiza exclusivamente mediante acceptFriendRequest.
+      allow update: if false;
       // Ambos pueden eliminar
       allow delete: if request.auth != null
         && (resource == null
@@ -381,18 +371,6 @@ service cloud.firestore {
         && after.unreadCounts.diff(before.unreadCounts).affectedKeys().hasOnly([readerId])
         && after.unreadCounts[readerId] == 0
         && after.unreadCounts[otherId] == before.unreadCounts[otherId];
-    }
-
-    function chatDeletedFor(chat, userId) {
-      return chat.get('deletedAt', {}).get(userId, null) is timestamp
-        && chat.lastMessageTime <= chat.get('deletedAt', {}).get(userId, request.time);
-    }
-
-    function fullySoftDeletedChat(chat) {
-      return chat.participants is list
-        && chat.participants.size() == 2
-        && chatDeletedFor(chat, chat.participants[0])
-        && chatDeletedFor(chat, chat.participants[1]);
     }
 
     function messageRateLimitAllows(userId) {
@@ -614,9 +592,6 @@ service cloud.firestore {
           )
         );
 
-      // Compatibilidad: clientes antiguos pueden intentar borrar el doc del chat
-      // durante limpieza de cuenta o despues de un borrado suave doble. Cloud
-      // Functions restaura chats no vacios que no estaban borrados por ambos.
       allow delete: if false;
 
       // ─── Mensajes (subcolección) ────────────────────
@@ -711,15 +686,8 @@ service cloud.firestore {
             )
           );
 
-        // El remitente puede eliminar sus propios mensajes. Si ambos usuarios
-        // borraron el chat, un cliente antiguo tambien puede completar la
-        // limpieza fisica; Cloud Functions hace el mismo trabajo para clientes nuevos.
-        allow delete: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
-          && (
-            resource.data.senderId == request.auth.uid
-            || fullySoftDeletedChat(get(/databases/$(database)/documents/chats/$(chatId)).data)
-          );
+        // La limpieza física la realiza exclusivamente el backend.
+        allow delete: if false;
       }
     }
 

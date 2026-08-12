@@ -31,7 +31,6 @@ const messaging = getMessaging();
 const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
-const recommendationIndexCollection = 'music_recommendation_index';
 const recommendationProfilesCollection = 'music_recommendation_profiles';
 const recommendationsCollection = 'recommendations';
 const chatsCollection = 'chats';
@@ -40,7 +39,6 @@ const dailySongLifetimeMs = 24 * 60 * 60 * 1000;
 const dailySongExpiryBatchSize = 200;
 const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
 const maxRecommendationInputArtists = 30;
-const maxLegacyRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
 const maxArtistCandidateProfiles = 300;
 const maxGenreCandidateProfiles = 100;
@@ -57,14 +55,7 @@ interface AcceptedFriendship {
   receiverId: string;
 }
 
-type TokenType = 'artist' | 'genre';
 type SupportedLocale = 'en' | 'es' | 'fr';
-
-interface MusicToken {
-  key: string;
-  type: TokenType;
-  value: string;
-}
 
 interface UserMusicProfile {
   topArtistNames: string[];
@@ -191,14 +182,7 @@ async function sendNotification(
     .collection(pushTokensSubcollection)
     .limit(20)
     .get();
-  const targets = new Map<
-    string,
-    DocumentReference | undefined
-  >();
-  const legacyToken = recipientPrivateData?.fcmToken;
-  if (typeof legacyToken === 'string' && legacyToken.length > 0) {
-    targets.set(legacyToken, undefined);
-  }
+  const targets = new Map<string, DocumentReference>();
   for (const tokenDoc of pushTokensSnapshot.docs) {
     const token = tokenDoc.data().token;
     if (typeof token === 'string' && token.length > 0) {
@@ -263,18 +247,7 @@ async function sendNotification(
       } catch (error: unknown) {
         const fcmError = error as { code?: string };
         if (fcmError.code === 'messaging/registration-token-not-registered') {
-          if (tokenRef) {
-            await tokenRef.delete();
-          } else {
-            await db.runTransaction(async (transaction) => {
-              const current = await transaction.get(privateUserRef);
-              if (current.data()?.fcmToken === token) {
-                transaction.update(privateUserRef, {
-                  fcmToken: FieldValue.delete(),
-                });
-              }
-            });
-          }
+          await tokenRef.delete();
           return;
         }
         logger.error('sendNotification: unexpected FCM error', {
@@ -609,14 +582,6 @@ function recommendationRefreshRequested(
   return afterMillis !== undefined && afterMillis !== beforeMillis;
 }
 
-function tokenKey(type: TokenType, value: string): string {
-  const tokenValue =
-    type === 'artist' && value.startsWith('spotify:')
-      ? value
-      : value.toLowerCase();
-  return `${type}_${Buffer.from(tokenValue, 'utf8').toString('base64url')}`;
-}
-
 function normalizedMusicKey(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -772,26 +737,6 @@ function similarityScore(
   return Math.max(coverage, evidence) * weight;
 }
 
-function musicTokens(profile: UserMusicProfile): MusicToken[] {
-  const tokens = [
-    ...artistIdentities(profile).flatMap((artist) => [
-      artist.key,
-      `name:${artist.normalizedName}`,
-      artist.name,
-    ].map((value) => ({
-      key: tokenKey('artist', value),
-      type: 'artist' as const,
-      value,
-    }))),
-    ...profile.topGenreNames.map((value) => ({
-      key: tokenKey('genre', value),
-      type: 'genre' as const,
-      value,
-    })),
-  ];
-  return [...new Map(tokens.map((token) => [token.key, token])).values()];
-}
-
 function artistMatchKeys(profile: UserMusicProfile): string[] {
   return [...new Set(
     artistIdentities(profile)
@@ -889,14 +834,6 @@ async function findCandidateProfiles(
   };
 }
 
-function indexUserRef(token: MusicToken, uid: string): DocumentReference {
-  return db
-    .collection(recommendationIndexCollection)
-    .doc(token.key)
-    .collection('users')
-    .doc(uid);
-}
-
 function userDocRef(uid: string): DocumentReference {
   return db.collection('users').doc(uid);
 }
@@ -982,53 +919,6 @@ async function updateStoredProfileSnapshots(
     uid,
     recommendationCount: recommendations.size,
   });
-}
-
-async function updateRecommendationIndex(
-  uid: string,
-  before: UserMusicProfile,
-  after: UserMusicProfile,
-): Promise<void> {
-  const legacyBefore = {
-    topArtistNames: before.topArtistNames.slice(0, maxLegacyRecommendationInputArtists),
-    topArtistKeys: before.topArtistKeys.slice(0, maxLegacyRecommendationInputArtists),
-    topGenreNames: before.topGenreNames,
-  };
-  const legacyAfter = {
-    topArtistNames: after.topArtistNames.slice(0, maxLegacyRecommendationInputArtists),
-    topArtistKeys: after.topArtistKeys.slice(0, maxLegacyRecommendationInputArtists),
-    topGenreNames: after.topGenreNames,
-  };
-  if (!musicProfileChanged(legacyBefore, legacyAfter)) return;
-
-  const previousTokens = new Map(
-    musicTokens(legacyBefore).map((token) => [token.key, token]),
-  );
-  const nextTokens = new Map(
-    musicTokens(legacyAfter).map((token) => [token.key, token]),
-  );
-  const now = FieldValue.serverTimestamp();
-  const operations: Array<(batch: WriteBatch) => void> = [];
-
-  for (const [key, token] of previousTokens) {
-    if (!nextTokens.has(key)) {
-      operations.push((batch) => batch.delete(indexUserRef(token, uid)));
-    }
-  }
-
-  for (const token of nextTokens.values()) {
-    operations.push((batch) => batch.set(indexUserRef(token, uid), {
-      uid,
-      tokenType: token.type,
-      tokenValue: token.value,
-      topArtistNames: legacyAfter.topArtistNames,
-      topArtistKeys: legacyAfter.topArtistKeys,
-      topGenreNames: legacyAfter.topGenreNames,
-      updatedAt: now,
-    }));
-  }
-
-  if (operations.length > 0) await commitBatches(operations);
 }
 
 async function updateRecommendationProfile(
@@ -1234,14 +1124,7 @@ async function rebuildMusicRecommendations(
   const reciprocalCandidates = profileChanged
     ? await matchingCandidateProfiles(uid, [before, after])
     : new Map<string, CandidateProfile>();
-  if (profileChanged) {
-    // Keep the legacy index current during the rollback window. It can be
-    // removed after the compact index migration has been verified.
-    await Promise.all([
-      updateRecommendationIndex(uid, before, after),
-      updateRecommendationProfile(uid, after),
-    ]);
-  }
+  if (profileChanged) await updateRecommendationProfile(uid, after);
   await refreshRecommendations(uid, after);
   if (profileChanged) {
     await updateReciprocalRecommendations(uid, after, profileSnapshot, reciprocalCandidates);
@@ -1284,15 +1167,11 @@ export const onNewMessage = onDocumentCreated(
         const updates: UpdateData<DocumentData> = {};
         const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
         const summary = messageSummary(currentMessage);
-        const legacyClientAlreadyAppliedSummary =
-          currentLastMessageTime?.seconds === messageTime.seconds &&
-          currentLastMessageTime.nanoseconds === messageTime.nanoseconds &&
-          chatData.lastMessage === summary;
         if (!currentLastMessageTime || messageTime.toMillis() >= currentLastMessageTime.toMillis()) {
           updates.lastMessage = summary;
           updates.lastMessageTime = messageTime;
         }
-        if (currentMessage.read !== true && !legacyClientAlreadyAppliedSummary) {
+        if (currentMessage.read !== true) {
           updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
         }
 
@@ -1502,8 +1381,8 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       const senderId = after.senderId as string;
       const receiverId = after.receiverId as string;
 
-      // Defensa en profundidad para clientes antiguos que aún actualicen el
-      // documento directamente: el Admin SDK crea ambos lados de la amistad.
+      // La callable marca la solicitud como aceptada; este trigger completa
+      // ambos lados de la amistad y envía la notificación.
       try {
         await establishAcceptedFriendship(event.params.requestId, receiverId);
       } catch (error) {
@@ -1642,44 +1521,7 @@ export const onChatSoftDeleted = onDocumentUpdated(
   },
 );
 
-// Si un cliente antiguo borra el documento del chat directamente, no rompemos
-// la app: si ya no quedan mensajes o ambos lo habian borrado, dejamos que
-// desaparezca; si aun quedan mensajes y no habia borrado suave doble, se
-// restaura el doc del chat para que la conversacion siga disponible.
-export const onChatDeleted = onDocumentDeleted(
-  { document: `${chatsCollection}/{chatId}`, region: 'europe-southwest1' },
-  async (event) => {
-    try {
-      const chatData = event.data?.data();
-      if (!chatData || fullySoftDeletedChat(chatData)) return;
-
-      const chatRef = db.doc(event.document);
-      const latest = await latestMessageSnapshot(chatRef);
-      if (!latest) return;
-
-      const latestData = latest.data();
-      await chatRef.set({
-        ...chatData,
-        lastMessage: messageSummary(latestData),
-        lastMessageTime: timestampValue(latestData.timestamp) ??
-          timestampValue(chatData.lastMessageTime) ??
-          FieldValue.serverTimestamp(),
-      });
-
-      logger.warn('onChatDeleted: restored non-empty chat deleted by client', {
-        chatId: event.params.chatId,
-      });
-    } catch (error) {
-      logger.error('onChatDeleted: unhandled error', {
-        chatId: event.params.chatId,
-        error,
-      });
-      throw error;
-    }
-  },
-);
-
-// Cuando se borran mensajes (por limpieza de cuenta o por un cliente antiguo),
+// Cuando se borran mensajes durante la limpieza de una cuenta,
 // el resumen del chat se mantiene coherente. Si el chat queda vacio, el backend
 // elimina el documento padre.
 export const onChatMessageDeleted = onDocumentDeleted(

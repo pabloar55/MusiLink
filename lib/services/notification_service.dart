@@ -243,13 +243,6 @@ class NotificationService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    String? currentToken;
-    try {
-      currentToken = await _getToken();
-    } catch (_) {
-      // Firestore cleanup below still prevents delivery to this installation.
-    }
-
     // Best-effort: revoke token from FCM. Even if this fails the token
     // will eventually expire; the Firestore cleanup below is what stops
     // immediate notification delivery to a signed-out user.
@@ -259,13 +252,10 @@ class NotificationService {
       await reportError(e, stack);
     }
 
-    await _clearFcmTokenFromFirestore(uid, legacyToken: currentToken);
+    await _clearFcmTokenFromFirestore(uid);
   }
 
-  Future<void> _clearFcmTokenFromFirestore(
-    String uid, {
-    String? legacyToken,
-  }) async {
+  Future<void> _clearFcmTokenFromFirestore(String uid) async {
     try {
       final privateUserRef = _firestore
           .collection(FirestoreCollections.userPrivate)
@@ -276,19 +266,6 @@ class NotificationService {
           .doc(installationId)
           .delete();
 
-      // Remove the legacy single-token field only when it belongs to this
-      // installation. Older app versions can continue receiving during the
-      // migration without being overwritten by a web login.
-      if (legacyToken != null) {
-        await _firestore.runTransaction((transaction) async {
-          final snapshot = await transaction.get(privateUserRef);
-          if (snapshot.data()?['fcmToken'] == legacyToken) {
-            transaction.update(privateUserRef, {
-              'fcmToken': FieldValue.delete(),
-            });
-          }
-        });
-      }
       await _prefs.remove(_pendingClearUidKey);
     } catch (e, stack) {
       await reportError(e, stack);
