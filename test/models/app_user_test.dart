@@ -105,6 +105,22 @@ void main() {
       expect(user!.topArtistKeys, ['spotify:6vWDO969PvNqNYHIOW5v0m']);
     });
 
+    test('fromMap descarta artistas posteriores al puesto 30', () {
+      final user = AppUser.fromMap(
+        uid: 'uid1',
+        data: {
+          'displayName': 'Test User',
+          'topArtistNames': List.generate(50, (index) => 'Artist $index'),
+          'topArtistKeys': List.generate(50, (index) => 'name:artist-$index'),
+        },
+      );
+
+      expect(user, isNotNull);
+      expect(user!.topArtistNames, hasLength(30));
+      expect(user.topArtistKeys, hasLength(30));
+      expect(user.topArtistNames.last, 'Artist 29');
+    });
+
     test('copyWith actualiza dailySong', () {
       final original = createTestUser();
       const track = Track(

@@ -32,15 +32,18 @@ const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
 const friendRequestNotificationLimitsCollection = 'friend_request_notification_limits';
 const recommendationIndexCollection = 'music_recommendation_index';
+const recommendationProfilesCollection = 'music_recommendation_profiles';
 const recommendationsCollection = 'recommendations';
 const chatsCollection = 'chats';
 const messagesCollection = 'messages';
 const dailySongLifetimeMs = 24 * 60 * 60 * 1000;
 const dailySongExpiryBatchSize = 200;
 const friendRequestNotificationCooldownMs = 60 * 60 * 1000;
-const maxRecommendationInputArtists = 15;
+const maxRecommendationInputArtists = 30;
+const maxLegacyRecommendationInputArtists = 15;
 const maxRecommendationInputGenres = 10;
-const maxIndexUsersPerToken = 80;
+const maxArtistCandidateProfiles = 300;
+const maxGenreCandidateProfiles = 100;
 const maxStoredRecommendations = 100;
 const maxReciprocalRecommendationUsers = 100;
 const chatCleanupBatchSize = 400;
@@ -89,6 +92,7 @@ interface RecommendationResult {
 const defaultLocale: SupportedLocale = 'en';
 const supportedLocales = new Set<SupportedLocale>(['en', 'es', 'fr']);
 const recommendationSnapshotVersion = 1;
+const recommendationProfileSchemaVersion = 2;
 
 const notificationText = {
   friendRequest: {
@@ -788,6 +792,103 @@ function musicTokens(profile: UserMusicProfile): MusicToken[] {
   return [...new Map(tokens.map((token) => [token.key, token])).values()];
 }
 
+function artistMatchKeys(profile: UserMusicProfile): string[] {
+  return [...new Set(
+    artistIdentities(profile)
+      .map((artist) => artist.normalizedName)
+      .filter((value) => value.length > 0),
+  )].slice(0, maxRecommendationInputArtists);
+}
+
+function genreMatchKeys(profile: UserMusicProfile): string[] {
+  return [...new Set(
+    profile.topGenreNames
+      .map(normalizedMusicKey)
+      .filter((value) => value.length > 0),
+  )].slice(0, maxRecommendationInputGenres);
+}
+
+function chunks<T>(values: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
+function candidateProfileFromData(
+  uid: string,
+  data: DocumentData,
+): CandidateProfile | undefined {
+  const topArtistNames = stringList(data.topArtistNames)
+    .slice(0, maxRecommendationInputArtists);
+  const topArtistKeys = stringList(data.topArtistKeys)
+    .slice(0, maxRecommendationInputArtists);
+  const topGenreNames = stringList(data.topGenreNames)
+    .slice(0, maxRecommendationInputGenres);
+  if (topArtistNames.length === 0 && topGenreNames.length === 0) return undefined;
+  return { uid, topArtistNames, topArtistKeys, topGenreNames };
+}
+
+async function addCandidateMatches(
+  uid: string,
+  field: 'artistMatchKeys' | 'genreMatchKeys',
+  values: string[],
+  limitPerQuery: number,
+  candidates: Map<string, CandidateProfile>,
+): Promise<number> {
+  if (values.length === 0) return 0;
+
+  const snapshots = await Promise.all(chunks(values, 30).map((page) =>
+    db
+      .collection(recommendationProfilesCollection)
+      .where(field, 'array-contains-any', page)
+      .orderBy('updatedAt', 'desc')
+      .limit(limitPerQuery)
+      .get(),
+  ));
+
+  let documentsRead = 0;
+  for (const snapshot of snapshots) {
+    documentsRead += snapshot.size;
+    for (const doc of snapshot.docs) {
+      if (doc.id === uid || candidates.has(doc.id)) continue;
+      const candidate = candidateProfileFromData(doc.id, doc.data());
+      if (candidate) candidates.set(doc.id, candidate);
+    }
+  }
+  return documentsRead;
+}
+
+async function findCandidateProfiles(
+  uid: string,
+  profiles: UserMusicProfile[],
+): Promise<{ candidates: Map<string, CandidateProfile>; documentsRead: number }> {
+  const artists = [...new Set(profiles.flatMap(artistMatchKeys))];
+  const genres = [...new Set(profiles.flatMap(genreMatchKeys))];
+  const candidates = new Map<string, CandidateProfile>();
+  const [artistDocumentsRead, genreDocumentsRead] = await Promise.all([
+    addCandidateMatches(
+      uid,
+      'artistMatchKeys',
+      artists,
+      maxArtistCandidateProfiles,
+      candidates,
+    ),
+    addCandidateMatches(
+      uid,
+      'genreMatchKeys',
+      genres,
+      maxGenreCandidateProfiles,
+      candidates,
+    ),
+  ]);
+  return {
+    candidates,
+    documentsRead: artistDocumentsRead + genreDocumentsRead,
+  };
+}
+
 function indexUserRef(token: MusicToken, uid: string): DocumentReference {
   return db
     .collection(recommendationIndexCollection)
@@ -888,8 +989,24 @@ async function updateRecommendationIndex(
   before: UserMusicProfile,
   after: UserMusicProfile,
 ): Promise<void> {
-  const previousTokens = new Map(musicTokens(before).map((token) => [token.key, token]));
-  const nextTokens = new Map(musicTokens(after).map((token) => [token.key, token]));
+  const legacyBefore = {
+    topArtistNames: before.topArtistNames.slice(0, maxLegacyRecommendationInputArtists),
+    topArtistKeys: before.topArtistKeys.slice(0, maxLegacyRecommendationInputArtists),
+    topGenreNames: before.topGenreNames,
+  };
+  const legacyAfter = {
+    topArtistNames: after.topArtistNames.slice(0, maxLegacyRecommendationInputArtists),
+    topArtistKeys: after.topArtistKeys.slice(0, maxLegacyRecommendationInputArtists),
+    topGenreNames: after.topGenreNames,
+  };
+  if (!musicProfileChanged(legacyBefore, legacyAfter)) return;
+
+  const previousTokens = new Map(
+    musicTokens(legacyBefore).map((token) => [token.key, token]),
+  );
+  const nextTokens = new Map(
+    musicTokens(legacyAfter).map((token) => [token.key, token]),
+  );
   const now = FieldValue.serverTimestamp();
   const operations: Array<(batch: WriteBatch) => void> = [];
 
@@ -904,14 +1021,38 @@ async function updateRecommendationIndex(
       uid,
       tokenType: token.type,
       tokenValue: token.value,
-      topArtistNames: after.topArtistNames,
-      topArtistKeys: after.topArtistKeys,
-      topGenreNames: after.topGenreNames,
+      topArtistNames: legacyAfter.topArtistNames,
+      topArtistKeys: legacyAfter.topArtistKeys,
+      topGenreNames: legacyAfter.topGenreNames,
       updatedAt: now,
     }));
   }
 
   if (operations.length > 0) await commitBatches(operations);
+}
+
+async function updateRecommendationProfile(
+  uid: string,
+  profile: UserMusicProfile,
+): Promise<void> {
+  const ref = db.collection(recommendationProfilesCollection).doc(uid);
+  const artistKeys = artistMatchKeys(profile);
+  const genreKeys = genreMatchKeys(profile);
+  if (artistKeys.length === 0 && genreKeys.length === 0) {
+    await ref.delete();
+    return;
+  }
+
+  await ref.set({
+    uid,
+    schemaVersion: recommendationProfileSchemaVersion,
+    artistMatchKeys: artistKeys,
+    genreMatchKeys: genreKeys,
+    topArtistNames: profile.topArtistNames,
+    topArtistKeys: profile.topArtistKeys,
+    topGenreNames: profile.topGenreNames,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 function calculateRecommendation(
@@ -977,10 +1118,9 @@ async function deleteStaleRecommendations(
 }
 
 async function refreshRecommendations(uid: string, profile: UserMusicProfile): Promise<void> {
-  const tokens = musicTokens(profile);
   const generatedAt = Timestamp.now();
 
-  if (tokens.length === 0) {
+  if (profile.topArtistNames.length === 0 && profile.topGenreNames.length === 0) {
     await deleteExistingRecommendations(uid);
     await userDocRef(uid).update({
       recommendationsGeneratedAt: generatedAt,
@@ -989,29 +1129,7 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
     return;
   }
 
-  const snapshots = await Promise.all(tokens.map((token) =>
-    db
-      .collection(recommendationIndexCollection)
-      .doc(token.key)
-      .collection('users')
-      .orderBy('updatedAt', 'desc')
-      .limit(maxIndexUsersPerToken)
-      .get(),
-  ));
-
-  const candidates = new Map<string, CandidateProfile>();
-  for (const snapshot of snapshots) {
-    for (const doc of snapshot.docs) {
-      if (doc.id === uid || candidates.has(doc.id)) continue;
-      const data = doc.data();
-      candidates.set(doc.id, {
-        uid: doc.id,
-        topArtistNames: stringList(data.topArtistNames),
-        topArtistKeys: stringList(data.topArtistKeys),
-        topGenreNames: stringList(data.topGenreNames),
-      });
-    }
-  }
+  const { candidates, documentsRead } = await findCandidateProfiles(uid, [profile]);
 
   const calculatedRecommendations = [...candidates.values()]
     .map((candidate) => calculateRecommendation(profile, candidate))
@@ -1051,6 +1169,7 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
 
   logger.info('refreshRecommendations: generated recommendations', {
     uid,
+    candidateDocumentsRead: documentsRead,
     candidateCount: candidates.size,
     recommendationCount: recommendations.length,
   });
@@ -1060,40 +1179,8 @@ async function matchingCandidateProfiles(
   uid: string,
   profiles: UserMusicProfile[],
 ): Promise<Map<string, CandidateProfile>> {
-  const tokenMap = new Map<string, MusicToken>();
-  profiles
-    .flatMap((profile) => musicTokens(profile))
-    .forEach((token) => tokenMap.set(token.key, token));
-
-  const tokens = [...tokenMap.values()];
-  if (tokens.length === 0) return new Map();
-
-  const snapshots = await Promise.all(tokens.map((token) =>
-    db
-      .collection(recommendationIndexCollection)
-      .doc(token.key)
-      .collection('users')
-      .orderBy('updatedAt', 'desc')
-      .limit(maxIndexUsersPerToken)
-      .get(),
-  ));
-
-  const candidates = new Map<string, CandidateProfile>();
-  for (const snapshot of snapshots) {
-    for (const doc of snapshot.docs) {
-      if (doc.id === uid || candidates.has(doc.id)) continue;
-      const data = doc.data();
-      candidates.set(doc.id, {
-        uid: doc.id,
-        topArtistNames: stringList(data.topArtistNames),
-        topArtistKeys: stringList(data.topArtistKeys),
-        topGenreNames: stringList(data.topGenreNames),
-      });
-      if (candidates.size >= maxReciprocalRecommendationUsers) return candidates;
-    }
-  }
-
-  return candidates;
+  const { candidates } = await findCandidateProfiles(uid, profiles);
+  return new Map([...candidates.entries()].slice(0, maxReciprocalRecommendationUsers));
 }
 
 async function updateReciprocalRecommendations(
@@ -1147,7 +1234,14 @@ async function rebuildMusicRecommendations(
   const reciprocalCandidates = profileChanged
     ? await matchingCandidateProfiles(uid, [before, after])
     : new Map<string, CandidateProfile>();
-  if (profileChanged) await updateRecommendationIndex(uid, before, after);
+  if (profileChanged) {
+    // Keep the legacy index current during the rollback window. It can be
+    // removed after the compact index migration has been verified.
+    await Promise.all([
+      updateRecommendationIndex(uid, before, after),
+      updateRecommendationProfile(uid, after),
+    ]);
+  }
   await refreshRecommendations(uid, after);
   if (profileChanged) {
     await updateReciprocalRecommendations(uid, after, profileSnapshot, reciprocalCandidates);

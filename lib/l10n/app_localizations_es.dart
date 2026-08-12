@@ -326,12 +326,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artistSelectorTitle => 'Mis Top Artistas';
 
   @override
-  String artistSelectorSubtitle(int count) {
+  String artistSelectorSubtitle(int count, int max) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count artistas · cuantos más, mejor compatibilidad',
-      one: '1 artista · cuantos más, mejor compatibilidad',
+      other: '$count de $max artistas seleccionados · arrastra para ordenar',
+      one: '1 de $max artistas seleccionado · arrastra para ordenar',
     );
     return '$_temp0';
   }

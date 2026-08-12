@@ -327,14 +327,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get artistSelectorTitle => 'Οι Κορυφαίοι Καλλιτέχνες μου';
 
   @override
-  String artistSelectorSubtitle(int count) {
+  String artistSelectorSubtitle(int count, int max) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count καλλιτέχνες · όσο περισσότερους προσθέτετε, τόσο καλύτερες οι αντιστοιχίσεις',
-      one:
-          '1 καλλιτέχνης · όσο περισσότερους προσθέτετε, τόσο καλύτερες οι αντιστοιχίσεις',
+      other: '$count από $max καλλιτέχνες επιλέχθηκαν · σύρετε για κατάταξη',
+      one: '1 από $max καλλιτέχνες επιλέχθηκε · σύρετε για κατάταξη',
     );
     return '$_temp0';
   }

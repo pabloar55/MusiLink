@@ -92,7 +92,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   void _showWriteError(FirebaseException? error) {
     final l10n = AppLocalizations.of(context)!;
-    final message = error?.code == 'permission-denied'
+    final message = error?.code == 'resource-exhausted'
         ? l10n.authErrorTooManyRequests
         : l10n.genericError;
     ScaffoldMessenger.of(
@@ -138,9 +138,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       ref.invalidate(relationshipProvider(widget.user.uid));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            l10n.blockUserBlockedSnackbar(widget.user.displayName),
-          ),
+          content: Text(l10n.blockUserBlockedSnackbar(widget.user.displayName)),
         ),
       );
     } catch (_) {
@@ -244,9 +242,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                           ? _ProfileMenuAction.unblock
                           : _ProfileMenuAction.block,
                       child: Text(
-                        isBlocked
-                            ? l10n.blockUserUnblock
-                            : l10n.blockUserBlock,
+                        isBlocked ? l10n.blockUserUnblock : l10n.blockUserBlock,
                       ),
                     ),
                   ],

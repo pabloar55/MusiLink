@@ -131,10 +131,11 @@
   "socialUser": "Χρήστης",
 
   "artistSelectorTitle": "Οι Κορυφαίοι Καλλιτέχνες μου",
-  "artistSelectorSubtitle": "{count, plural, =1{1 καλλιτέχνης · όσο περισσότερους προσθέτετε, τόσο καλύτερες οι αντιστοιχίσεις} other{{count} καλλιτέχνες · όσο περισσότερους προσθέτετε, τόσο καλύτερες οι αντιστοιχίσεις}}",
+  "artistSelectorSubtitle": "{count, plural, =1{1 από {max} καλλιτέχνες επιλέχθηκε · σύρετε για κατάταξη} other{{count} από {max} καλλιτέχνες επιλέχθηκαν · σύρετε για κατάταξη}}",
   "@artistSelectorSubtitle": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": { "type": "int" },
+      "max": { "type": "int" }
     }
   },
   "artistSelectorSearchHint": "Αναζήτηση καλλιτεχνών...",

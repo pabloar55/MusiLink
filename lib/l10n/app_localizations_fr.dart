@@ -331,13 +331,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get artistSelectorTitle => 'Mes Top Artistes';
 
   @override
-  String artistSelectorSubtitle(int count) {
+  String artistSelectorSubtitle(int count, int max) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other:
-          '$count artistes · plus vous en ajoutez, meilleure est la compatibilité',
-      one: '1 artiste · plus vous en ajoutez, meilleure est la compatibilité',
+          '$count artistes sur $max sélectionnés · faites glisser pour classer',
+      one: '1 artiste sur $max sélectionné · faites glisser pour classer',
     );
     return '$_temp0';
   }

@@ -47,6 +47,20 @@ class FriendService with AuthenticatedService {
       _firestore.collection(FirestoreCollections.rateLimits);
 
   static const Duration _friendRequestRateLimitWindow = Duration(minutes: 10);
+  static const int _maxFriendRequestsPerWindow = 20;
+
+  bool _friendRequestRateLimitReached(
+    DocumentSnapshot<Map<String, dynamic>> snap,
+  ) {
+    final data = snap.data() ?? const <String, dynamic>{};
+    final windowStart = data['friendRequestWindowStart'] as Timestamp?;
+    final count = (data['friendRequestCount'] as int?) ?? 0;
+    if (windowStart == null || count < _maxFriendRequestsPerWindow) {
+      return false;
+    }
+    return DateTime.now().difference(windowStart.toDate()) <=
+        _friendRequestRateLimitWindow;
+  }
 
   Map<String, Object?> _nextFriendRequestRateLimit(
     DocumentSnapshot<Map<String, dynamic>> snap,
@@ -124,6 +138,13 @@ class FriendService with AuthenticatedService {
         if (snapshot.exists) return;
 
         final limiterSnap = await tx.get(limiterRef);
+        if (_friendRequestRateLimitReached(limiterSnap)) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'resource-exhausted',
+            message: 'Friend request rate limit reached.',
+          );
+        }
         tx.set(docRef, {
           ...request.toFirestore(),
           'createdAt': FieldValue.serverTimestamp(),

@@ -51,6 +51,7 @@ const phases = [
   'owned_recommendations',
   'referencing_recommendations',
   'recommendation_index',
+  'recommendation_profile',
   'username_reservations',
   'rate_limits',
   'storage',
@@ -419,6 +420,9 @@ async function verifyCleanup(uid: string): Promise<DeletionPhase | undefined> {
   for (const check of checks) {
     if (!(await check.query.limit(1).get()).empty) return check.phase;
   }
+  if ((await db.doc(`music_recommendation_profiles/${uid}`).get()).exists) {
+    return 'recommendation_profile';
+  }
   for (let index = 0; index < reactionEmojis.length; index += 1) {
     const emoji = reactionEmojis[index];
     const snapshot = await db
@@ -515,8 +519,11 @@ async function processPhase(uid: string, job: DeletionJob): Promise<PhaseResult>
     }
     case 'recommendation_index': {
       const count = await commitDeletes(db.collectionGroup('users').where('uid', '==', uid));
-      return { nextPhase: count === batchSize ? 'recommendation_index' : 'username_reservations', processed: count };
+      return { nextPhase: count === batchSize ? 'recommendation_index' : 'recommendation_profile', processed: count };
     }
+    case 'recommendation_profile':
+      await db.doc(`music_recommendation_profiles/${uid}`).delete();
+      return { nextPhase: 'username_reservations', processed: 1 };
     case 'username_reservations': {
       const count = await commitDeletes(db.collection('usernames').where('uid', '==', uid));
       return { nextPhase: count === batchSize ? 'username_reservations' : 'rate_limits', processed: count };

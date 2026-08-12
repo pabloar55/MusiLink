@@ -7,6 +7,7 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 const EXPECTED_PROJECT_ID = 'musi-link-e7759';
 const ARTIST_IDENTITY_VERSION = 1;
+const MAX_ARTISTS = 30;
 const WRITE_BATCH_SIZE = 400;
 const DEFAULT_REPORT_PATH = 'artist-key-migration-report.json';
 
@@ -84,12 +85,12 @@ function stringList(value) {
     .filter((item) => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean)
-    .slice(0, 50);
+    .slice(0, MAX_ARTISTS);
 }
 
 function rawArtists(value) {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 50).map((artist) => {
+  return value.slice(0, MAX_ARTISTS).map((artist) => {
     if (!artist || typeof artist !== 'object') return { name: '', spotifyId: '' };
     return {
       name: typeof artist.name === 'string' ? artist.name.trim() : '',

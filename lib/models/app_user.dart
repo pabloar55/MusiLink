@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:musi_link/models/artist.dart';
 import 'package:musi_link/models/genre.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/utils/music_profile_limits.dart';
 
 class AppUser {
   static const deletedDisplayName = 'Deleted user';
@@ -69,26 +70,31 @@ class AppUser {
       topArtists:
           (data['topArtists'] as List<dynamic>?)
               ?.map((e) => Artist.fromMap(e as Map<String, dynamic>))
+              .take(MusicProfileLimits.maxArtists)
               .toList() ??
           [],
       topGenres:
           (data['topGenres'] as List<dynamic>?)
               ?.map((e) => Genre.fromMap(e as Map<String, dynamic>))
+              .take(MusicProfileLimits.maxGenres)
               .toList() ??
           [],
       topArtistNames:
           (data['topArtistNames'] as List<dynamic>?)
               ?.map((e) => e.toString())
+              .take(MusicProfileLimits.maxArtists)
               .toList() ??
           [],
       topArtistKeys:
           (data['topArtistKeys'] as List<dynamic>?)
               ?.map((e) => e.toString())
+              .take(MusicProfileLimits.maxArtists)
               .toList() ??
           [],
       topGenreNames:
           (data['topGenreNames'] as List<dynamic>?)
               ?.map((e) => e.toString())
+              .take(MusicProfileLimits.maxGenres)
               .toList() ??
           [],
       musicDataUpdatedAt: (data['musicDataUpdatedAt'] as Timestamp?)?.toDate(),

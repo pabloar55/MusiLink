@@ -4,14 +4,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isActiveUser(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
-        && get(/databases/$(database)/documents/users/$(userId)).data.username != 'deleted_user'
+      // `get()` falla de forma cerrada si el perfil no existe, por lo que un
+      // `exists()` previo solo consumiría otra llamada de acceso de reglas.
+      return get(/databases/$(database)/documents/users/$(userId))
+          .data.get('username', 'deleted_user') != 'deleted_user'
         && !exists(/databases/$(database)/documents/account_deletions/$(userId));
     }
 
     function hasBlocked(blockerId, blockedId) {
-      return exists(/databases/$(database)/documents/user_private/$(blockerId))
-        && get(/databases/$(database)/documents/user_private/$(blockerId))
+      // Igual que isActiveUser, un perfil privado ausente deniega la operación.
+      return get(/databases/$(database)/documents/user_private/$(blockerId))
           .data
           .get('blockedUsers', [])
           .hasAny([blockedId]);
@@ -26,9 +28,7 @@ service cloud.firestore {
     }
 
     function areMutualFriends(userA, userB) {
-      return exists(/databases/$(database)/documents/user_private/$(userA))
-        && exists(/databases/$(database)/documents/user_private/$(userB))
-        && get(/databases/$(database)/documents/user_private/$(userA))
+      return get(/databases/$(database)/documents/user_private/$(userA))
           .data.get('friends', []).hasAny([userB])
         && get(/databases/$(database)/documents/user_private/$(userB))
           .data.get('friends', []).hasAny([userA]);
@@ -64,13 +64,13 @@ service cloud.firestore {
         && (!('spotifyId' in data)
           || data.spotifyId is string && data.spotifyId.toUtf8().size() <= 128)
         && (!('topArtists' in data)
-          || data.topArtists is list && data.topArtists.size() <= 50)
+          || data.topArtists is list && data.topArtists.size() <= 30)
         && (!('topGenres' in data)
           || data.topGenres is list && data.topGenres.size() <= 10)
         && (!('topArtistNames' in data)
-          || data.topArtistNames is list && data.topArtistNames.size() <= 50)
+          || data.topArtistNames is list && data.topArtistNames.size() <= 30)
         && (!('topArtistKeys' in data)
-          || data.topArtistKeys is list && data.topArtistKeys.size() <= 50)
+          || data.topArtistKeys is list && data.topArtistKeys.size() <= 30)
         && (!('topGenreNames' in data)
           || data.topGenreNames is list && data.topGenreNames.size() <= 10)
         && (!('artistIdentityVersion' in data)
@@ -267,6 +267,11 @@ service cloud.firestore {
       }
     }
 
+    // Índice interno mantenido exclusivamente por Cloud Functions/Admin SDK.
+    match /music_recommendation_profiles/{userId} {
+      allow read, write: if false;
+    }
+
     // ─── Solicitudes de amistad ───────────────────────────
     match /friend_requests/{requestId} {
       // Solo el remitente o destinatario puede leer.
@@ -293,7 +298,6 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && friendRequestRateLimitAllows(request.auth.uid)
-        && isActiveUser(request.resource.data.receiverId)
         && canUsersInteract(request.resource.data.senderId, request.resource.data.receiverId)
         && requestId == request.resource.data.senderId + '_' + request.resource.data.receiverId
         && !exists(/databases/$(database)/documents/friend_requests/$(request.resource.data.receiverId + '_' + request.resource.data.senderId));

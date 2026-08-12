@@ -261,6 +261,67 @@ void main() {
         expect(fakeTransaction.updates, isEmpty);
       });
 
+      test('distingue el rate limit real de otros permission-denied', () async {
+        final fakeTransaction = FakeTransaction();
+        mockFirestore.fakeTransaction = fakeTransaction;
+
+        final mockCurrentUserDoc = MockDocumentReference();
+        final mockReceiverUserDoc = MockDocumentReference();
+        when(
+          () => mockUsersRef.doc('current_uid'),
+        ).thenReturn(mockCurrentUserDoc);
+        when(
+          () => mockUsersRef.doc('receiver_uid'),
+        ).thenReturn(mockReceiverUserDoc);
+        final mockCurrentUserSnap = MockDocumentSnapshot();
+        when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
+        final mockReceiverPublicSnap = MockDocumentSnapshot();
+        when(() => mockReceiverPublicSnap.exists).thenReturn(true);
+        when(
+          () => mockReceiverPublicSnap.data(),
+        ).thenReturn({'username': 'receiver'});
+        final mockInverseDocSnap = MockDocumentSnapshot();
+        when(() => mockInverseDocSnap.exists).thenReturn(false);
+        final mockDocSnap = MockDocumentSnapshot();
+        when(() => mockDocSnap.exists).thenReturn(false);
+        final mockRateLimitSnap = MockDocumentSnapshot();
+        when(() => mockRateLimitSnap.data()).thenReturn({
+          'friendRequestWindowStart': Timestamp.now(),
+          'friendRequestCount': 20,
+        });
+        fakeTransaction.getResults.addAll([
+          mockReceiverPublicSnap,
+          mockCurrentUserSnap,
+          mockInverseDocSnap,
+          mockDocSnap,
+          mockRateLimitSnap,
+        ]);
+
+        final mockDocRef = MockDocumentReference();
+        final mockInverseDocRef = MockDocumentReference();
+        when(
+          () => mockRequestsRef.doc('current_uid_receiver_uid'),
+        ).thenReturn(mockDocRef);
+        when(
+          () => mockRequestsRef.doc('receiver_uid_current_uid'),
+        ).thenReturn(mockInverseDocRef);
+        final mockRateLimitDocRef = MockDocumentReference();
+        when(
+          () => mockRateLimitsRef.doc('current_uid'),
+        ).thenReturn(mockRateLimitDocRef);
+
+        expect(
+          () => friendService.sendRequest('receiver_uid'),
+          throwsA(
+            isA<FirebaseException>().having(
+              (error) => error.code,
+              'code',
+              'resource-exhausted',
+            ),
+          ),
+        );
+      });
+
       test('propaga error si Firestore falla', () async {
         when(
           () => mockRequestsRef.doc(any()),

@@ -12,6 +12,7 @@ import 'package:musi_link/utils/artist_identity.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/genre_normalizer.dart';
+import 'package:musi_link/utils/music_profile_limits.dart';
 
 class MusicProfileService with AuthenticatedService {
   MusicProfileService(
@@ -82,9 +83,12 @@ class MusicProfileService with AuthenticatedService {
   ) async {
     try {
       final artists = await _hydrateMissingArtistDetails(
-        selectedArtists.take(50).toList(),
+        selectedArtists.take(MusicProfileLimits.maxArtists).toList(),
       );
-      final genres = _musicCatalogService.getTopGenresFromArtists(artists, 10);
+      final genres = _musicCatalogService.getTopGenresFromArtists(
+        artists,
+        MusicProfileLimits.maxGenres,
+      );
       final updatedAt = FieldValue.serverTimestamp();
 
       await _usersRef.doc(uid).update({
@@ -455,9 +459,14 @@ class MusicProfileService with AuthenticatedService {
     required List<String> myGenreNames,
     required AppUser otherUser,
   }) {
-    final myArtists = _uniqueArtistIdentities(myArtistNames, myArtistKeys);
+    final myArtists = _uniqueArtistIdentities(
+      myArtistNames.take(MusicProfileLimits.maxArtists).toList(growable: false),
+      myArtistKeys,
+    );
     final otherArtists = _uniqueArtistIdentities(
-      otherUser.topArtistNames,
+      otherUser.topArtistNames
+          .take(MusicProfileLimits.maxArtists)
+          .toList(growable: false),
       otherUser.topArtistKeys,
     );
     final myUniqueGenreNames = _uniqueGenreNames(myGenreNames);

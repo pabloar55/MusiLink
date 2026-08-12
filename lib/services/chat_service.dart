@@ -103,7 +103,8 @@ class ChatService with AuthenticatedService {
   }
 
   /// Stream de los chats del usuario actual, ordenados por último mensaje.
-  /// Los chats borrados suavemente (deletedAt[uid] >= lastMessageTime) quedan ocultos.
+  /// Los chats sin mensajes y los borrados suavemente
+  /// (deletedAt[uid] >= lastMessageTime) quedan ocultos.
   Stream<List<Chat>> getChats() {
     return _chatsRef
         .where('participants', arrayContains: currentUid)
@@ -112,6 +113,7 @@ class ChatService with AuthenticatedService {
         .handleError((e, st) => reportError(e, st).ignore())
         .map(
           (snapshot) => snapshot.docs.map(Chat.fromFirestore).where((chat) {
+            if (chat.lastMessage.isEmpty) return false;
             final dt = chat.deletedAt[currentUid];
             return dt == null || chat.lastMessageTime.isAfter(dt);
           }).toList(),

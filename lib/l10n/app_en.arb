@@ -131,10 +131,11 @@
   "socialUser": "User",
 
   "artistSelectorTitle": "My Top Artists",
-  "artistSelectorSubtitle": "{count, plural, =1{1 artist · the more you add, the better your matches} other{{count} artists · the more you add, the better your matches}}",
+  "artistSelectorSubtitle": "{count, plural, =1{1 of {max} artists selected · drag to rank} other{{count} of {max} artists selected · drag to rank}}",
   "@artistSelectorSubtitle": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": { "type": "int" },
+      "max": { "type": "int" }
     }
   },
   "artistSelectorSearchHint": "Search artists...",

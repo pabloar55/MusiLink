@@ -121,7 +121,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
 
   void _showWriteError(FirebaseException? error) {
     final l10n = AppLocalizations.of(context)!;
-    final message = error?.code == 'permission-denied'
+    final message = error?.code == 'resource-exhausted'
         ? l10n.authErrorTooManyRequests
         : l10n.genericError;
     ScaffoldMessenger.of(

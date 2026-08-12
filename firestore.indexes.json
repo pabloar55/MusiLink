@@ -33,6 +33,22 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "music_recommendation_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "artistMatchKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "music_recommendation_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "genreMatchKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

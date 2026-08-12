@@ -12,6 +12,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
+import 'package:musi_link/utils/music_profile_limits.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 
 // ─── Definición de etapas ────────────────────────────────────────────────────
@@ -35,25 +36,25 @@ const _stages = [
   _StageConfig(
     stage: _ProfileStage.basic,
     minCount: 0,
-    maxCount: 9,
+    maxCount: 5,
     color: Color(0xFFF59E0B),
   ),
   _StageConfig(
     stage: _ProfileStage.good,
-    minCount: 10,
-    maxCount: 19,
+    minCount: 6,
+    maxCount: 11,
     color: Color(0xFF84CC16),
   ),
   _StageConfig(
     stage: _ProfileStage.great,
-    minCount: 20,
-    maxCount: 34,
+    minCount: 12,
+    maxCount: 19,
     color: Color(0xFF22C55E),
   ),
   _StageConfig(
     stage: _ProfileStage.expert,
-    minCount: 35,
-    maxCount: 50,
+    minCount: 20,
+    maxCount: MusicProfileLimits.maxArtists,
     color: Color(0xFF1DB954),
   ),
 ];
@@ -73,7 +74,7 @@ class _ProfileProgressBar extends StatelessWidget {
   final int count;
   final AppLocalizations l10n;
 
-  static const _maxCount = 50;
+  static const _maxCount = MusicProfileLimits.maxArtists;
 
   // Convierte el número de artistas en un progreso visual [0, 1] distribuido uniformemente entre los segmentos.
   static double _toVisualProgress(int count) {
@@ -220,7 +221,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   String _lastQuery = '';
 
   static const _minArtists = 4;
-  static const _maxArtists = 50;
+  static const _maxArtists = MusicProfileLimits.maxArtists;
 
   @override
   void initState() {
@@ -247,7 +248,11 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       if (!mounted || user == null) return;
       final loadedUser = user;
       setState(() {
-        _selected.addAll(_dedupeArtists(loadedUser.topArtists));
+        _selected.addAll(
+          _dedupeArtists(
+            loadedUser.topArtists.take(MusicProfileLimits.maxArtists),
+          ),
+        );
         _originalArtistKeys = _selected.map(_artistKey).toList();
       });
     } catch (e, st) {
@@ -503,7 +508,10 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          l10n.artistSelectorSubtitle(_selected.length),
+                          l10n.artistSelectorSubtitle(
+                            _selected.length,
+                            MusicProfileLimits.maxArtists,
+                          ),
                           style: TextStyle(
                             color: Theme.of(
                               context,

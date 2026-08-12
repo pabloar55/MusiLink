@@ -49,7 +49,7 @@ function profileSnapshot(data) {
     displayName,
     username,
     photoUrl,
-    topArtistNames: stringList(data.topArtistNames, 15),
+    topArtistNames: stringList(data.topArtistNames, 30),
     topGenreNames: stringList(data.topGenreNames, 10),
   };
 }

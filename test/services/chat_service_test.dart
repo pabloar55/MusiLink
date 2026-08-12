@@ -120,6 +120,52 @@ void main() {
       });
     });
 
+    group('getChats', () {
+      test('oculta chats abiertos en los que aún no hay mensajes', () async {
+        final participantsQuery = MockQuery();
+        final orderedQuery = MockQuery();
+        final snapshot = MockQuerySnapshot();
+        final emptyChatDoc = MockQueryDocumentSnapshot();
+        final chatWithMessageDoc = MockQueryDocumentSnapshot();
+        final now = Timestamp.now();
+
+        when(
+          () =>
+              mockChatsRef.where('participants', arrayContains: 'current_uid'),
+        ).thenReturn(participantsQuery);
+        when(
+          () => participantsQuery.orderBy('lastMessageTime', descending: true),
+        ).thenReturn(orderedQuery);
+        when(
+          () => orderedQuery.snapshots(),
+        ).thenAnswer((_) => Stream.value(snapshot));
+        when(
+          () => snapshot.docs,
+        ).thenReturn([emptyChatDoc, chatWithMessageDoc]);
+        when(() => emptyChatDoc.id).thenReturn('current_uid_empty_uid');
+        when(() => emptyChatDoc.data()).thenReturn({
+          'participants': ['current_uid', 'empty_uid'],
+          'lastMessage': '',
+          'lastMessageTime': now,
+          'createdAt': now,
+          'unreadCounts': {'current_uid': 0, 'empty_uid': 0},
+        });
+        when(() => chatWithMessageDoc.id).thenReturn('current_uid_other_uid');
+        when(() => chatWithMessageDoc.data()).thenReturn({
+          'participants': ['current_uid', 'other_uid'],
+          'lastMessage': 'Hola',
+          'lastMessageTime': now,
+          'createdAt': now,
+          'unreadCounts': {'current_uid': 0, 'other_uid': 0},
+        });
+
+        final chats = await chatService.getChats().first;
+
+        expect(chats, hasLength(1));
+        expect(chats.single.id, 'current_uid_other_uid');
+      });
+    });
+
     group('sendMessage', () {
       test('crea mensaje y deja el resumen al backend', () async {
         final mockChatDocRef = MockDocumentReference();

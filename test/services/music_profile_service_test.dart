@@ -162,6 +162,25 @@ void main() {
       expect(result.sharedArtistNames, ['A1', 'A2', 'A3', 'A4', 'A5']);
     });
 
+    test('ignora coincidencias posteriores al puesto 30', () {
+      final result = MusicProfileService.calculateCompatibility(
+        myArtistNames: [
+          ...List.generate(30, (index) => 'Mine $index'),
+          'Shared outside limit',
+        ],
+        myGenreNames: [],
+        otherUser: createUser(
+          topArtistNames: [
+            ...List.generate(30, (index) => 'Other $index'),
+            'Shared outside limit',
+          ],
+        ),
+      );
+
+      expect(result.score, 0.0);
+      expect(result.sharedArtistNames, isEmpty);
+    });
+
     test('5 artistas y 2 generos compartidos dan compatibilidad solida', () {
       final result = MusicProfileService.calculateCompatibility(
         myArtistNames: [
@@ -592,6 +611,43 @@ void main() {
           update['recommendationsRefreshRequestedAt'],
           same(update['musicDataUpdatedAt']),
         );
+      });
+
+      test('guarda como máximo los primeros 30 artistas', () async {
+        final selected = List.generate(
+          50,
+          (index) => app.Artist(
+            name: 'Artist $index',
+            imageUrl: 'https://example.com/$index.jpg',
+            genres: const ['rock'],
+            spotifyId: 'artist-$index',
+          ),
+        );
+        when(
+          () => mockMusicCatalogService.getTopGenresFromArtists(
+            any<List<app.Artist>>(),
+            10,
+          ),
+        ).thenReturn(const <Genre>[]);
+
+        await service.saveManualArtists(myUid, selected);
+
+        final capturedArtists =
+            verify(
+                  () => mockMusicCatalogService.getTopGenresFromArtists(
+                    captureAny(),
+                    10,
+                  ),
+                ).captured.single
+                as List<app.Artist>;
+        final update = Map<String, dynamic>.from(
+          verify(() => mockMyDocRef.update(captureAny())).captured.single
+              as Map,
+        );
+        expect(capturedArtists, hasLength(30));
+        expect(capturedArtists.last.name, 'Artist 29');
+        expect(update['topArtistNames'], hasLength(30));
+        expect((update['topArtistNames'] as List).last, 'Artist 29');
       });
     });
 

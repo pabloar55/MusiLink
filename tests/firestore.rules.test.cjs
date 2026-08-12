@@ -9,6 +9,7 @@ const {
 const {
   doc,
   getDoc,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -202,6 +203,60 @@ test('solo el receptor puede aceptar una solicitud pendiente', async () => {
   await assertSucceeds(updateDoc(doc(dbFor('bob'), 'friend_requests/alice_bob'), {
     status: 'accepted',
     updatedAt: serverTimestamp(),
+  }));
+});
+
+test('un usuario activo puede crear su primera solicitud y su rate limit atómicamente', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+  const db = dbFor('alice');
+
+  await assertSucceeds(runTransaction(db, async (tx) => {
+    const limiterRef = doc(db, 'rate_limits/alice');
+    await tx.get(limiterRef);
+    tx.set(doc(db, 'friend_requests/alice_bob'), {
+      senderId: 'alice',
+      receiverId: 'bob',
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    tx.set(limiterRef, {
+      lastFriendRequestAt: serverTimestamp(),
+      friendRequestWindowStart: serverTimestamp(),
+      friendRequestCount: 1,
+    }, { merge: true });
+  }));
+});
+
+test('una solicitud reinicia una ventana de rate limit caducada', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+  await seed('rate_limits/alice', {
+    lastFriendRequestAt: new Date('2026-01-01T00:00:00Z'),
+    friendRequestWindowStart: new Date('2026-01-01T00:00:00Z'),
+    friendRequestCount: 8,
+    lastMessageAt: new Date('2026-01-01T00:00:00Z'),
+    messageWindowStart: new Date('2026-01-01T00:00:00Z'),
+    messageCount: 3,
+  });
+  const db = dbFor('alice');
+
+  await assertSucceeds(runTransaction(db, async (tx) => {
+    const limiterRef = doc(db, 'rate_limits/alice');
+    await tx.get(limiterRef);
+    tx.set(doc(db, 'friend_requests/alice_bob'), {
+      senderId: 'alice',
+      receiverId: 'bob',
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    tx.set(limiterRef, {
+      lastFriendRequestAt: serverTimestamp(),
+      friendRequestWindowStart: serverTimestamp(),
+      friendRequestCount: 1,
+    }, { merge: true });
   }));
 });
 
