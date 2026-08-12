@@ -23,6 +23,7 @@ class _DailySongSearchSheetState extends ConsumerState<DailySongSearchSheet> {
   List<Track> _results = [];
   bool _loading = false;
   Timer? _debounce;
+  int _searchGeneration = 0;
 
   @override
   void dispose() {
@@ -33,31 +34,38 @@ class _DailySongSearchSheetState extends ConsumerState<DailySongSearchSheet> {
 
   void _onSearchChanged(String query) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _search(query);
-    });
-  }
-
-  Future<void> _search(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() => _results = []);
+    final generation = ++_searchGeneration;
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
+      setState(() {
+        _results = [];
+        _loading = false;
+      });
       return;
     }
 
     setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _search(normalizedQuery, generation);
+    });
+  }
+
+  Future<void> _search(String query, int generation) async {
     try {
       final results = await ref
           .read(musicCatalogServiceProvider)
           .searchTracks(query);
-      if (!mounted) return;
-      setState(() => _results = results);
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _results = []);
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _results = [];
+        _loading = false;
+      });
     }
   }
 

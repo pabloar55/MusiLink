@@ -219,6 +219,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   bool _isSaving = false;
   Timer? _debounce;
   String _lastQuery = '';
+  int _searchGeneration = 0;
 
   static const _minArtists = 4;
   static const _maxArtists = MusicProfileLimits.maxArtists;
@@ -274,20 +275,27 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     final query = _searchController.text.trim();
     if (query == _lastQuery) return;
     _lastQuery = query;
+    final generation = ++_searchGeneration;
     if (query.isEmpty) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
       return;
     }
     setState(() => _isSearching = true);
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _search(query, generation),
+    );
   }
 
-  Future<void> _search(String query) async {
+  Future<void> _search(String query, int generation) async {
     try {
       final results = await ref
           .read(musicCatalogServiceProvider)
           .searchArtists(query, limit: 20);
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       final selectedKeys = _selected.map(_artistKey).toSet();
       setState(() {
         _searchResults = _dedupeArtists(results, excluding: selectedKeys);
@@ -295,7 +303,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       });
     } catch (e, st) {
       reportError(e, st).ignore();
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _isSearching = false);
     }
   }
