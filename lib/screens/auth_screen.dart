@@ -344,7 +344,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   // Google Sign-In
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
+                    height: 40,
                     child: kIsWeb
                         ? const GoogleSignInWebButton()
                         : OutlinedButton(

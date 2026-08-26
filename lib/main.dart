@@ -31,6 +31,18 @@ import 'package:musi_link/widgets/theme_environment_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Whether this web build is running with the Dart-to-Wasm compiler.
+const isRunningWithWasm = bool.fromEnvironment('dart.tool.dart2wasm');
+
+/// Enables the runtime compiler badge for manual web testing.
+///
+/// Pass `--dart-define=SHOW_RUNTIME_COMPILATION_BADGE=true` when running or
+/// building. Keeping it opt-in prevents this diagnostic UI from appearing in
+/// regular production builds.
+const _showRuntimeCompilationBadge = bool.fromEnvironment(
+  'SHOW_RUNTIME_COMPILATION_BADGE',
+);
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -319,8 +331,9 @@ class _BootstrapMaterialApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) =>
-          ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => _RuntimeCompilationBadge(
+        child: ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
+      ),
       home: home,
     );
   }
@@ -344,8 +357,29 @@ class MainApp extends ConsumerWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
-      builder: (context, child) =>
-          ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => _RuntimeCompilationBadge(
+        child: ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
+      ),
+    );
+  }
+}
+
+class _RuntimeCompilationBadge extends StatelessWidget {
+  const _RuntimeCompilationBadge({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb || !_showRuntimeCompilationBadge) return child;
+
+    return Banner(
+      message: isRunningWithWasm ? 'WASM' : 'JS',
+      location: BannerLocation.topEnd,
+      color: isRunningWithWasm
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.error,
+      child: child,
     );
   }
 }

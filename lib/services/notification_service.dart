@@ -127,6 +127,7 @@ class NotificationService {
       AuthorizationStatus.provisional => PushPermissionState.enabled,
       AuthorizationStatus.denied => PushPermissionState.denied,
       AuthorizationStatus.notDetermined => PushPermissionState.notDetermined,
+      AuthorizationStatus.deniedPermanently => PushPermissionState.denied,
     };
   }
 
