@@ -129,6 +129,7 @@ void main() {
     );
     messages.add([firstMessage, sameDayMessage, nextDayMessage]);
     await tester.pump();
+    await tester.pump();
 
     expect(find.byKey(const ValueKey('chat-date-2026-7-19')), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-date-2026-7-20')), findsOneWidget);

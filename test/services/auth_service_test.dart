@@ -113,15 +113,15 @@ void main() {
             email: any(named: 'email'),
             password: any(named: 'password'),
           ),
-        ).thenThrow(
-          FirebaseAuthException(
+        ).thenAnswer(
+          (_) async => throw FirebaseAuthException(
             code: 'email-already-in-use',
             message: 'Email already in use',
           ),
         );
 
-        expect(
-          () => authService.registerWithEmail(
+        await expectLater(
+          authService.registerWithEmail(
             email: 'test@test.com',
             password: 'pass',
             displayName: 'Test',
@@ -184,15 +184,15 @@ void main() {
               email: any(named: 'email'),
               password: any(named: 'password'),
             ),
-          ).thenThrow(
-            FirebaseAuthException(
+          ).thenAnswer(
+            (_) async => throw FirebaseAuthException(
               code: 'wrong-password',
               message: 'Wrong password',
             ),
           );
 
-          expect(
-            () => authService.signInWithEmail(
+          await expectLater(
+            authService.signInWithEmail(
               email: 'test@test.com',
               password: 'wrong',
             ),
@@ -221,15 +221,15 @@ void main() {
       test('propaga FirebaseAuthException', () async {
         when(
           () => mockAuth.sendPasswordResetEmail(email: any(named: 'email')),
-        ).thenThrow(
-          FirebaseAuthException(
+        ).thenAnswer(
+          (_) async => throw FirebaseAuthException(
             code: 'invalid-email',
             message: 'Invalid email',
           ),
         );
 
-        expect(
-          () => authService.sendPasswordResetEmail('bad-email'),
+        await expectLater(
+          authService.sendPasswordResetEmail('bad-email'),
           throwsA(isA<FirebaseAuthException>()),
         );
       });
