@@ -263,11 +263,16 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
                                 overflow: TextOverflow.ellipsis,
                               )
                             : null,
-                        trailing: _buildTrailingAction(
-                          user,
-                          rel,
-                          colorScheme,
-                          l10n,
+                        trailing: SizedBox.square(
+                          dimension: 48,
+                          child: Center(
+                            child: _buildTrailingAction(
+                              user,
+                              rel,
+                              colorScheme,
+                              l10n,
+                            ),
+                          ),
                         ),
                         onTap: () => _openProfile(user),
                       );
