@@ -115,6 +115,19 @@ firebase functions:secrets:set SPOTIFY_CLIENT_SECRET
 firebase functions:secrets:set LASTFM_API_KEY
 ```
 
+### CORS de Firebase Storage
+
+Las fotos de perfil se cargan en el canvas de Flutter Web para que respeten el
+recorte circular y los efectos de scroll. Después de crear o modificar el
+bucket, aplica la configuración versionada en `cors.json`:
+
+```bash
+gcloud storage buckets update gs://musi-link-e7759.firebasestorage.app --cors-file=cors.json
+```
+
+Esta configuración solo habilita la lectura de imágenes desde el navegador;
+las reglas de acceso siguen definidas por `storage.rules`.
+
 ## Algoritmo de Compatibilidad
 
 El porcentaje de afinidad musical (rango 0-100) combina dos señales para no penalizar perfiles con listas grandes:

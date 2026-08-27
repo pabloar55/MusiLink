@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 
 /// Displays a user profile photo with a browser-safe fallback.
 ///
-/// Firebase Storage images may not expose the CORS headers required by
-/// Flutter's canvas renderer. On web, [WebHtmlElementStrategy.fallback] retries
-/// those images as an HTML image element, which can display them without
-/// weakening the Storage read rules.
+/// On web, profile photos stay in Flutter's canvas so they participate in
+/// clipping and scroll stretch effects. The Firebase Storage bucket must apply
+/// the CORS policy in `cors.json` for cross-origin image requests to work.
 class UserProfilePhoto extends StatelessWidget {
   const UserProfilePhoto({
     super.key,
@@ -29,7 +28,7 @@ class UserProfilePhoto extends StatelessWidget {
       return Image.network(
         url,
         fit: fit,
-        webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+        webHtmlElementStrategy: WebHtmlElementStrategy.never,
         errorBuilder: (_, _, _) => fallback,
       );
     }

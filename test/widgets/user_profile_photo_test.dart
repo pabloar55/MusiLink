@@ -19,7 +19,7 @@ void main() {
     expect(find.byKey(fallbackKey), findsOneWidget);
   });
 
-  testWidgets('en web reintenta la foto con un elemento HTML', (tester) async {
+  testWidgets('en web mantiene la foto en el canvas de Flutter', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: UserProfilePhoto(
@@ -31,6 +31,6 @@ void main() {
 
     final image = tester.widget<Image>(find.byType(Image));
     final provider = image.image as NetworkImage;
-    expect(provider.webHtmlElementStrategy, WebHtmlElementStrategy.fallback);
+    expect(provider.webHtmlElementStrategy, WebHtmlElementStrategy.never);
   }, skip: !kIsWeb);
 }
