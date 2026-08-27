@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -15,9 +16,7 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: ArtistTile(artist: artist),
-          ),
+          home: Scaffold(body: ArtistTile(artist: artist)),
         ),
       );
 
@@ -25,22 +24,35 @@ void main() {
     });
 
     testWidgets('muestra icono cuando imageUrl está vacío', (tester) async {
-      const artist = Artist(
-        name: 'Test Artist',
-        imageUrl: '',
-        genres: [],
-      );
+      const artist = Artist(name: 'Test Artist', imageUrl: '', genres: []);
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: ArtistTile(artist: artist),
-          ),
+          home: Scaffold(body: ArtistTile(artist: artist)),
         ),
       );
 
       expect(find.byIcon(LucideIcons.user), findsOneWidget);
     });
 
+    testWidgets('en web carga la imagen dentro del canvas de Flutter', (
+      tester,
+    ) async {
+      const artist = Artist(
+        name: 'Test Artist',
+        imageUrl: 'https://i.scdn.co/image/test',
+        genres: [],
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ArtistTile(artist: artist)),
+        ),
+      );
+
+      final image = tester.widget<Image>(find.byType(Image));
+      final provider = image.image as NetworkImage;
+      expect(provider.webHtmlElementStrategy, WebHtmlElementStrategy.never);
+    }, skip: !kIsWeb);
   });
 }

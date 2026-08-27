@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/artist.dart';
@@ -40,14 +41,7 @@ class ArtistTile extends StatelessWidget {
           // Foto circular del artista
           ClipOval(
             child: artist.imageUrl.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: artist.imageUrl,
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                    placeholder: (ctx, url) => _placeholder(cs),
-                    errorWidget: (ctx, url, err) => _placeholder(cs),
-                  )
+                ? _artistImage(cs)
                 : _placeholder(cs),
           ),
           const SizedBox(width: AppTokens.spaceMD),
@@ -63,6 +57,32 @@ class ArtistTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _artistImage(ColorScheme cs) {
+    if (kIsWeb) {
+      return Image.network(
+        artist.imageUrl,
+        width: 52,
+        height: 52,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        webHtmlElementStrategy: WebHtmlElementStrategy.never,
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : _placeholder(cs),
+        errorBuilder: (context, error, stackTrace) => _placeholder(cs),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: artist.imageUrl,
+      width: 52,
+      height: 52,
+      fit: BoxFit.cover,
+      useOldImageOnUrlChange: true,
+      placeholder: (context, url) => _placeholder(cs),
+      errorWidget: (context, url, error) => _placeholder(cs),
     );
   }
 
