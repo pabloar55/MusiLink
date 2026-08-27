@@ -30,21 +30,6 @@ export function messageSummary(data: DocumentData): string {
   return typeof data.text === 'string' ? data.text : '';
 }
 
-export function fullySoftDeletedChat(data: DocumentData | undefined): boolean {
-  const participants = chatParticipants(data);
-  if (participants.length !== 2) return false;
-
-  const lastMessageTime = timestampValue(data?.lastMessageTime);
-  const deletedAt = data?.deletedAt as Record<string, unknown> | undefined;
-  if (!lastMessageTime || !deletedAt) return false;
-
-  return participants.every((uid) => {
-    const deletedTime = timestampValue(deletedAt[uid]);
-    return deletedTime !== undefined &&
-      lastMessageTime.toMillis() <= deletedTime.toMillis();
-  });
-}
-
 export function allParticipantsDeletedBefore(
   data: DocumentData | undefined,
 ): Timestamp | undefined {
@@ -62,24 +47,6 @@ export function allParticipantsDeletedBefore(
   return deletedTimes.reduce((earliest, value) =>
     value.toMillis() < earliest.toMillis() ? value : earliest,
   deletedTimes[0]);
-}
-
-async function deleteChatMessages(chatRef: DocumentReference): Promise<void> {
-  const messagesRef = chatRef.collection(messagesCollection);
-  while (true) {
-    const snapshot = await messagesRef.limit(chatCleanupBatchSize).get();
-    if (snapshot.empty) return;
-
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
-    if (snapshot.size < chatCleanupBatchSize) return;
-  }
-}
-
-async function hardDeleteChat(chatRef: DocumentReference): Promise<void> {
-  await deleteChatMessages(chatRef);
-  await chatRef.delete();
 }
 
 async function pruneMessagesDeletedForAllParticipants(
@@ -120,17 +87,65 @@ async function latestMessageSnapshot(
 
 async function refreshChatSummaryFromLatestMessage(
   chatRef: DocumentReference,
+  deletedMessageTime: Timestamp | undefined,
 ): Promise<boolean> {
   const latest = await latestMessageSnapshot(chatRef);
   if (!latest) {
-    await chatRef.delete();
+    // Keep the deterministic parent document even when the conversation is
+    // empty. Deleting it here would race with a concurrent message creation:
+    // Firestore does not delete subcollections atomically with their parent.
+    if (!deletedMessageTime) return false;
+    await db.runTransaction(async (tx) => {
+      const chatSnap = await tx.get(chatRef);
+      const chatData = chatSnap.data();
+      if (!chatData) return;
+
+      // A newer message may already have refreshed the summary after the
+      // empty query. Do not clear that newer state when triggers run late.
+      const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
+      if (
+        currentLastMessageTime &&
+        currentLastMessageTime.toMillis() > deletedMessageTime.toMillis()
+      ) {
+        return;
+      }
+
+      const participants = chatParticipants(chatData);
+      tx.update(chatRef, {
+        lastMessage: '',
+        unreadCounts: Object.fromEntries(participants.map((uid) => [uid, 0])),
+      });
+    });
     return false;
   }
 
   const latestData = latest.data();
-  await chatRef.update({
-    lastMessage: messageSummary(latestData),
-    lastMessageTime: timestampValue(latestData.timestamp) ?? FieldValue.serverTimestamp(),
+  const latestMessageTime = timestampValue(latestData.timestamp);
+  await db.runTransaction(async (tx) => {
+    const [chatSnap, latestSnap] = await Promise.all([
+      tx.get(chatRef),
+      tx.get(latest.ref),
+    ]);
+    const chatData = chatSnap.data();
+    const currentLatestData = latestSnap.data();
+    if (!chatData || !currentLatestData) return;
+
+    // If another message has already advanced the summary beyond the message
+    // whose deletion caused this refresh, this delayed trigger must not
+    // overwrite it with an older value.
+    const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
+    if (
+      deletedMessageTime &&
+      currentLastMessageTime &&
+      currentLastMessageTime.toMillis() > deletedMessageTime.toMillis()
+    ) {
+      return;
+    }
+
+    tx.update(chatRef, {
+      lastMessage: messageSummary(currentLatestData),
+      lastMessageTime: latestMessageTime ?? FieldValue.serverTimestamp(),
+    });
   });
   return true;
 }
@@ -222,14 +237,11 @@ export const onChatSoftDeleted = onDocumentUpdated(
     try {
       const after = event.data?.after.data();
       if (!after) return;
-      if (fullySoftDeletedChat(after)) {
-        await hardDeleteChat(event.data!.after.ref);
-        logger.info('onChatSoftDeleted: hard-deleted fully soft-deleted chat', {
-          chatId: event.params.chatId,
-        });
-        return;
-      }
 
+      // lastMessageTime is an asynchronously maintained summary and can lag
+      // behind the messages collection. Only prune up to the earliest point
+      // both participants deleted; messages committed after that boundary are
+      // never eligible, even if this trigger runs late or out of order.
       const prunedMessages = await pruneMessagesDeletedForAllParticipants(
         event.data!.after.ref,
         after,
@@ -274,7 +286,10 @@ export const onChatMessageDeleted = onDocumentDeleted(
         return;
       }
 
-      const stillExists = await refreshChatSummaryFromLatestMessage(chatRef);
+      const stillExists = await refreshChatSummaryFromLatestMessage(
+        chatRef,
+        deletedMessageTime,
+      );
       logger.info('onChatMessageDeleted: refreshed chat after message delete', {
         chatId: event.params.chatId,
         messageId: event.params.messageId,
