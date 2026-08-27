@@ -74,6 +74,9 @@ jobs:
           npm ci
           npm ci --prefix ..
 
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.28.2
+
       - name: Build
         run: npm run build
 
