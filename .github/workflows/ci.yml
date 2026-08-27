@@ -68,8 +68,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npm run test:artist-keys
-
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

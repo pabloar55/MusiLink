@@ -5,12 +5,6 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "migrate:artist-keys": "node scripts/backfill-artist-identity-keys.cjs",
-    "test:artist-keys": "node --test scripts/backfill-artist-identity-keys.test.cjs",
-    "migrate:recommendation-snapshots": "node scripts/backfill-recommendation-snapshots.cjs",
-    "migrate:recommendation-index-v2": "node scripts/migrate-recommendation-index-v2.cjs",
-    "migrate:usernames": "node scripts/backfill-username-reservations.cjs",
-    "test:usernames-migration": "node --test scripts/backfill-username-reservations.test.cjs",
     "test:account-deletion": "npm run build && node --test test/account_deletion.test.cjs",
     "test:recommendation-index-migration": "node --test test/recommendation_index_migration.test.cjs",
     "test:unit": "npm run build && node --test test/unit/*.test.cjs"
