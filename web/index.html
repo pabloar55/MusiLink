@@ -51,6 +51,60 @@
       background-color: #ffffff;
       color-scheme: light;
     }
+
+    #app-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      background-color: #121212;
+      opacity: 1;
+      transition: opacity 180ms ease-out;
+    }
+
+    html[data-app-theme="light"] #app-loading {
+      background-color: #ffffff;
+    }
+
+    #app-loading.app-loading--hidden {
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    #app-loading img {
+      width: min(190px, 56vw);
+      height: auto;
+    }
+
+    .app-loading__spinner {
+      width: 28px;
+      height: 28px;
+      box-sizing: border-box;
+      border: 3px solid rgba(27, 191, 86, 0.22);
+      border-top-color: #1bbf56;
+      border-radius: 50%;
+      animation: app-loading-spin 800ms linear infinite;
+    }
+
+    @keyframes app-loading-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #app-loading {
+        transition: none;
+      }
+
+      .app-loading__spinner {
+        animation: none;
+      }
+    }
   </style>
 
   <script>
@@ -85,6 +139,11 @@
   </script>
 </head>
 <body>
+  <div id="app-loading" role="status" aria-label="Cargando MusiLink">
+    <img src="assets/assets/images/logo.png" alt="MusiLink">
+    <div class="app-loading__spinner" aria-hidden="true"></div>
+  </div>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
