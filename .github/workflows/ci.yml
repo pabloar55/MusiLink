@@ -56,17 +56,41 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: functions/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix ..
 
       - name: Build
         run: npm run build
+
+      - name: Test unit functions
+        run: npm run test:unit
+
+      - name: Test account deletion
+        run: npm run test:account-deletion
+
+      - name: Test Firestore security rules
+        run: npm --prefix .. run test:rules
+
+      - name: Test username claims
+        run: npm --prefix .. run test:functions:usernames
+
+      - name: Test chat cleanup
+        run: npm --prefix .. run test:functions:chat
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
