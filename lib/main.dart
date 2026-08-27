@@ -27,6 +27,7 @@ import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/utils/pwa_environment.dart';
 import 'package:musi_link/utils/pwa_install_session.dart';
+import 'package:musi_link/utils/user_setup_cache.dart';
 import 'package:musi_link/widgets/theme_environment_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -57,36 +58,60 @@ Future<AppRouterBootstrapState> _loadRouterBootstrapState(
 ) async {
   final authUser = FirebaseAuth.instance.currentUser;
   final uid = authUser?.uid;
-  bool usernameSet = false;
-  bool artistsSelected = false;
+  final cachedSetup = uid == null ? null : UserSetupCache.read(prefs, uid);
+  bool usernameSet = cachedSetup?.usernameSet ?? false;
+  bool artistsSelected = cachedSetup?.artistsSelected ?? false;
+  bool onboardingDone =
+      cachedSetup?.onboardingDone ??
+      (prefs.getBool(OnboardingScreen.onboardingCompletedKey) ?? false);
+  bool photoSetupDone =
+      cachedSetup?.photoSetupDone ??
+      (prefs.getBool(PhotoSetupScreen.photoSetupDoneKey) ?? false);
   bool deletionPending = false;
+  bool setupStateKnown = uid == null || cachedSetup != null;
 
   if (uid != null) {
     try {
-      await authUser?.getIdToken();
+      final user = await UserService(firestore: FirebaseFirestore.instance)
+          .getUser(uid, reportErrors: false, cacheOnly: true);
+      usernameSet = user != null && user.username.isNotEmpty;
+      artistsSelected = user != null && user.topArtistNames.isNotEmpty;
+      onboardingDone = artistsSelected || onboardingDone;
+      photoSetupDone = artistsSelected || photoSetupDone;
+      setupStateKnown = true;
+    } catch (_) {
+      // Sin documento local se conserva el último snapshot persistido. La
+      // consulta de servidor se hará después de pintar la primera pantalla.
+    }
+
+    try {
       final deletionJob = await FirebaseFirestore.instance
           .collection(FirestoreCollections.accountDeletions)
           .doc(uid)
-          .get();
+          .get(const GetOptions(source: Source.cache));
       deletionPending = deletionJob.exists;
-      final user = await UserService(
-        firestore: FirebaseFirestore.instance,
-      ).getUser(uid, reportErrors: false);
-      usernameSet = user != null && user.username.isNotEmpty;
-      artistsSelected = user != null && user.topArtistNames.isNotEmpty;
     } catch (_) {}
   }
 
-  final onboardingDone =
-      artistsSelected ||
-      (prefs.getBool(OnboardingScreen.onboardingCompletedKey) ?? false);
-  final photoSetupDone =
-      onboardingDone ||
-      (prefs.getBool(PhotoSetupScreen.photoSetupDoneKey) ?? false);
+  onboardingDone = artistsSelected || onboardingDone;
+  photoSetupDone = onboardingDone || photoSetupDone;
 
   if (onboardingDone &&
       !(prefs.getBool(PhotoSetupScreen.photoSetupDoneKey) ?? false)) {
     await prefs.setBool(PhotoSetupScreen.photoSetupDoneKey, true);
+  }
+
+  if (uid != null && setupStateKnown) {
+    await UserSetupCache.write(
+      prefs,
+      uid,
+      CachedUserSetupState(
+        usernameSet: usernameSet,
+        artistsSelected: artistsSelected,
+        onboardingDone: onboardingDone,
+        photoSetupDone: photoSetupDone,
+      ),
+    );
   }
 
   return AppRouterBootstrapState(
@@ -95,6 +120,7 @@ Future<AppRouterBootstrapState> _loadRouterBootstrapState(
     onboardingDone: onboardingDone,
     photoSetupDone: photoSetupDone,
     deletionPending: deletionPending,
+    setupStateKnown: setupStateKnown,
   );
 }
 

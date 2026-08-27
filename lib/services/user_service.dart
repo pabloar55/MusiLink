@@ -81,8 +81,10 @@ class UserService {
     bool reportErrors = true,
     bool bypassCache = false,
     bool serverOnly = false,
+    bool cacheOnly = false,
   }) {
-    if (!bypassCache && !serverOnly) {
+    assert(!(serverOnly && cacheOnly));
+    if (!bypassCache && !serverOnly && !cacheOnly) {
       final cached = _getFromCache(uid);
       if (cached != null) {
         return Future.value(cached.user);
@@ -98,12 +100,15 @@ class UserService {
           uid,
           reportErrors: reportErrors,
           serverOnly: serverOnly,
+          cacheOnly: cacheOnly,
         ).whenComplete(() {
           if (identical(_pendingUserRequests[uid], request)) {
             _pendingUserRequests.remove(uid);
           }
         });
-    if (!bypassCache && !serverOnly) _pendingUserRequests[uid] = request;
+    if (!bypassCache && !serverOnly && !cacheOnly) {
+      _pendingUserRequests[uid] = request;
+    }
     return request;
   }
 
@@ -111,11 +116,14 @@ class UserService {
     String uid, {
     required bool reportErrors,
     required bool serverOnly,
+    required bool cacheOnly,
   }) async {
     try {
       final docRef = _usersRef.doc(uid);
       final doc = serverOnly
           ? await docRef.get(const GetOptions(source: Source.server))
+          : cacheOnly
+          ? await docRef.get(const GetOptions(source: Source.cache))
           : await docRef.get();
       if (!doc.exists) return null;
       final user = AppUser.fromFirestore(doc);

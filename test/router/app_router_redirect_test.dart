@@ -91,6 +91,35 @@ void main() {
       expect(appRedirect(n, '/deleting-account'), isNull);
       n.dispose();
     });
+
+    test('conserva el bloqueo si no puede refrescar su estado', () async {
+      when(() => mockUser.uid).thenReturn('uid123');
+      final n = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: true,
+          setupStateKnown: true,
+        ),
+        fetchUserState: (_) async => (
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: null,
+        ),
+      );
+
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(n.deletionPending, isTrue);
+      expect(appRedirect(n, '/'), '/deleting-account');
+      n.dispose();
+    });
   });
 
   // ── Estado 3: autenticado, sin onboarding ─────────────────────
@@ -121,6 +150,51 @@ void main() {
           photoSetupDone: false,
         );
       expect(appRedirect(n, '/onboarding'), isNull);
+      n.dispose();
+    });
+  });
+
+  group('logged in, setup state unknown', () {
+    setUp(() => when(() => mockAuth.currentUser).thenReturn(mockUser));
+
+    test('un fallo de red no redirige al flujo de alta', () {
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+          setupStateKnown: false,
+        );
+
+      expect(appRedirect(n, '/'), isNull);
+      expect(appRedirect(n, '/onboarding'), '/');
+      expect(appRedirect(n, '/username-setup'), '/');
+      n.dispose();
+    });
+
+    test('conserva el snapshot válido si el refresco falla', () async {
+      when(() => mockUser.uid).thenReturn('uid123');
+      final n = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: false,
+          setupStateKnown: true,
+        ),
+        fetchUserState: (_) => Future.error(Exception('offline')),
+      );
+
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(n.setupStateKnown, isTrue);
+      expect(n.usernameSet, isTrue);
+      expect(n.artistsSelected, isTrue);
+      expect(appRedirect(n, '/'), isNull);
       n.dispose();
     });
   });

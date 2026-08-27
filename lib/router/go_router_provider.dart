@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
@@ -20,6 +22,7 @@ import 'package:musi_link/screens/username_setup_screen.dart';
 import 'package:musi_link/screens/user_profile_screen.dart';
 import 'package:musi_link/screens/user_search_screen.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
+import 'package:musi_link/utils/user_setup_cache.dart';
 
 // ── Router ──────────────────────────────────────────────────────
 
@@ -31,26 +34,57 @@ final initialRouterLocationProvider = Provider<String>((ref) => '/');
 
 final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
   final userService = ref.read(userServiceProvider);
+  final prefs = ref.read(sharedPreferencesProvider);
   final notifier = AppRouterNotifier(
     auth: ref.watch(firebaseAuthProvider),
     initialState: ref.watch(routerBootstrapStateProvider),
     fetchUserState: (loginUid) async {
-      final deletionJob = await ref
-          .read(firebaseFirestoreProvider)
-          .collection(FirestoreCollections.accountDeletions)
-          .doc(loginUid)
-          .get();
-      final profile = await userService.getUser(loginUid, reportErrors: false);
+      final deletionPendingFuture = (() async {
+        try {
+          final deletionJob = await ref
+              .read(firebaseFirestoreProvider)
+              .collection(FirestoreCollections.accountDeletions)
+              .doc(loginUid)
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 5));
+          return deletionJob.exists;
+        } catch (_) {
+          // La disponibilidad de esta comprobación no invalida el perfil.
+          return null;
+        }
+      })();
+      final profile = await userService
+          .getUser(loginUid, reportErrors: false, serverOnly: true)
+          .timeout(const Duration(seconds: 5));
       final hasUsername = profile != null && profile.username.isNotEmpty;
       final hasArtists = profile != null && profile.topArtistNames.isNotEmpty;
+      final cachedSetup = UserSetupCache.read(prefs, loginUid);
+      final onboardingDone =
+          hasArtists ||
+          (cachedSetup?.onboardingDone ?? false) ||
+          (prefs.getBool(OnboardingScreen.onboardingCompletedKey) ?? false);
+      final photoSetupDone =
+          onboardingDone ||
+          (cachedSetup?.photoSetupDone ?? false) ||
+          (prefs.getBool(PhotoSetupScreen.photoSetupDoneKey) ?? false);
       return (
         usernameSet: hasUsername,
         artistsSelected: hasArtists,
-        onboardingDone: hasArtists,
-        photoSetupDone: hasArtists,
-        deletionPending: deletionJob.exists,
+        onboardingDone: onboardingDone,
+        photoSetupDone: photoSetupDone,
+        deletionPending: await deletionPendingFuture,
       );
     },
+    persistUserState: (uid, state) => UserSetupCache.write(
+      prefs,
+      uid,
+      CachedUserSetupState(
+        usernameSet: state.usernameSet,
+        artistsSelected: state.artistsSelected,
+        onboardingDone: state.onboardingDone,
+        photoSetupDone: state.photoSetupDone,
+      ),
+    ),
   );
   ref.onDispose(notifier.dispose);
   return notifier;

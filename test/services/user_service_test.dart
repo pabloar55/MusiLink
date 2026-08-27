@@ -176,6 +176,25 @@ void main() {
         ).called(1);
       });
 
+      test('cacheOnly consulta exclusivamente la caché persistente', () async {
+        final mockDocRef = MockDocumentReference();
+        final cachedSnapshot = MockDocumentSnapshot();
+        when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
+        when(() => mockDocRef.get(const GetOptions(source: Source.cache)))
+            .thenAnswer((_) async => cachedSnapshot);
+        when(() => cachedSnapshot.exists).thenReturn(true);
+        when(() => cachedSnapshot.id).thenReturn('uid123');
+        when(() => cachedSnapshot.data())
+            .thenReturn({'displayName': 'Cached name', 'username': 'cached'});
+
+        final cached = await userService.getUser('uid123', cacheOnly: true);
+
+        expect(cached?.displayName, 'Cached name');
+        verify(() => mockDocRef.get(const GetOptions(source: Source.cache)))
+            .called(1);
+        verifyNever(() => mockDocRef.get());
+      });
+
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
