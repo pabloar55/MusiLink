@@ -7,7 +7,7 @@
             "type": "dart",
             "args": [
                 "--web-port",
-                "5002"
+                "5051"
             ]
         },
         {
@@ -17,7 +17,7 @@
             "flutterMode": "profile",
             "args": [
                 "--web-port",
-                "5002"
+                "5051"
             ]
         },
         {
@@ -27,7 +27,7 @@
             "flutterMode": "release",
             "args": [
                 "--web-port",
-                "5002"
+                "5051"
             ]
         }
     ]

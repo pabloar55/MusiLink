@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -34,6 +35,28 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Whether this web build is running with the Dart-to-Wasm compiler.
 const isRunningWithWasm = bool.fromEnvironment('dart.tool.dart2wasm');
+
+const _webRecaptchaEnterpriseSiteKey =
+    '6LcYM5wtAAAAADlPteZ4HZwb6ib1WLNjSIqDnFYx';
+const _forceAppCheckDebugProvider = bool.fromEnvironment(
+  'USE_APP_CHECK_DEBUG_PROVIDER',
+);
+
+Future<void> _activateAppCheck() {
+  final useDebugProvider =
+      kDebugMode ||
+      _forceAppCheckDebugProvider ||
+      (kIsWeb &&
+          (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1'));
+  return FirebaseAppCheck.instance.activate(
+    providerWeb: useDebugProvider
+        ? WebDebugProvider()
+        : ReCaptchaEnterpriseProvider(_webRecaptchaEnterpriseSiteKey),
+    providerAndroid: useDebugProvider
+        ? const AndroidDebugProvider()
+        : const AndroidPlayIntegrityProvider(),
+  );
+}
 
 /// Enables the runtime compiler badge for manual web testing.
 ///
@@ -128,6 +151,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _activateAppCheck();
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 

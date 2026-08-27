@@ -39,6 +39,7 @@ dependencies:
   firebase_remote_config: ^6.5.5
   package_info_plus: ^10.2.1
   web: ^1.1.1
+  firebase_app_check: ^0.4.7
 
 
 dev_dependencies:
