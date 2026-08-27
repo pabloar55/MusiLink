@@ -8,11 +8,14 @@ class SpotifyCloudService {
 
   final FirebaseFunctions _functions;
 
-  Future<List<app.Artist>> searchArtists(String query, {int limit = 20}) async {
+  Future<List<app.Artist>> searchArtists(String query, {int limit = 10}) async {
     if (query.trim().isEmpty) return [];
     try {
       final callable = _functions.httpsCallable('searchSpotifyArtists');
-      final result = await callable.call<List<dynamic>>({'query': query, 'limit': limit});
+      final result = await callable.call<List<dynamic>>({
+        'query': query,
+        'limit': limit,
+      });
       return result.data.map((raw) {
         final item = Map<String, dynamic>.from(raw as Map);
         return app.Artist(
@@ -28,11 +31,14 @@ class SpotifyCloudService {
     }
   }
 
-  Future<List<app.Track>> searchTracks(String query, {int limit = 20}) async {
+  Future<List<app.Track>> searchTracks(String query, {int limit = 10}) async {
     if (query.trim().isEmpty) return [];
     try {
       final callable = _functions.httpsCallable('searchSpotifyTracks');
-      final result = await callable.call<List<dynamic>>({'query': query, 'limit': limit});
+      final result = await callable.call<List<dynamic>>({
+        'query': query,
+        'limit': limit,
+      });
       return result.data.map((raw) {
         final item = Map<String, dynamic>.from(raw as Map);
         return app.Track(

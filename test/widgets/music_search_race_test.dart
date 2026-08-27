@@ -54,12 +54,10 @@ void main() {
   ) async {
     final oldResult = Completer<List<Track>>();
     final newResult = Completer<List<Track>>();
-    when(
-      () => musicCatalogService.searchTracks('old'),
-    ).thenAnswer((_) => oldResult.future);
-    when(
-      () => musicCatalogService.searchTracks('new'),
-    ).thenAnswer((_) => newResult.future);
+    when(() => musicCatalogService.searchTracks('old'))
+        .thenAnswer((_) => oldResult.future);
+    when(() => musicCatalogService.searchTracks('new'))
+        .thenAnswer((_) => newResult.future);
 
     await tester.pumpWidget(
       _app(
@@ -89,12 +87,10 @@ void main() {
   ) async {
     final oldResult = Completer<List<Track>>();
     final newResult = Completer<List<Track>>();
-    when(
-      () => musicCatalogService.searchTracks('old'),
-    ).thenAnswer((_) => oldResult.future);
-    when(
-      () => musicCatalogService.searchTracks('new'),
-    ).thenAnswer((_) => newResult.future);
+    when(() => musicCatalogService.searchTracks('old'))
+        .thenAnswer((_) => oldResult.future);
+    when(() => musicCatalogService.searchTracks('new'))
+        .thenAnswer((_) => newResult.future);
 
     await tester.pumpWidget(
       _app(
@@ -124,12 +120,10 @@ void main() {
   ) async {
     final oldResult = Completer<List<Artist>>();
     final newResult = Completer<List<Artist>>();
-    when(
-      () => musicCatalogService.searchArtists('old', limit: 20),
-    ).thenAnswer((_) => oldResult.future);
-    when(
-      () => musicCatalogService.searchArtists('new', limit: 20),
-    ).thenAnswer((_) => newResult.future);
+    when(() => musicCatalogService.searchArtists('old', limit: 10))
+        .thenAnswer((_) => oldResult.future);
+    when(() => musicCatalogService.searchArtists('new', limit: 10))
+        .thenAnswer((_) => newResult.future);
 
     await tester.pumpWidget(
       _app(
@@ -158,9 +152,8 @@ void main() {
     tester,
   ) async {
     final oldResult = Completer<List<Artist>>();
-    when(
-      () => musicCatalogService.searchArtists('old', limit: 20),
-    ).thenAnswer((_) => oldResult.future);
+    when(() => musicCatalogService.searchArtists('old', limit: 10))
+        .thenAnswer((_) => oldResult.future);
 
     await tester.pumpWidget(
       _app(
@@ -204,18 +197,14 @@ void main() {
     );
     final relatedCalls = <String>[];
 
-    when(
-      () => musicCatalogService.searchArtists('first', limit: 20),
-    ).thenAnswer((_) async => const [firstArtist]);
-    when(
-      () => musicCatalogService.searchArtists('second', limit: 20),
-    ).thenAnswer((_) async => const [secondArtist]);
-    when(
-      () => musicCatalogService.searchArtists(firstArtist.name, limit: 1),
-    ).thenAnswer((_) async => const [firstArtist]);
-    when(
-      () => musicCatalogService.searchArtists(secondArtist.name, limit: 1),
-    ).thenAnswer((_) async => const [secondArtist]);
+    when(() => musicCatalogService.searchArtists('first', limit: 10))
+        .thenAnswer((_) async => const [firstArtist]);
+    when(() => musicCatalogService.searchArtists('second', limit: 10))
+        .thenAnswer((_) async => const [secondArtist]);
+    when(() => musicCatalogService.searchArtists(firstArtist.name, limit: 1))
+        .thenAnswer((_) async => const [firstArtist]);
+    when(() => musicCatalogService.searchArtists(secondArtist.name, limit: 1))
+        .thenAnswer((_) async => const [secondArtist]);
     when(() => musicCatalogService.getRelatedArtists(any())).thenAnswer((call) {
       relatedCalls.add(call.positionalArguments.first as String);
       return Future.value(const []);

@@ -165,9 +165,9 @@ class _ProfileProgressBar extends StatelessWidget {
                         children: [
                           Container(
                             height: 6,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           FractionallySizedBox(
                             widthFactor: segFill,
@@ -305,7 +305,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     try {
       final results = await ref
           .read(musicCatalogServiceProvider)
-          .searchArtists(query, limit: 20);
+          .searchArtists(query, limit: 10);
       if (!mounted || generation != _searchGeneration) return;
       final selectedKeys = _selected.map(_artistKey).toSet();
       setState(() {
@@ -606,9 +606,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                             MusicProfileLimits.maxArtists,
                           ),
                           style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                             fontSize: 13,
                           ),
                         ),
@@ -799,9 +799,8 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         SizedBox(
           height: 34,
           child: Theme(
-            data: Theme.of(
-              context,
-            ).copyWith(splashFactory: NoSplash.splashFactory),
+            data: Theme.of(context)
+                .copyWith(splashFactory: NoSplash.splashFactory),
             child: AnimatedList(
               key: _suggestionsListKey,
               scrollDirection: Axis.horizontal,

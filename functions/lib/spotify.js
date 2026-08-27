@@ -4,16 +4,32 @@ exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const v2_1 = require("firebase-functions/v2");
+const catalog_request_1 = require("./catalog_request");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = (0, params_1.defineSecret)('LASTFM_API_KEY');
-const defaultSpotifyMarket = 'ES';
 const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
+const spotifyRequestTimeoutMs = 8_000;
+const lastFmRequestTimeoutMs = 5_000;
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken = null;
 let tokenExpiresAt = 0;
+async function fetchExternal(input, init, timeoutMs, service) {
+    try {
+        return await fetch(input, {
+            ...init,
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+    }
+    catch (error) {
+        v2_1.logger.warn(`${service} request failed before receiving a response`, {
+            reason: error instanceof Error ? error.name : 'unknown',
+        });
+        throw new https_1.HttpsError('unavailable', `${service} is temporarily unavailable`);
+    }
+}
 async function getSpotifyToken(clientId, clientSecret) {
     const now = Date.now();
     if (cachedToken && now < tokenExpiresAt - 60_000)
@@ -23,20 +39,29 @@ async function getSpotifyToken(clientId, clientSecret) {
         throw new https_1.HttpsError('failed-precondition', 'Spotify credentials are not configured');
     }
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const res = await fetch('https://accounts.spotify.com/api/token', {
+    const res = await fetchExternal('https://accounts.spotify.com/api/token', {
         method: 'POST',
         headers: {
             Authorization: `Basic ${credentials}`,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: 'grant_type=client_credentials',
-    });
+    }, spotifyRequestTimeoutMs, 'Spotify');
     if (!res.ok) {
         const errorBody = await readResponseSnippet(res);
         v2_1.logger.error('Spotify token request failed', { status: res.status, errorBody });
         throw new https_1.HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
     }
     const data = await res.json();
+    if (!(0, catalog_request_1.isRecord)(data) ||
+        typeof data.access_token !== 'string' ||
+        !data.access_token ||
+        typeof data.expires_in !== 'number' ||
+        !Number.isFinite(data.expires_in) ||
+        data.expires_in <= 0) {
+        v2_1.logger.error('Spotify token response was malformed');
+        throw new https_1.HttpsError('unavailable', 'Spotify returned an invalid token response');
+    }
     cachedToken = data.access_token;
     tokenExpiresAt = now + data.expires_in * 1000;
     return cachedToken;
@@ -48,12 +73,6 @@ async function readResponseSnippet(res) {
     catch {
         return '';
     }
-}
-function sanitizeSpotifyMarket(value) {
-    if (typeof value !== 'string')
-        return defaultSpotifyMarket;
-    const market = value.trim().toUpperCase();
-    return /^[A-Z]{2}$/.test(market) ? market : defaultSpotifyMarket;
 }
 function spotifyArtistQuery(query) {
     return `artist:${query.replace(/"/g, '').trim()}`;
@@ -243,6 +262,8 @@ function normalizeSpotifyGenres(values) {
         return [];
     const genres = new Map();
     for (const value of values) {
+        if (typeof value !== 'string')
+            continue;
         const normalized = normalizeGenreName(value);
         if (!normalized)
             continue;
@@ -266,6 +287,25 @@ function normalizeLastFmTags(tags) {
             break;
     }
     return [...genres.values()];
+}
+function isSpotifyArtistItem(value) {
+    if (!(0, catalog_request_1.isRecord)(value) || typeof value.id !== 'string' || typeof value.name !== 'string') {
+        return false;
+    }
+    if (value.genres !== undefined && (!Array.isArray(value.genres) || !value.genres.every((genre) => typeof genre === 'string'))) {
+        return false;
+    }
+    if (value.images !== undefined && (!Array.isArray(value.images) ||
+        !value.images.every((image) => (0, catalog_request_1.isRecord)(image) && typeof image.url === 'string'))) {
+        return false;
+    }
+    if (value.popularity !== undefined && typeof value.popularity !== 'number')
+        return false;
+    if (value.followers !== undefined && (!(0, catalog_request_1.isRecord)(value.followers) ||
+        (value.followers.total !== undefined && typeof value.followers.total !== 'number'))) {
+        return false;
+    }
+    return true;
 }
 function scoreArtistMatch(item, queryKey, queryTokens) {
     const nameKey = normalizeArtistName(item.name ?? '');
@@ -312,14 +352,18 @@ async function getLastFmGenres(artistName, apiKey) {
         url.searchParams.set('api_key', apiKey);
         url.searchParams.set('format', 'json');
         url.searchParams.set('autocorrect', '1');
-        const res = await fetch(url.toString());
+        const res = await fetchExternal(url.toString(), {}, lastFmRequestTimeoutMs, 'Last.fm');
         if (!res.ok)
             return [];
         const data = await res.json();
-        const tags = data.toptags?.tag;
+        if (!(0, catalog_request_1.isRecord)(data) || !(0, catalog_request_1.isRecord)(data.toptags))
+            return [];
+        const tags = data.toptags.tag;
         if (!Array.isArray(tags))
             return [];
-        return normalizeLastFmTags(tags);
+        return normalizeLastFmTags(tags.filter((tag) => ((0, catalog_request_1.isRecord)(tag) &&
+            (tag.name === undefined || typeof tag.name === 'string') &&
+            (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string'))));
     }
     catch {
         return [];
@@ -329,29 +373,33 @@ async function getLastFmGenres(artistName, apiKey) {
 exports.searchSpotifyArtists = (0, https_1.onCall)({ region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey] }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
-    const query = request.data.query?.trim() ?? '';
-    const limit = Math.min(Number(request.data.limit) || 20, 50);
-    if (!query)
-        return [];
-    const market = sanitizeSpotifyMarket(request.data.market);
-    const spotifyLimit = Math.min(Math.max(limit * 3, 20), 50);
+    const { value: query, limit, market } = (0, catalog_request_1.parseSpotifyArtistSearchRequest)(request.data);
+    const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
     const url = new URL('https://api.spotify.com/v1/search');
     url.searchParams.set('q', spotifyArtistQuery(query));
     url.searchParams.set('type', 'artist');
     url.searchParams.set('market', market);
     url.searchParams.set('limit', String(spotifyLimit));
-    const res = await fetch(url.toString(), {
+    const res = await fetchExternal(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
-    });
+    }, spotifyRequestTimeoutMs, 'Spotify');
     if (!res.ok) {
         v2_1.logger.error('Spotify searchArtists failed', { status: res.status, query });
+        if (res.status === 429) {
+            throw new https_1.HttpsError('resource-exhausted', 'Spotify rate limit reached');
+        }
         throw new https_1.HttpsError('internal', 'Spotify search failed');
     }
     const data = await res.json();
+    if (!(0, catalog_request_1.isRecord)(data) || !(0, catalog_request_1.isRecord)(data.artists) || !Array.isArray(data.artists.items)) {
+        v2_1.logger.error('Spotify searchArtists returned malformed response', { query });
+        throw new https_1.HttpsError('internal', 'Spotify search returned malformed response');
+    }
+    const items = data.artists.items.filter(isSpotifyArtistItem);
     const queryKey = normalizeArtistName(query);
     const queryTokens = queryKey.split(' ').filter(Boolean);
-    const rankedItems = data.artists.items.map((item) => ({
+    const rankedItems = items.map((item) => ({
         item,
         nameKey: normalizeArtistName(item.name ?? ''),
         score: scoreArtistMatch(item, queryKey, queryTokens),
@@ -386,35 +434,41 @@ exports.searchSpotifyTracks = (0, https_1.onCall)({ region: 'europe-southwest1',
     try {
         if (!request.auth)
             throw new https_1.HttpsError('unauthenticated', 'Login required');
-        const query = request.data.query?.trim() ?? '';
-        const limit = Math.min(Number(request.data.limit) || 20, 50);
-        if (!query)
-            return [];
+        const { value: query, limit } = (0, catalog_request_1.parseSpotifySearchRequest)(request.data);
         const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
         const url = new URL('https://api.spotify.com/v1/search');
         url.searchParams.set('q', query);
         url.searchParams.set('type', 'track');
         url.searchParams.set('limit', String(limit));
-        const res = await fetch(url.toString(), {
+        const res = await fetchExternal(url.toString(), {
             headers: { Authorization: `Bearer ${token}` },
-        });
+        }, spotifyRequestTimeoutMs, 'Spotify');
         if (!res.ok) {
             const errorBody = await readResponseSnippet(res);
             v2_1.logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });
+            if (res.status === 429) {
+                throw new https_1.HttpsError('resource-exhausted', 'Spotify rate limit reached');
+            }
             throw new https_1.HttpsError('unavailable', 'Spotify search failed', { status: res.status });
         }
         const data = await res.json();
-        const items = data.tracks?.items;
+        const items = (0, catalog_request_1.isRecord)(data) && (0, catalog_request_1.isRecord)(data.tracks) ? data.tracks.items : undefined;
         if (!Array.isArray(items)) {
             v2_1.logger.error('Spotify searchTracks returned malformed response', { query });
             throw new https_1.HttpsError('internal', 'Spotify search returned malformed response');
         }
-        return items.map((item) => ({
-            title: item.name ?? 'Unknown',
-            artist: item.artists?.[0]?.name ?? 'Unknown Artist',
-            imageUrl: item.album?.images?.[0]?.url ?? '',
-            spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
-        }));
+        return items.filter(catalog_request_1.isRecord).map((item) => {
+            const artists = Array.isArray(item.artists) ? item.artists.filter(catalog_request_1.isRecord) : [];
+            const album = (0, catalog_request_1.isRecord)(item.album) ? item.album : undefined;
+            const images = album && Array.isArray(album.images) ? album.images.filter(catalog_request_1.isRecord) : [];
+            const id = typeof item.id === 'string' ? item.id : '';
+            return {
+                title: typeof item.name === 'string' ? item.name : 'Unknown',
+                artist: typeof artists[0]?.name === 'string' ? artists[0].name : 'Unknown Artist',
+                imageUrl: typeof images[0]?.url === 'string' ? images[0].url : '',
+                spotifyUrl: id ? `https://open.spotify.com/track/${id}` : '',
+            };
+        });
     }
     catch (error) {
         if (error instanceof https_1.HttpsError)

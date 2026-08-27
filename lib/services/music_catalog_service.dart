@@ -51,10 +51,10 @@ class MusicCatalogService {
     }).toList();
   }
 
-  Future<List<app.Track>> searchTracks(String query, {int limit = 20}) =>
+  Future<List<app.Track>> searchTracks(String query, {int limit = 10}) =>
       _client.searchTracks(query, limit: limit);
 
-  Future<List<app.Artist>> searchArtists(String query, {int limit = 20}) =>
+  Future<List<app.Artist>> searchArtists(String query, {int limit = 10}) =>
       _client.searchArtists(query, limit: limit);
 
   Future<List<app.Artist>> getRelatedArtists(String artistName) {

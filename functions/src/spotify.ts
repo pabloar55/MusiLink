@@ -1,18 +1,43 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
+import {
+  isRecord,
+  parseSpotifyArtistSearchRequest,
+  parseSpotifySearchRequest,
+} from './catalog_request';
 
 const spotifyClientId = defineSecret('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = defineSecret('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = defineSecret('LASTFM_API_KEY');
-const defaultSpotifyMarket = 'ES';
 const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
+const spotifyRequestTimeoutMs = 8_000;
+const lastFmRequestTimeoutMs = 5_000;
 
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
+
+async function fetchExternal(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+  service: 'Spotify' | 'Last.fm',
+): Promise<Response> {
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error: unknown) {
+    logger.warn(`${service} request failed before receiving a response`, {
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
+    throw new HttpsError('unavailable', `${service} is temporarily unavailable`);
+  }
+}
 
 async function getSpotifyToken(clientId: string, clientSecret: string): Promise<string> {
   const now = Date.now();
@@ -24,14 +49,14 @@ async function getSpotifyToken(clientId: string, clientSecret: string): Promise<
   }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const res = await fetch('https://accounts.spotify.com/api/token', {
+  const res = await fetchExternal('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
-  });
+  }, spotifyRequestTimeoutMs, 'Spotify');
 
   if (!res.ok) {
     const errorBody = await readResponseSnippet(res);
@@ -39,7 +64,18 @@ async function getSpotifyToken(clientId: string, clientSecret: string): Promise<
     throw new HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
   }
 
-  const data = await res.json() as { access_token: string; expires_in: number };
+  const data: unknown = await res.json();
+  if (
+    !isRecord(data) ||
+    typeof data.access_token !== 'string' ||
+    !data.access_token ||
+    typeof data.expires_in !== 'number' ||
+    !Number.isFinite(data.expires_in) ||
+    data.expires_in <= 0
+  ) {
+    logger.error('Spotify token response was malformed');
+    throw new HttpsError('unavailable', 'Spotify returned an invalid token response');
+  }
   cachedToken = data.access_token;
   tokenExpiresAt = now + data.expires_in * 1000;
   return cachedToken;
@@ -51,12 +87,6 @@ async function readResponseSnippet(res: Response): Promise<string> {
   } catch {
     return '';
   }
-}
-
-function sanitizeSpotifyMarket(value: unknown): string {
-  if (typeof value !== 'string') return defaultSpotifyMarket;
-  const market = value.trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(market) ? market : defaultSpotifyMarket;
 }
 
 function spotifyArtistQuery(query: string): string {
@@ -244,10 +274,11 @@ function hasLastFmGenreKeyword(value: string): boolean {
   });
 }
 
-function normalizeSpotifyGenres(values: string[] | undefined): string[] {
+function normalizeSpotifyGenres(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
   const genres = new Map<string, string>();
   for (const value of values) {
+    if (typeof value !== 'string') continue;
     const normalized = normalizeGenreName(value);
     if (!normalized) continue;
     genres.set(normalized, normalized);
@@ -276,6 +307,31 @@ interface SpotifyArtistItem {
   images?: Array<{ url: string }>;
   popularity?: number;
   followers?: { total?: number };
+}
+
+function isSpotifyArtistItem(value: unknown): value is SpotifyArtistItem {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string') {
+    return false;
+  }
+  if (value.genres !== undefined && (
+    !Array.isArray(value.genres) || !value.genres.every((genre) => typeof genre === 'string')
+  )) {
+    return false;
+  }
+  if (value.images !== undefined && (
+    !Array.isArray(value.images) ||
+    !value.images.every((image) => isRecord(image) && typeof image.url === 'string')
+  )) {
+    return false;
+  }
+  if (value.popularity !== undefined && typeof value.popularity !== 'number') return false;
+  if (value.followers !== undefined && (
+    !isRecord(value.followers) ||
+    (value.followers.total !== undefined && typeof value.followers.total !== 'number')
+  )) {
+    return false;
+  }
+  return true;
 }
 
 function scoreArtistMatch(item: SpotifyArtistItem, queryKey: string, queryTokens: string[]): number {
@@ -321,17 +377,19 @@ async function getLastFmGenres(artistName: string, apiKey: string): Promise<stri
     url.searchParams.set('format', 'json');
     url.searchParams.set('autocorrect', '1');
 
-    const res = await fetch(url.toString());
+    const res = await fetchExternal(url.toString(), {}, lastFmRequestTimeoutMs, 'Last.fm');
     if (!res.ok) return [];
 
-    const data = await res.json() as {
-      toptags?: { tag?: Array<{ name?: string; count?: number | string }> };
-    };
-
-    const tags = data.toptags?.tag;
+    const data: unknown = await res.json();
+    if (!isRecord(data) || !isRecord(data.toptags)) return [];
+    const tags = data.toptags.tag;
     if (!Array.isArray(tags)) return [];
 
-    return normalizeLastFmTags(tags);
+    return normalizeLastFmTags(tags.filter((tag): tag is { name?: string; count?: number | string } => (
+      isRecord(tag) &&
+      (tag.name === undefined || typeof tag.name === 'string') &&
+      (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')
+    )));
   } catch {
     return [];
   }
@@ -360,12 +418,8 @@ export const searchSpotifyArtists = onCall(
   async (request): Promise<ArtistResult[]> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
-    const query = (request.data.query as string | undefined)?.trim() ?? '';
-    const limit = Math.min(Number(request.data.limit) || 20, 50);
-    if (!query) return [];
-
-    const market = sanitizeSpotifyMarket(request.data.market);
-    const spotifyLimit = Math.min(Math.max(limit * 3, 20), 50);
+    const { value: query, limit, market } = parseSpotifyArtistSearchRequest(request.data);
+    const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 
     const url = new URL('https://api.spotify.com/v1/search');
@@ -374,25 +428,29 @@ export const searchSpotifyArtists = onCall(
     url.searchParams.set('market', market);
     url.searchParams.set('limit', String(spotifyLimit));
 
-    const res = await fetch(url.toString(), {
+    const res = await fetchExternal(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
-    });
+    }, spotifyRequestTimeoutMs, 'Spotify');
 
     if (!res.ok) {
       logger.error('Spotify searchArtists failed', { status: res.status, query });
+      if (res.status === 429) {
+        throw new HttpsError('resource-exhausted', 'Spotify rate limit reached');
+      }
       throw new HttpsError('internal', 'Spotify search failed');
     }
 
-    const data = await res.json() as {
-      artists: {
-        items: SpotifyArtistItem[];
-      };
-    };
+    const data: unknown = await res.json();
+    if (!isRecord(data) || !isRecord(data.artists) || !Array.isArray(data.artists.items)) {
+      logger.error('Spotify searchArtists returned malformed response', { query });
+      throw new HttpsError('internal', 'Spotify search returned malformed response');
+    }
+    const items = data.artists.items.filter(isSpotifyArtistItem);
 
     const queryKey = normalizeArtistName(query);
     const queryTokens = queryKey.split(' ').filter(Boolean);
 
-    const rankedItems = data.artists.items.map((item) => ({
+    const rankedItems = items.map((item) => ({
       item,
       nameKey: normalizeArtistName(item.name ?? ''),
       score: scoreArtistMatch(item, queryKey, queryTokens),
@@ -433,9 +491,7 @@ export const searchSpotifyTracks = onCall(
     try {
       if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
-      const query = (request.data.query as string | undefined)?.trim() ?? '';
-      const limit = Math.min(Number(request.data.limit) || 20, 50);
-      if (!query) return [];
+      const { value: query, limit } = parseSpotifySearchRequest(request.data);
 
       const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 
@@ -444,39 +500,38 @@ export const searchSpotifyTracks = onCall(
       url.searchParams.set('type', 'track');
       url.searchParams.set('limit', String(limit));
 
-      const res = await fetch(url.toString(), {
+      const res = await fetchExternal(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      }, spotifyRequestTimeoutMs, 'Spotify');
 
       if (!res.ok) {
         const errorBody = await readResponseSnippet(res);
         logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });
+        if (res.status === 429) {
+          throw new HttpsError('resource-exhausted', 'Spotify rate limit reached');
+        }
         throw new HttpsError('unavailable', 'Spotify search failed', { status: res.status });
       }
 
-      const data = await res.json() as {
-        tracks?: {
-          items?: Array<{
-            id?: string;
-            name?: string;
-            artists?: Array<{ name?: string }>;
-            album?: { images?: Array<{ url?: string }> };
-          }>;
-        };
-      };
-
-      const items = data.tracks?.items;
+      const data: unknown = await res.json();
+      const items = isRecord(data) && isRecord(data.tracks) ? data.tracks.items : undefined;
       if (!Array.isArray(items)) {
         logger.error('Spotify searchTracks returned malformed response', { query });
         throw new HttpsError('internal', 'Spotify search returned malformed response');
       }
 
-      return items.map((item) => ({
-        title: item.name ?? 'Unknown',
-        artist: item.artists?.[0]?.name ?? 'Unknown Artist',
-        imageUrl: item.album?.images?.[0]?.url ?? '',
-        spotifyUrl: item.id ? `https://open.spotify.com/track/${item.id}` : '',
-      }));
+      return items.filter(isRecord).map((item) => {
+        const artists = Array.isArray(item.artists) ? item.artists.filter(isRecord) : [];
+        const album = isRecord(item.album) ? item.album : undefined;
+        const images = album && Array.isArray(album.images) ? album.images.filter(isRecord) : [];
+        const id = typeof item.id === 'string' ? item.id : '';
+        return {
+          title: typeof item.name === 'string' ? item.name : 'Unknown',
+          artist: typeof artists[0]?.name === 'string' ? artists[0].name : 'Unknown Artist',
+          imageUrl: typeof images[0]?.url === 'string' ? images[0].url : '',
+          spotifyUrl: id ? `https://open.spotify.com/track/${id}` : '',
+        };
+      });
     } catch (error: unknown) {
       if (error instanceof HttpsError) throw error;
       logger.error('Spotify searchTracks crashed', { error });
