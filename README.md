@@ -186,6 +186,12 @@ Las reglas de seguridad de Firestore garantizan la privacidad:
 - Las solicitudes de amistad restringen modificación y eliminación a los usuarios involucrados.
 - Los datos privados, como tokens FCM, preferencias de notificación y usuarios bloqueados, viven en `user_private`.
 
+## Despliegue web
+
+La migración reversible de GitHub Pages a Cloudflare Workers Static Assets, sus
+credenciales de CI y la lista de comprobaciones de dominio están documentadas
+en [`docs/cloudflare_migration.md`](docs/cloudflare_migration.md).
+
 ---
 
 *Desarrollado con Flutter.*

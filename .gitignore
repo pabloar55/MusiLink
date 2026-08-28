@@ -57,5 +57,6 @@ pending.txt
 /functions/node_modules/
 /node_modules/
 /functions/artist-key-migration-report.json
+.wrangler/
 
 firestore.rules.old

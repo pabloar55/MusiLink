@@ -1,0 +1,8 @@
+{
+  "name": "musilink-web",
+  "compatibility_date": "2026-08-28",
+  "assets": {
+    "directory": "./build/web",
+    "not_found_handling": "single-page-application"
+  }
+}
