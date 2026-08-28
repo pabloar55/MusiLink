@@ -414,7 +414,11 @@ interface TrackResult {
 // ── Function 1 — Search artists ───────────────────────────────────────────────
 
 export const searchSpotifyArtists = onCall(
-  { region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey] },
+  {
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey],
+  },
   async (request): Promise<ArtistResult[]> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
@@ -486,7 +490,11 @@ export const searchSpotifyArtists = onCall(
 // ── Function 2 — Search tracks ────────────────────────────────────────────────
 
 export const searchSpotifyTracks = onCall(
-  { region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret] },
+  {
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [spotifyClientId, spotifyClientSecret],
+  },
   async (request): Promise<TrackResult[]> => {
     try {
       if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');

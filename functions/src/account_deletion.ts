@@ -153,7 +153,7 @@ function recentAuthentication(authTime: unknown): boolean {
 }
 
 export const requestAccountDeletion = onCall(
-  { region: callableRegion },
+  { region: callableRegion, enforceAppCheck: true },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {

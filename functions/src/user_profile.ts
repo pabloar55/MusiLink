@@ -5,7 +5,7 @@ import { db } from './firebase';
 import { claimUsernameAndCreateProfile as claimUsername } from './username_claim';
 
 export const createUserProfile = onCall(
-  { region: 'europe-southwest1' },
+  { region: 'europe-southwest1', enforceAppCheck: true },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {

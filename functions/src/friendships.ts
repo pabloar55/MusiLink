@@ -133,7 +133,7 @@ async function establishAcceptedFriendship(
 }
 
 export const acceptFriendRequest = onCall(
-  { region: 'europe-southwest1' },
+  { region: 'europe-southwest1', enforceAppCheck: true },
   async (request) => {
     const receiverId = request.auth?.uid;
     if (!receiverId) {

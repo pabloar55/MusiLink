@@ -20,7 +20,11 @@ async function fetchLastFm(input: string): Promise<Response> {
 }
 
 export const getSimilarArtists = onCall(
-  { region: 'europe-southwest1', secrets: [lastFmApiKey] },
+  {
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [lastFmApiKey],
+  },
   async (request): Promise<string[]> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 

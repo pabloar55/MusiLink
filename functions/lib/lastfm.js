@@ -19,7 +19,11 @@ async function fetchLastFm(input) {
         throw new https_1.HttpsError('unavailable', 'Last.fm is temporarily unavailable');
     }
 }
-exports.getSimilarArtists = (0, https_1.onCall)({ region: 'europe-southwest1', secrets: [lastFmApiKey] }, async (request) => {
+exports.getSimilarArtists = (0, https_1.onCall)({
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [lastFmApiKey],
+}, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: artistName, limit } = (0, catalog_request_1.parseLastFmSearchRequest)(request.data);

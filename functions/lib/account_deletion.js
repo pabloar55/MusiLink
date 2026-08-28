@@ -112,7 +112,7 @@ function recentAuthentication(authTime) {
         return false;
     return Math.floor(Date.now() / 1000) - authTime <= recentAuthenticationSeconds;
 }
-exports.requestAccountDeletion = (0, https_1.onCall)({ region: callableRegion }, async (request) => {
+exports.requestAccountDeletion = (0, https_1.onCall)({ region: callableRegion, enforceAppCheck: true }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {
         throw new https_1.HttpsError('unauthenticated', 'Authentication is required.');

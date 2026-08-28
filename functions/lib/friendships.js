@@ -92,7 +92,7 @@ async function establishAcceptedFriendship(requestId, expectedReceiverId, expect
         return { senderId, receiverId };
     });
 }
-exports.acceptFriendRequest = (0, https_1.onCall)({ region: 'europe-southwest1' }, async (request) => {
+exports.acceptFriendRequest = (0, https_1.onCall)({ region: 'europe-southwest1', enforceAppCheck: true }, async (request) => {
     const receiverId = request.auth?.uid;
     if (!receiverId) {
         throw new https_1.HttpsError('unauthenticated', 'Authentication is required.');

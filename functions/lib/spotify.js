@@ -370,7 +370,11 @@ async function getLastFmGenres(artistName, apiKey) {
     }
 }
 // ── Function 1 — Search artists ───────────────────────────────────────────────
-exports.searchSpotifyArtists = (0, https_1.onCall)({ region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey] }, async (request) => {
+exports.searchSpotifyArtists = (0, https_1.onCall)({
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey],
+}, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: query, limit, market } = (0, catalog_request_1.parseSpotifyArtistSearchRequest)(request.data);
@@ -430,7 +434,11 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({ region: 'europe-southwest1'
     }));
 });
 // ── Function 2 — Search tracks ────────────────────────────────────────────────
-exports.searchSpotifyTracks = (0, https_1.onCall)({ region: 'europe-southwest1', secrets: [spotifyClientId, spotifyClientSecret] }, async (request) => {
+exports.searchSpotifyTracks = (0, https_1.onCall)({
+    region: 'europe-southwest1',
+    enforceAppCheck: true,
+    secrets: [spotifyClientId, spotifyClientSecret],
+}, async (request) => {
     try {
         if (!request.auth)
             throw new https_1.HttpsError('unauthenticated', 'Login required');
