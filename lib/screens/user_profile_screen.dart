@@ -11,6 +11,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/profile/compatibility_card.dart';
 import 'package:musi_link/widgets/profile/friendship_buttons.dart';
 import 'package:musi_link/widgets/profile/music_taste_section.dart';
@@ -95,9 +96,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final message = error?.code == 'resource-exhausted'
         ? l10n.authErrorTooManyRequests
         : l10n.genericError;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _acceptRequest(String requestId) async {
@@ -174,7 +174,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   }
 
   Future<void> _openSpotifyUrl(String url) async {
-    final uri = Uri.parse(url);
+    final uri = parseSpotifyTrackUri(url);
+    if (uri == null) return;
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -264,7 +265,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
             if (user.dailySong != null)
               ProfileDailySongCard(
                 song: user.dailySong!,
-                onTap: user.dailySong!.spotifyUrl.isNotEmpty
+                onTap: parseSpotifyTrackUri(user.dailySong!.spotifyUrl) != null
                     ? () => _openSpotifyUrl(user.dailySong!.spotifyUrl)
                     : null,
               ),

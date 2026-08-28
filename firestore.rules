@@ -40,6 +40,16 @@ service cloud.firestore {
         && (allowEmpty && value == '' || value.matches('^https://.*$'));
     }
 
+    function validSpotifyTrackUrl(value) {
+      // searchSpotifyTracks emite esta URL canónica a partir del ID de Spotify.
+      // No se aceptan hosts parecidos, credenciales en la URL, parámetros ni
+      // rutas adicionales para que una tarjeta musical no pueda ocultar phishing.
+      return value is string
+        && value.matches(
+          '^https://open[.]spotify[.]com/track/[A-Za-z0-9]{22}$'
+        );
+    }
+
     function validTrackData(track) {
       return track is map
         && track.keys().hasOnly(['title', 'artist', 'imageUrl', 'spotifyUrl'])
@@ -51,7 +61,7 @@ service cloud.firestore {
         && track.artist.toUtf8().size() > 0
         && track.artist.toUtf8().size() <= 300
         && validHttpsUrl(track.imageUrl, true)
-        && validHttpsUrl(track.spotifyUrl, true);
+        && validSpotifyTrackUrl(track.spotifyUrl);
     }
 
     function validPublicProfile(data) {

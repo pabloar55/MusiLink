@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/track_artwork.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,9 +10,7 @@ class DailySongCard extends StatelessWidget {
 
   const DailySongCard({super.key, required this.song});
 
-  Future<void> _openSpotify() async {
-    if (song.spotifyUrl.isEmpty) return;
-    final uri = Uri.parse(song.spotifyUrl);
+  Future<void> _openSpotify(Uri uri) async {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -20,11 +19,12 @@ class DailySongCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final spotifyUri = parseSpotifyTrackUri(song.spotifyUrl);
 
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: _openSpotify,
+        onTap: spotifyUri == null ? null : () => _openSpotify(spotifyUri),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

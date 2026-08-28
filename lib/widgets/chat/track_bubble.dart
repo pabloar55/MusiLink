@@ -5,6 +5,7 @@ import 'package:musi_link/models/message.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/chat/reaction_picker.dart';
 import 'package:musi_link/widgets/track_artwork.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -84,6 +85,7 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
     final cs = widget.colorScheme;
     final tt = Theme.of(context).textTheme;
     final track = widget.message.trackData!;
+    final spotifyUri = parseSpotifyTrackUri(track.spotifyUrl);
     final time =
         '${widget.message.timestamp.hour.toString().padLeft(2, '0')}:${widget.message.timestamp.minute.toString().padLeft(2, '0')}';
 
@@ -111,12 +113,11 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
                 child: CompositedTransformTarget(
                   link: _layerLink,
                   child: GestureDetector(
-                    onTap: track.spotifyUrl.isNotEmpty
+                    onTap: spotifyUri != null
                         ? () async {
-                            final uri = Uri.parse(track.spotifyUrl);
-                            if (await canLaunchUrl(uri)) {
+                            if (await canLaunchUrl(spotifyUri)) {
                               await launchUrl(
-                                uri,
+                                spotifyUri,
                                 mode: LaunchMode.externalApplication,
                               );
                             }

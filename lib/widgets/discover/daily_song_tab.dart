@@ -11,6 +11,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_locations.dart';
+import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
@@ -134,7 +135,8 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
   }
 
   Future<void> _openSpotifyUrl(String url) async {
-    final uri = Uri.parse(url);
+    final uri = parseSpotifyTrackUri(url);
+    if (uri == null) return;
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -372,7 +374,8 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                 padding: const EdgeInsets.only(bottom: 8),
                 child: FriendDailySongCard(
                   friend: friend,
-                  onTapSong: friend.dailySong!.spotifyUrl.isNotEmpty
+                  onTapSong:
+                      parseSpotifyTrackUri(friend.dailySong!.spotifyUrl) != null
                       ? () => _openSpotifyUrl(friend.dailySong!.spotifyUrl)
                       : null,
                   onTapProfile: () => context.push(

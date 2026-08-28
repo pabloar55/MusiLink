@@ -400,3 +400,34 @@ test('rechaza usernames, URLs y trackData fuera de contrato', async () => {
     dailySongUpdatedAt: serverTimestamp(),
   }));
 });
+
+test('solo acepta URLs canónicas de canciones de Spotify', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+  const track = {
+    title: 'Song',
+    artist: 'Artist',
+    imageUrl: '',
+    spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+  };
+
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: track,
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+
+  for (const spotifyUrl of [
+    'https://phishing.example/track/4uLU6hMCjMI75M1A2tKUQC',
+    'https://open.spotify.com.evil.example/track/4uLU6hMCjMI75M1A2tKUQC',
+    'https://open.spotify.com@evil.example/track/4uLU6hMCjMI75M1A2tKUQC',
+    'https://open.spotify.com/track/short-id',
+    'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=attacker',
+    'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC/extra',
+    '',
+  ]) {
+    await assertFails(updateDoc(userRef, {
+      dailySong: { ...track, spotifyUrl },
+      dailySongUpdatedAt: serverTimestamp(),
+    }));
+  }
+});
