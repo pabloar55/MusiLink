@@ -22,7 +22,13 @@ class NotificationService {
     required this._prefs,
     required this._onNotificationTapped,
     required this._getActiveChatId,
-  });
+    FlutterLocalNotificationsPlugin? localNotifications,
+    Stream<String>? tokenRefreshes,
+    Stream<RemoteMessage>? foregroundMessages,
+  }) : _localNotifications =
+           localNotifications ?? FlutterLocalNotificationsPlugin(),
+       _tokenRefreshes = tokenRefreshes ?? _messaging.onTokenRefresh,
+       _foregroundMessages = foregroundMessages ?? FirebaseMessaging.onMessage;
 
   final FirebaseMessaging _messaging;
   final FirebaseFirestore _firestore;
@@ -30,9 +36,11 @@ class NotificationService {
   final SharedPreferences _prefs;
   final void Function(Map<String, dynamic>) _onNotificationTapped;
   final String? Function() _getActiveChatId;
+  final FlutterLocalNotificationsPlugin _localNotifications;
+  final Stream<String> _tokenRefreshes;
+  final Stream<RemoteMessage> _foregroundMessages;
 
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
+  Future<bool>? _platformInitialization;
 
   static const _channelId = 'musilink_high';
   static const _channelName = 'MusiLink Notifications';
@@ -59,13 +67,30 @@ class NotificationService {
   static const _maxAvatarBytes = 1024 * 1024;
 
   Future<void> initialize() async {
+    final initialization = _platformInitialization ??= _initializePlatform();
+    final bool supported;
+    try {
+      supported = await initialization;
+    } catch (_) {
+      if (identical(_platformInitialization, initialization)) {
+        _platformInitialization = null;
+      }
+      rethrow;
+    }
+    if (!supported) return;
+
+    // These operations are session-specific. They must run again after a
+    // logout/login even though the native notification setup is app-scoped.
+    await _retryPendingTokenClear();
+    await _saveTokenIfGranted();
+  }
+
+  Future<bool> _initializePlatform() async {
     if (kIsWeb) {
-      if (!await _messaging.isSupported()) return;
-      await _retryPendingTokenClear();
-      await _saveTokenIfGranted();
-      _messaging.onTokenRefresh.listen((_) => _saveToken());
-      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-      return;
+      if (!await _messaging.isSupported()) return false;
+      _tokenRefreshes.listen((_) => _saveToken());
+      _foregroundMessages.listen(_onForegroundMessage);
+      return true;
     }
 
     // 1. iOS foreground presentation options
@@ -95,18 +120,12 @@ class NotificationService {
       if (response != null) await _onLocalNotificationTapped(response);
     }
 
-    // 4. Retry any FCM token clear that failed during a previous sign-out.
-    await _retryPendingTokenClear();
+    // 4. Auto-refresh token
+    _tokenRefreshes.listen((_) => _saveToken());
 
-    // 5. Save token silently if permission was already granted (no dialog).
-    // New users will be prompted contextually from MessagesScreen.
-    await _saveTokenIfGranted();
-
-    // 6. Auto-refresh token
-    _messaging.onTokenRefresh.listen((_) => _saveToken());
-
-    // 7. Foreground message handler
-    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+    // 5. Foreground message handler
+    _foregroundMessages.listen(_onForegroundMessage);
+    return true;
   }
 
   bool get hasShownPermissionDialog =>
