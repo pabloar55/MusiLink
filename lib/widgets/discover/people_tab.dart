@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/user_discovery_card.dart';
 import 'package:musi_link/models/discovery_result.dart';
@@ -143,7 +144,10 @@ class _PeopleTabState extends State<PeopleTab> {
           final result = widget.results[index];
           return UserDiscoveryCard(
             result: result,
-            onTap: () => context.push('/profile', extra: result),
+            onTap: () => context.push(
+              userProfileLocation(result.user.uid),
+              extra: result,
+            ),
           );
         },
       ),

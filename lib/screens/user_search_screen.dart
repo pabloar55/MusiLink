@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/theme/app_theme.dart';
@@ -140,7 +141,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
   }
 
   void _openProfile(AppUser user) {
-    context.push<void>('/profile', extra: user).then((_) {
+    context.push<void>(userProfileLocation(user.uid), extra: user).then((_) {
       // Refrescar relaciones al volver del perfil
       if (mounted && _results.isNotEmpty) {
         _refreshRelationships();

@@ -12,6 +12,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/notification_prefs_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/session_cleanup.dart';
@@ -37,7 +38,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   Future<void> _goToProfile() async {
     final appUser = ref.read(currentUserProvider).asData?.value;
     if (appUser != null && mounted) {
-      unawaited(context.push('/profile', extra: appUser));
+      unawaited(context.push(userProfileLocation(appUser.uid), extra: appUser));
     }
   }
 

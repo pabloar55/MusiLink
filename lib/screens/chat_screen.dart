@@ -9,6 +9,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_route_observer.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
@@ -433,7 +434,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final nav = GoRouter.of(context);
     final user = await _otherUserFuture;
     if (user != null && !user.isDeleted && mounted) {
-      unawaited(nav.push('/profile?fromChat=true', extra: user));
+      unawaited(
+        nav.push(userProfileLocation(user.uid, fromChat: true), extra: user),
+      );
     }
   }
 

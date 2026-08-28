@@ -10,6 +10,7 @@ import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
@@ -374,7 +375,10 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                   onTapSong: friend.dailySong!.spotifyUrl.isNotEmpty
                       ? () => _openSpotifyUrl(friend.dailySong!.spotifyUrl)
                       : null,
-                  onTapProfile: () => context.push('/profile', extra: friend),
+                  onTapProfile: () => context.push(
+                    userProfileLocation(friend.uid),
+                    extra: friend,
+                  ),
                 ),
               );
             }),

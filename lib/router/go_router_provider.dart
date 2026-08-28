@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:musi_link/models/app_user.dart';
-import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
@@ -19,7 +17,7 @@ import 'package:musi_link/screens/onboarding_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
 import 'package:musi_link/screens/artist_selector_screen.dart';
 import 'package:musi_link/screens/username_setup_screen.dart';
-import 'package:musi_link/screens/user_profile_screen.dart';
+import 'package:musi_link/screens/user_profile_route_screen.dart';
 import 'package:musi_link/screens/user_search_screen.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/user_setup_cache.dart';
@@ -137,26 +135,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
         ),
       ),
-      GoRoute(
-        path: '/profile',
-        redirect: (context, state) {
-          final extra = state.extra;
-          if (extra is! AppUser && extra is! DiscoveryResult) return '/';
-          return null;
-        },
-        builder: (context, state) {
-          final extra = state.extra;
-          final fromChat = state.uri.queryParameters['fromChat'] == 'true';
-          if (extra is DiscoveryResult) {
-            return UserProfileScreen(
-              user: extra.user,
-              initialCompatibility: extra,
-              fromChat: fromChat,
-            );
-          }
-          return UserProfileScreen(user: extra! as AppUser, fromChat: fromChat);
-        },
-      ),
+      GoRoute(path: '/profile/:uid', builder: buildUserProfileRoute),
       GoRoute(
         path: '/chat',
         redirect: (context, state) {

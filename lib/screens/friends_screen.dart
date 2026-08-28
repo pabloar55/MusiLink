@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
 import 'package:musi_link/widgets/friends/section_header.dart';
@@ -213,7 +214,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                           if (selectedUser != null) {
                             // Invalida el caché para obtener los datos más recientes (ej. Now Playing)
                             invalidateUserFuture(selectedUser.uid);
-                            context.push('/profile', extra: selectedUser);
+                            context.push(
+                              userProfileLocation(selectedUser.uid),
+                              extra: selectedUser,
+                            );
                           }
                         },
                         onLongPress: (selectedUser) => _showRemoveFriendDialog(
