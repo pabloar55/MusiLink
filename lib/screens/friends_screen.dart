@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/user_service.dart';
@@ -27,6 +28,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     with AutomaticKeepAliveClientMixin, UserFutureCache {
   List<String> _loadedFriendUids = const [];
   Future<List<AppUser>>? _friendProfilesFuture;
+  final Map<String, String> _optimisticAcceptances = {};
+  bool _reconciliationScheduled = false;
 
   @override
   UserService get userService => ref.read(userServiceProvider);
@@ -50,6 +53,76 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     return true;
   }
 
+  Future<void> _acceptRequest(String requestId, String otherUid) async {
+    if (_optimisticAcceptances.containsKey(requestId)) return;
+
+    setState(() {
+      _optimisticAcceptances[requestId] = otherUid;
+    });
+
+    try {
+      await ref.read(friendServiceProvider).acceptRequest(requestId, otherUid);
+    } catch (_) {
+      if (!mounted || _optimisticAcceptances[requestId] != otherUid) return;
+      setState(() {
+        _optimisticAcceptances.remove(requestId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
+      );
+    }
+  }
+
+  List<String> _withOptimisticFriends(List<String> friendUids) {
+    final merged = friendUids.toList(growable: true);
+    final seen = friendUids.toSet();
+    for (final uid in _optimisticAcceptances.values) {
+      if (seen.add(uid)) merged.add(uid);
+    }
+    return merged;
+  }
+
+  void _reconcileOptimisticAcceptances({
+    required List<FriendRequest>? receivedRequests,
+    required List<String>? friendUids,
+  }) {
+    if (_reconciliationScheduled ||
+        receivedRequests == null ||
+        friendUids == null ||
+        _optimisticAcceptances.isEmpty) {
+      return;
+    }
+
+    final pendingRequestIds = receivedRequests
+        .map((request) => request.id)
+        .toSet();
+    final confirmedFriendUids = friendUids.toSet();
+    final confirmedRequestIds = _optimisticAcceptances.entries
+        .where(
+          (entry) =>
+              confirmedFriendUids.contains(entry.value) &&
+              !pendingRequestIds.contains(entry.key),
+        )
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    if (confirmedRequestIds.isEmpty) return;
+
+    _reconciliationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reconciliationScheduled = false;
+      if (!mounted) return;
+      final hasPendingConfirmation = confirmedRequestIds.any(
+        _optimisticAcceptances.containsKey,
+      );
+      if (!hasPendingConfirmation) return;
+      setState(() {
+        for (final requestId in confirmedRequestIds) {
+          _optimisticAcceptances.remove(requestId);
+        }
+      });
+    });
+  }
+
   Future<void> _showRemoveFriendDialog(String uid, String? name) async {
     final confirmed = await showRemoveFriendDialog(context);
     if (confirmed == true) {
@@ -67,6 +140,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     final receivedAsync = ref.watch(receivedRequestsProvider);
     final sentAsync = ref.watch(sentRequestsProvider);
     final friendsAsync = ref.watch(friendsStreamProvider);
+    _reconcileOptimisticAcceptances(
+      receivedRequests: receivedAsync.asData?.value,
+      friendUids: friendsAsync.asData?.value,
+    );
 
     return Scaffold(
       body: ListView(
@@ -82,11 +159,17 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
             ),
             error: (_, _) => Center(child: Text(l10n.genericError)),
             data: (requests) {
-              if (requests.isEmpty) {
+              final visibleRequests = requests
+                  .where(
+                    (request) =>
+                        !_optimisticAcceptances.containsKey(request.id),
+                  )
+                  .toList(growable: false);
+              if (visibleRequests.isEmpty) {
                 return EmptyMessage(text: l10n.friendsNoRequests);
               }
               return Column(
-                children: requests.map((request) {
+                children: visibleRequests.map((request) {
                   return RequestTile(
                     uid: request.senderId,
                     getUserFuture: getUserFuture,
@@ -99,9 +182,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                             color: colorScheme.primary,
                           ),
                           tooltip: l10n.friendsAccept,
-                          onPressed: () => ref
-                              .read(friendServiceProvider)
-                              .acceptRequest(request.id, request.senderId),
+                          onPressed: () =>
+                              _acceptRequest(request.id, request.senderId),
                         ),
                         IconButton(
                           icon: Icon(
@@ -165,7 +247,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
             ),
             error: (_, _) => Center(child: Text(l10n.genericError)),
             data: (friendUids) {
-              if (friendUids.isEmpty) {
+              final visibleFriendUids = _withOptimisticFriends(friendUids);
+              if (visibleFriendUids.isEmpty) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -184,14 +267,14 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                 );
               }
               return FutureBuilder<List<AppUser>>(
-                future: _getFriendProfiles(friendUids),
+                future: _getFriendProfiles(visibleFriendUids),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting &&
                       !snapshot.hasData) {
                     return SkeletonShimmer(
                       child: Column(
                         children: List.generate(
-                          friendUids.length.clamp(1, 3),
+                          visibleFriendUids.length.clamp(1, 3),
                           (_) => const SkeletonListTile(),
                         ),
                       ),
@@ -206,7 +289,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                       user.uid: user,
                   };
                   return Column(
-                    children: friendUids.map((uid) {
+                    children: visibleFriendUids.map((uid) {
                       final user = usersById[uid];
                       return FriendTile(
                         user: user,
