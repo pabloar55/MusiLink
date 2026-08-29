@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:musi_link/utils/trusted_media_url.dart';
 
 /// Displays a user profile photo with a browser-safe fallback.
 ///
@@ -21,7 +22,7 @@ class UserProfilePhoto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = photoUrl.trim();
+    final url = trustedProfilePhotoUrl(photoUrl);
     if (url.isEmpty) return fallback;
 
     if (kIsWeb) {

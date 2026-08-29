@@ -35,6 +35,25 @@ void main() {
       expect(find.byIcon(LucideIcons.user), findsOneWidget);
     });
 
+    testWidgets('muestra icono para una imagen externa no confiable', (
+      tester,
+    ) async {
+      const artist = Artist(
+        name: 'Test Artist',
+        imageUrl: 'https://tracking.example/artist.jpg',
+        genres: [],
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ArtistTile(artist: artist)),
+        ),
+      );
+
+      expect(find.byIcon(LucideIcons.user), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    });
+
     testWidgets('en web carga la imagen dentro del canvas de Flutter', (
       tester,
     ) async {

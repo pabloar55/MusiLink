@@ -34,10 +34,30 @@ service cloud.firestore {
           .data.get('friends', []).hasAny([userA]);
     }
 
-    function validHttpsUrl(value, allowEmpty) {
+    function validSpotifyImageUrl(value, allowEmpty) {
       return value is string
         && value.toUtf8().size() <= 2048
-        && (allowEmpty && value == '' || value.matches('^https://.*$'));
+        && (
+          allowEmpty && value == ''
+          || value.matches('^https://i[.]scdn[.]co/image/[A-Za-z0-9]+$')
+        );
+    }
+
+    function validProfilePhotoUrl(userId, value) {
+      return value is string
+        && value.toUtf8().size() <= 2048
+        && (
+          value == ''
+          || (
+            userId.matches('^[A-Za-z0-9]{1,128}$')
+            && value.matches(
+              '^https://firebasestorage[.]googleapis[.]com/v0/b/'
+              + 'musi-link-e7759[.]firebasestorage[.]app/o/'
+              + 'profile_photos%2F' + userId
+              + '[?]alt=media&token=[A-Za-z0-9_-]{1,256}$'
+            )
+          )
+        );
     }
 
     function validSpotifyTrackUrl(value) {
@@ -60,17 +80,17 @@ service cloud.firestore {
         && track.artist is string
         && track.artist.toUtf8().size() > 0
         && track.artist.toUtf8().size() <= 300
-        && validHttpsUrl(track.imageUrl, true)
+        && validSpotifyImageUrl(track.imageUrl, true)
         && validSpotifyTrackUrl(track.spotifyUrl);
     }
 
-    function validPublicProfile(data) {
+    function validPublicProfile(userId, data) {
       return data.displayName is string
         && data.displayName.toUtf8().size() > 0
         && data.displayName.toUtf8().size() <= 100
         && data.username is string
         && data.username.matches('^[a-z0-9_]{3,20}$')
-        && validHttpsUrl(data.get('photoUrl', ''), true)
+        && validProfilePhotoUrl(userId, data.get('photoUrl', ''))
         && (!('spotifyId' in data)
           || data.spotifyId is string && data.spotifyId.toUtf8().size() <= 128)
         && (!('topArtists' in data)
@@ -219,7 +239,7 @@ service cloud.firestore {
           'dailySongUpdatedAt',
           'recommendationsRefreshRequestedAt',
         ])
-        && validPublicProfile(request.resource.data)
+        && validPublicProfile(userId, request.resource.data)
         && keepsUsernameOrAnonymizes(userId);
       allow delete: if false;
 

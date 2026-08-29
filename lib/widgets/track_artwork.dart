@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:musi_link/utils/trusted_media_url.dart';
 
 class TrackArtwork extends StatelessWidget {
   const TrackArtwork({
@@ -23,9 +24,10 @@ class TrackArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final content = imageUrl.isNotEmpty
+    final trustedUrl = trustedSpotifyImageUrl(imageUrl);
+    final content = trustedUrl.isNotEmpty
         ? CachedNetworkImage(
-            imageUrl: imageUrl,
+            imageUrl: trustedUrl,
             width: width,
             height: height,
             fit: fit,

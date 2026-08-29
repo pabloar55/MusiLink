@@ -19,11 +19,16 @@ void main() {
     expect(find.byKey(fallbackKey), findsOneWidget);
   });
 
-  testWidgets('en web mantiene la foto en el canvas de Flutter', (tester) async {
+  testWidgets('en web mantiene la foto en el canvas de Flutter', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: UserProfilePhoto(
-          photoUrl: 'https://example.test/avatar.jpg',
+          photoUrl:
+              'https://firebasestorage.googleapis.com/v0/b/'
+              'musi-link-e7759.firebasestorage.app/o/'
+              'profile_photos%2Falice?alt=media&token=test-token',
           fallback: SizedBox(),
         ),
       ),
@@ -33,4 +38,20 @@ void main() {
     final provider = image.image as NetworkImage;
     expect(provider.webHtmlElementStrategy, WebHtmlElementStrategy.never);
   }, skip: !kIsWeb);
+
+  testWidgets('no carga fotos externas no confiables', (tester) async {
+    const fallbackKey = Key('untrusted-fallback');
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: UserProfilePhoto(
+          photoUrl: 'https://tracking.example/avatar.jpg',
+          fallback: SizedBox(key: fallbackKey),
+        ),
+      ),
+    );
+
+    expect(find.byKey(fallbackKey), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+  });
 }

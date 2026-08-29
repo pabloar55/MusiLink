@@ -13,6 +13,7 @@ import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/music_profile_limits.dart';
+import 'package:musi_link/utils/trusted_media_url.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 
 // ─── Definición de etapas ────────────────────────────────────────────────────
@@ -827,6 +828,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
   Widget _buildRankedItem(Artist artist, int index) {
     final cs = Theme.of(context).colorScheme;
+    final imageUrl = trustedSpotifyImageUrl(artist.imageUrl);
     return ListTile(
       key: ValueKey(_artistKey(artist)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -848,12 +850,10 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 18,
-            backgroundImage: artist.imageUrl.isNotEmpty
-                ? CachedNetworkImageProvider(artist.imageUrl)
+            backgroundImage: imageUrl.isNotEmpty
+                ? CachedNetworkImageProvider(imageUrl)
                 : null,
-            child: artist.imageUrl.isEmpty
-                ? const Icon(Icons.person, size: 16)
-                : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person, size: 16) : null,
           ),
         ],
       ),
@@ -880,6 +880,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       itemCount: artists.length,
       itemBuilder: (_, i) {
         final artist = artists[i];
+        final imageUrl = trustedSpotifyImageUrl(artist.imageUrl);
         final isSelected = _selected.any(
           (a) => _artistKey(a) == _artistKey(artist),
         );
@@ -887,10 +888,10 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
           visualDensity: const VisualDensity(vertical: -2),
           minVerticalPadding: 2,
           leading: CircleAvatar(
-            backgroundImage: artist.imageUrl.isNotEmpty
-                ? CachedNetworkImageProvider(artist.imageUrl)
+            backgroundImage: imageUrl.isNotEmpty
+                ? CachedNetworkImageProvider(imageUrl)
                 : null,
-            child: artist.imageUrl.isEmpty ? const Icon(Icons.person) : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
           ),
           title: Text(artist.name),
           subtitle: artist.genres.isNotEmpty

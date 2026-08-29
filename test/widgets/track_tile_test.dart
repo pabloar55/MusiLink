@@ -15,9 +15,7 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: TrackTile(track: track),
-          ),
+          home: Scaffold(body: TrackTile(track: track)),
         ),
       );
 
@@ -26,17 +24,29 @@ void main() {
     });
 
     testWidgets('muestra icono cuando imageUrl está vacío', (tester) async {
+      const track = Track(title: 'Test', artist: 'Artist', imageUrl: '');
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: TrackTile(track: track)),
+        ),
+      );
+
+      expect(find.byIcon(LucideIcons.music), findsOneWidget);
+    });
+
+    testWidgets('muestra icono para una imagen externa no confiable', (
+      tester,
+    ) async {
       const track = Track(
         title: 'Test',
         artist: 'Artist',
-        imageUrl: '',
+        imageUrl: 'https://tracking.example/song.jpg',
       );
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: TrackTile(track: track),
-          ),
+          home: Scaffold(body: TrackTile(track: track)),
         ),
       );
 

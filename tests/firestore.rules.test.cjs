@@ -431,3 +431,54 @@ test('solo acepta URLs canónicas de canciones de Spotify', async () => {
     }));
   }
 });
+
+test('solo acepta imágenes de canciones del CDN de Spotify', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+  const spotifyImageUrl =
+    'https://i.scdn.co/image/ab67616d0000b27371dfaeb7a1930cf0ad245854';
+
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: {
+      title: 'Song',
+      artist: 'Artist',
+      imageUrl: spotifyImageUrl,
+      spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+    },
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+
+  await assertFails(updateDoc(userRef, {
+    dailySong: {
+      title: 'Song',
+      artist: 'Artist',
+      imageUrl: 'https://tracking.example/song.jpg',
+      spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+    },
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+});
+
+test('solo acepta la foto del bucket y ruta propios del usuario', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+  const baseUrl =
+    'https://firebasestorage.googleapis.com/v0/b/' +
+    'musi-link-e7759.firebasestorage.app/o/profile_photos%2F';
+  const query = '?alt=media&token=12345678-abcd-1234-abcd-123456789abc';
+
+  await assertSucceeds(updateDoc(userRef, {
+    photoUrl: `${baseUrl}alice${query}`,
+  }));
+  await assertFails(updateDoc(userRef, {
+    photoUrl: `${baseUrl}bob${query}`,
+  }));
+  await assertFails(updateDoc(userRef, {
+    photoUrl: 'https://tracking.example/alice.jpg',
+  }));
+  await assertFails(updateDoc(userRef, {
+    photoUrl:
+      'https://firebasestorage.googleapis.com.evil.example/v0/b/' +
+      `musi-link-e7759.firebasestorage.app/o/profile_photos%2Falice${query}`,
+  }));
+});

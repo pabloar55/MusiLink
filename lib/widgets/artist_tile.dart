@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/artist.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/trusted_media_url.dart';
 
 class ArtistTile extends StatelessWidget {
   final Artist artist;
@@ -15,6 +16,7 @@ class ArtistTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final imageUrl = trustedSpotifyImageUrl(artist.imageUrl);
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -40,8 +42,8 @@ class ArtistTile extends StatelessWidget {
 
           // Foto circular del artista
           ClipOval(
-            child: artist.imageUrl.isNotEmpty
-                ? _artistImage(cs)
+            child: imageUrl.isNotEmpty
+                ? _artistImage(cs, imageUrl)
                 : _placeholder(cs),
           ),
           const SizedBox(width: AppTokens.spaceMD),
@@ -60,10 +62,10 @@ class ArtistTile extends StatelessWidget {
     );
   }
 
-  Widget _artistImage(ColorScheme cs) {
+  Widget _artistImage(ColorScheme cs, String imageUrl) {
     if (kIsWeb) {
       return Image.network(
-        artist.imageUrl,
+        imageUrl,
         width: 52,
         height: 52,
         fit: BoxFit.cover,
@@ -76,7 +78,7 @@ class ArtistTile extends StatelessWidget {
     }
 
     return CachedNetworkImage(
-      imageUrl: artist.imageUrl,
+      imageUrl: imageUrl,
       width: 52,
       height: 52,
       fit: BoxFit.cover,
