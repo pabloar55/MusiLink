@@ -19,9 +19,8 @@ jobs:
     # Keep this migration dormant until the Cloudflare account, token and
     # Firebase/Google domain allowlists are ready.
     if: >-
-      vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-       github.event.workflow_run.conclusion == 'success')
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
