@@ -77,8 +77,9 @@ copiar `index.html` a `404.html`, como se hace para GitHub Pages.
 
 ## 4. Dominio y retirada de GitHub Pages
 
-1. Añadir el dominio definitivo al Worker desde **Workers & Pages > musilink-web
-   > Settings > Domains & Routes**.
+1. Los dominios definitivos `musilink.app` y `www.musilink.app` están declarados
+   como Custom Domains en `wrangler.jsonc`; cada despliegue mantiene estas rutas
+   sincronizadas con el Worker.
 2. Repetir las tres autorizaciones de dominio de Firebase Auth, Google OAuth y
    reCAPTCHA Enterprise para el dominio definitivo.
 3. Validar de nuevo los flujos críticos en el dominio definitivo.

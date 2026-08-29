@@ -1,6 +1,16 @@
 {
   "name": "musilink-web",
   "compatibility_date": "2026-08-28",
+  "routes": [
+    {
+      "pattern": "musilink.app",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.musilink.app",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./build/web",
     "not_found_handling": "single-page-application"
