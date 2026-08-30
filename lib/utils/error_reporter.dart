@@ -17,6 +17,11 @@ Future<void> reportError(Object error, StackTrace stack) async {
   } catch (_) {}
 }
 
+/// Returns true for an intentional backend throttle that should be presented
+/// to the user instead of recorded as an application failure.
+bool isRateLimitError(Object error) =>
+    error is FirebaseException && error.code == 'resource-exhausted';
+
 /// Returns true when [e] looks like a transient network failure.
 bool isNetworkError(Object e) {
   if (e is FirebaseException) {

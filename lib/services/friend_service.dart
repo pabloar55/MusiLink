@@ -47,7 +47,7 @@ class FriendService with AuthenticatedService {
       final callable = _functions.httpsCallable('sendFriendRequest');
       await callable.call<void>({'receiverId': receiverUid});
     } catch (e, stack) {
-      await reportError(e, stack);
+      if (!isRateLimitError(e)) await reportError(e, stack);
       rethrow;
     }
   }

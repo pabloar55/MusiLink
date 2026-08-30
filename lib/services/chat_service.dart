@@ -185,7 +185,7 @@ class ChatService with AuthenticatedService {
         'text': trimmed,
       });
     } catch (e, stack) {
-      await reportError(e, stack);
+      if (!isRateLimitError(e)) await reportError(e, stack);
       rethrow;
     }
   }
@@ -313,7 +313,7 @@ class ChatService with AuthenticatedService {
         'trackData': track.toMap(),
       });
     } catch (e, stack) {
-      await reportError(e, stack);
+      if (!isRateLimitError(e)) await reportError(e, stack);
       rethrow;
     }
   }
