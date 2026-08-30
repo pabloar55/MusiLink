@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -11,10 +12,15 @@ import 'package:musi_link/utils/firestore_collections.dart';
 
 /// Servicio para gestionar chats y mensajes en Firestore.
 class ChatService with AuthenticatedService {
-  ChatService({required this._firestore, required this._auth});
+  ChatService({
+    required this._firestore,
+    required this._auth,
+    required this._functions,
+  });
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
   @override
   FirebaseAuth get auth => _auth;
@@ -22,9 +28,6 @@ class ChatService with AuthenticatedService {
       .collection(FirestoreCollections.chats);
   late final CollectionReference<Map<String, dynamic>> _privateUsersRef =
       _firestore.collection(FirestoreCollections.userPrivate);
-  late final CollectionReference<Map<String, dynamic>> _rateLimitsRef =
-      _firestore.collection(FirestoreCollections.rateLimits);
-
   // Cache por otherUid: evita re-query al abrir el mismo chat varias veces.
   final Map<String, Chat> _chatByOtherUid = {};
 
@@ -158,69 +161,28 @@ class ChatService with AuthenticatedService {
 
   /// Envía un mensaje de texto en un chat.
   static const int maxMessageBytes = 2000;
-  static const Duration _messageRateLimitWindow = Duration(seconds: 10);
 
   static bool _isValidMessageText(String text) =>
       text.isNotEmpty && utf8.encode(text).length <= maxMessageBytes;
 
-  Map<String, Object?> _nextMessageRateLimit(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) {
-    final data = snap.data() ?? const <String, dynamic>{};
-    final windowStart = data['messageWindowStart'] as Timestamp?;
-    final count = (data['messageCount'] as int?) ?? 0;
-    final shouldReset =
-        windowStart == null ||
-        DateTime.now().difference(windowStart.toDate()) >
-            _messageRateLimitWindow;
-
-    return {
-      'lastMessageAt': FieldValue.serverTimestamp(),
-      'messageWindowStart': shouldReset
-          ? FieldValue.serverTimestamp()
-          : windowStart,
-      'messageCount': shouldReset ? 1 : count + 1,
-    };
-  }
-
-  Future<void> sendMessage(
-    String chatId,
-    String text, {
-    required String otherUid,
-  }) async {
+  Future<void> sendMessage(String chatId, String text) async {
     final trimmed = text.trim();
     if (!_isValidMessageText(trimmed)) {
       throw ArgumentError('Invalid message');
     }
-    await _throwIfBlockedByMe(otherUid);
 
     try {
-      final now = DateTime.now();
-      final message = Message(
-        id: '',
-        senderId: currentUid,
-        text: trimmed,
-        timestamp: now,
-      );
-
-      final chatRef = _chatsRef.doc(chatId);
-      final msgRef = chatRef.collection(FirestoreCollections.messages).doc();
-      final limiterRef = _rateLimitsRef.doc(currentUid);
-
-      await _firestore.runTransaction((tx) async {
-        final limiterSnap = await tx.get(limiterRef);
-
-        // Añadir el mensaje a la subcolección
-        tx.set(msgRef, {
-          ...message.toFirestore(),
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        tx.set(
-          limiterRef,
-          _nextMessageRateLimit(limiterSnap),
-          SetOptions(merge: true),
-        );
+      final messageId = _chatsRef
+          .doc(chatId)
+          .collection(FirestoreCollections.messages)
+          .doc()
+          .id;
+      final callable = _functions.httpsCallable('sendChatMessage');
+      await callable.call<void>({
+        'chatId': chatId,
+        'messageId': messageId,
+        'type': 'text',
+        'text': trimmed,
       });
     } catch (e, stack) {
       await reportError(e, stack);
@@ -331,45 +293,24 @@ class ChatService with AuthenticatedService {
   }
 
   /// Envía una canción como mensaje en un chat.
-  Future<void> sendTrackMessage(
-    String chatId,
-    Track track, {
-    required String otherUid,
-  }) async {
+  Future<void> sendTrackMessage(String chatId, Track track) async {
     final text = '${track.title} - ${track.artist}'.trim();
     if (!_isValidMessageText(text)) {
       throw ArgumentError('Invalid message');
     }
-    await _throwIfBlockedByMe(otherUid);
 
     try {
-      final now = DateTime.now();
-      final message = Message(
-        id: '',
-        senderId: currentUid,
-        text: text,
-        timestamp: now,
-        type: MessageType.track,
-        trackData: track,
-      );
-
-      final chatRef = _chatsRef.doc(chatId);
-      final msgRef = chatRef.collection(FirestoreCollections.messages).doc();
-      final limiterRef = _rateLimitsRef.doc(currentUid);
-
-      await _firestore.runTransaction((tx) async {
-        final limiterSnap = await tx.get(limiterRef);
-
-        tx.set(msgRef, {
-          ...message.toFirestore(),
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        tx.set(
-          limiterRef,
-          _nextMessageRateLimit(limiterSnap),
-          SetOptions(merge: true),
-        );
+      final messageId = _chatsRef
+          .doc(chatId)
+          .collection(FirestoreCollections.messages)
+          .doc()
+          .id;
+      final callable = _functions.httpsCallable('sendChatMessage');
+      await callable.call<void>({
+        'chatId': chatId,
+        'messageId': messageId,
+        'type': 'track',
+        'trackData': track.toMap(),
       });
     } catch (e, stack) {
       await reportError(e, stack);

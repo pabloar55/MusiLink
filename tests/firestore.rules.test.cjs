@@ -245,12 +245,12 @@ test('un usuario puede consultar sus solicitudes en bloque', async () => {
   )));
 });
 
-test('un usuario activo puede crear su primera solicitud y su rate limit atómicamente', async () => {
+test('el cliente no puede saltarse sendFriendRequest', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');
   const db = dbFor('alice');
 
-  await assertSucceeds(runTransaction(db, async (tx) => {
+  await assertFails(runTransaction(db, async (tx) => {
     const limiterRef = doc(db, 'rate_limits/alice');
     await tx.get(limiterRef);
     tx.set(doc(db, 'friend_requests/alice_bob'), {
@@ -268,7 +268,7 @@ test('un usuario activo puede crear su primera solicitud y su rate limit atómic
   }));
 });
 
-test('una solicitud reinicia una ventana de rate limit caducada', async () => {
+test('el cliente no puede modificar un rate limit caducado', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');
   await seed('rate_limits/alice', {
@@ -281,7 +281,7 @@ test('una solicitud reinicia una ventana de rate limit caducada', async () => {
   });
   const db = dbFor('alice');
 
-  await assertSucceeds(runTransaction(db, async (tx) => {
+  await assertFails(runTransaction(db, async (tx) => {
     const limiterRef = doc(db, 'rate_limits/alice');
     await tx.get(limiterRef);
     tx.set(doc(db, 'friend_requests/alice_bob'), {
@@ -323,6 +323,21 @@ test('dos amigos mutuos pueden crear el chat inicial canónico', async () => {
     createdAt: serverTimestamp(),
     unreadCounts: { alice: 0, bob: 0 },
   }));
+});
+
+test('el cliente no puede saltarse sendChatMessage', async () => {
+  await seedChat();
+
+  await assertFails(setDoc(
+    doc(dbFor('alice'), 'chats/alice_bob/messages/client-message'),
+    {
+      senderId: 'alice',
+      text: 'mensaje directo',
+      timestamp: serverTimestamp(),
+      read: false,
+      type: 'text',
+    },
+  ));
 });
 
 test('solo el receptor marca read de false a true', async () => {

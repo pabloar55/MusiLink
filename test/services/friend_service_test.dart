@@ -1,5 +1,6 @@
 // ignore_for_file: subtype_of_sealed_class, unnecessary_lambdas, avoid_redundant_argument_values
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
@@ -11,6 +12,7 @@ void main() {
   late MockFirebaseFirestore mockFirestore;
   late MockFirebaseAuth mockAuth;
   late MockFirebaseFunctions mockFunctions;
+  late MockHttpsCallable mockSendRequestCallable;
   late MockCollectionReference mockRequestsRef;
   late MockCollectionReference mockUsersRef;
   late MockCollectionReference mockRateLimitsRef;
@@ -21,23 +23,25 @@ void main() {
     mockFirestore = MockFirebaseFirestore();
     mockAuth = MockFirebaseAuth();
     mockFunctions = MockFirebaseFunctions();
+    mockSendRequestCallable = MockHttpsCallable();
     mockRequestsRef = MockCollectionReference();
     mockUsersRef = MockCollectionReference();
     mockRateLimitsRef = MockCollectionReference();
     mockCurrentUser = MockUser();
 
-    when(
-      () => mockFirestore.collection('friend_requests'),
-    ).thenReturn(mockRequestsRef);
+    when(() => mockFirestore.collection('friend_requests'))
+        .thenReturn(mockRequestsRef);
     when(() => mockFirestore.collection('users')).thenReturn(mockUsersRef);
-    when(
-      () => mockFirestore.collection('user_private'),
-    ).thenReturn(mockUsersRef);
-    when(
-      () => mockFirestore.collection('rate_limits'),
-    ).thenReturn(mockRateLimitsRef);
+    when(() => mockFirestore.collection('user_private'))
+        .thenReturn(mockUsersRef);
+    when(() => mockFirestore.collection('rate_limits'))
+        .thenReturn(mockRateLimitsRef);
     when(() => mockAuth.currentUser).thenReturn(mockCurrentUser);
     when(() => mockCurrentUser.uid).thenReturn('current_uid');
+    when(() => mockFunctions.httpsCallable('sendFriendRequest'))
+        .thenReturn(mockSendRequestCallable);
+    when(() => mockSendRequestCallable.call<void>(any()))
+        .thenAnswer((_) async => MockHttpsCallableResult<void>());
 
     friendService = FriendService(
       firestore: mockFirestore,
@@ -77,19 +81,16 @@ void main() {
 
         final mockCurrentUserDoc = MockDocumentReference();
         final mockReceiverUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(
-          () => mockUsersRef.doc('receiver_uid'),
-        ).thenReturn(mockReceiverUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('receiver_uid'))
+            .thenReturn(mockReceiverUserDoc);
         final mockCurrentUserSnap = MockDocumentSnapshot();
         when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
         final mockReceiverPublicSnap = MockDocumentSnapshot();
         when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-        when(
-          () => mockReceiverPublicSnap.data(),
-        ).thenReturn({'username': 'receiver'});
+        when(() => mockReceiverPublicSnap.data())
+            .thenReturn({'username': 'receiver'});
 
         final mockDocSnap = MockDocumentSnapshot();
         when(() => mockDocSnap.exists).thenReturn(false);
@@ -107,35 +108,22 @@ void main() {
 
         final mockDocRef = MockDocumentReference();
         final mockInverseDocRef = MockDocumentReference();
-        when(
-          () => mockRequestsRef.doc('current_uid_receiver_uid'),
-        ).thenReturn(mockDocRef);
-        when(
-          () => mockRequestsRef.doc('receiver_uid_current_uid'),
-        ).thenReturn(mockInverseDocRef);
+        when(() => mockRequestsRef.doc('current_uid_receiver_uid'))
+            .thenReturn(mockDocRef);
+        when(() => mockRequestsRef.doc('receiver_uid_current_uid'))
+            .thenReturn(mockInverseDocRef);
         final mockRateLimitDocRef = MockDocumentReference();
-        when(
-          () => mockRateLimitsRef.doc('current_uid'),
-        ).thenReturn(mockRateLimitDocRef);
+        when(() => mockRateLimitsRef.doc('current_uid'))
+            .thenReturn(mockRateLimitDocRef);
 
         await friendService.sendRequest('receiver_uid');
 
-        expect(fakeTransaction.sets, hasLength(2));
-        final data = fakeTransaction.sets
-            .firstWhere((entry) => entry.key == mockDocRef)
-            .value;
-        expect(data['senderId'], 'current_uid');
-        expect(data['receiverId'], 'receiver_uid');
-        expect(data['status'], 'pending');
-        expect(data['createdAt'], isA<FieldValue>());
-        expect(data['updatedAt'], isA<FieldValue>());
-
-        final limiterData = fakeTransaction.sets
-            .firstWhere((entry) => entry.key == mockRateLimitDocRef)
-            .value;
-        expect(limiterData['lastFriendRequestAt'], isA<FieldValue>());
-        expect(limiterData['friendRequestWindowStart'], isA<FieldValue>());
-        expect(limiterData['friendRequestCount'], 1);
+        verify(
+          () => mockSendRequestCallable.call<void>({
+            'receiverId': 'receiver_uid',
+          }),
+        ).called(1);
+        expect(fakeTransaction.sets, isEmpty);
       });
 
       test('no crea solicitud si ya son amigos', () async {
@@ -144,21 +132,18 @@ void main() {
 
         final mockCurrentUserDoc = MockDocumentReference();
         final mockReceiverUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(
-          () => mockUsersRef.doc('receiver_uid'),
-        ).thenReturn(mockReceiverUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('receiver_uid'))
+            .thenReturn(mockReceiverUserDoc);
         final mockCurrentUserSnap = MockDocumentSnapshot();
         when(() => mockCurrentUserSnap.data()).thenReturn({
           'friends': ['receiver_uid'],
         });
         final mockReceiverPublicSnap = MockDocumentSnapshot();
         when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-        when(
-          () => mockReceiverPublicSnap.data(),
-        ).thenReturn({'username': 'receiver'});
+        when(() => mockReceiverPublicSnap.data())
+            .thenReturn({'username': 'receiver'});
         fakeTransaction.getResults.addAll([
           mockReceiverPublicSnap,
           mockCurrentUserSnap,
@@ -167,9 +152,8 @@ void main() {
         final mockRequestDoc = MockDocumentReference();
         when(() => mockRequestsRef.doc(any())).thenReturn(mockRequestDoc);
         final mockRateLimitDocRef = MockDocumentReference();
-        when(
-          () => mockRateLimitsRef.doc('current_uid'),
-        ).thenReturn(mockRateLimitDocRef);
+        when(() => mockRateLimitsRef.doc('current_uid'))
+            .thenReturn(mockRateLimitDocRef);
 
         await friendService.sendRequest('receiver_uid');
 
@@ -182,26 +166,22 @@ void main() {
 
         final mockCurrentUserDoc = MockDocumentReference();
         final mockReceiverUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(
-          () => mockUsersRef.doc('receiver_uid'),
-        ).thenReturn(mockReceiverUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('receiver_uid'))
+            .thenReturn(mockReceiverUserDoc);
 
         final mockReceiverPublicSnap = MockDocumentSnapshot();
         when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-        when(
-          () => mockReceiverPublicSnap.data(),
-        ).thenReturn({'username': AppUser.deletedUsername});
+        when(() => mockReceiverPublicSnap.data())
+            .thenReturn({'username': AppUser.deletedUsername});
         fakeTransaction.getResults.add(mockReceiverPublicSnap);
 
         final mockRequestDoc = MockDocumentReference();
         when(() => mockRequestsRef.doc(any())).thenReturn(mockRequestDoc);
         final mockRateLimitDocRef = MockDocumentReference();
-        when(
-          () => mockRateLimitsRef.doc('current_uid'),
-        ).thenReturn(mockRateLimitDocRef);
+        when(() => mockRateLimitsRef.doc('current_uid'))
+            .thenReturn(mockRateLimitDocRef);
 
         await friendService.sendRequest('receiver_uid');
 
@@ -215,20 +195,17 @@ void main() {
 
         final mockCurrentUserDoc = MockDocumentReference();
         final mockReceiverUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(
-          () => mockUsersRef.doc('receiver_uid'),
-        ).thenReturn(mockReceiverUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('receiver_uid'))
+            .thenReturn(mockReceiverUserDoc);
 
         final mockCurrentUserSnap = MockDocumentSnapshot();
         when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
         final mockReceiverPublicSnap = MockDocumentSnapshot();
         when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-        when(
-          () => mockReceiverPublicSnap.data(),
-        ).thenReturn({'username': 'receiver'});
+        when(() => mockReceiverPublicSnap.data())
+            .thenReturn({'username': 'receiver'});
         final mockInverseSnap = MockDocumentSnapshot();
         when(() => mockInverseSnap.exists).thenReturn(true);
         when(() => mockInverseSnap.data()).thenReturn({
@@ -244,16 +221,13 @@ void main() {
 
         final mockForwardDocRef = MockDocumentReference();
         final mockInverseDocRef = MockDocumentReference();
-        when(
-          () => mockRequestsRef.doc('current_uid_receiver_uid'),
-        ).thenReturn(mockForwardDocRef);
-        when(
-          () => mockRequestsRef.doc('receiver_uid_current_uid'),
-        ).thenReturn(mockInverseDocRef);
+        when(() => mockRequestsRef.doc('current_uid_receiver_uid'))
+            .thenReturn(mockForwardDocRef);
+        when(() => mockRequestsRef.doc('receiver_uid_current_uid'))
+            .thenReturn(mockInverseDocRef);
         final mockRateLimitDocRef = MockDocumentReference();
-        when(
-          () => mockRateLimitsRef.doc('current_uid'),
-        ).thenReturn(mockRateLimitDocRef);
+        when(() => mockRateLimitsRef.doc('current_uid'))
+            .thenReturn(mockRateLimitDocRef);
 
         await friendService.sendRequest('receiver_uid');
 
@@ -267,19 +241,16 @@ void main() {
 
         final mockCurrentUserDoc = MockDocumentReference();
         final mockReceiverUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
-        when(
-          () => mockUsersRef.doc('receiver_uid'),
-        ).thenReturn(mockReceiverUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('receiver_uid'))
+            .thenReturn(mockReceiverUserDoc);
         final mockCurrentUserSnap = MockDocumentSnapshot();
         when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
         final mockReceiverPublicSnap = MockDocumentSnapshot();
         when(() => mockReceiverPublicSnap.exists).thenReturn(true);
-        when(
-          () => mockReceiverPublicSnap.data(),
-        ).thenReturn({'username': 'receiver'});
+        when(() => mockReceiverPublicSnap.data())
+            .thenReturn({'username': 'receiver'});
         final mockInverseDocSnap = MockDocumentSnapshot();
         when(() => mockInverseDocSnap.exists).thenReturn(false);
         final mockDocSnap = MockDocumentSnapshot();
@@ -299,21 +270,23 @@ void main() {
 
         final mockDocRef = MockDocumentReference();
         final mockInverseDocRef = MockDocumentReference();
-        when(
-          () => mockRequestsRef.doc('current_uid_receiver_uid'),
-        ).thenReturn(mockDocRef);
-        when(
-          () => mockRequestsRef.doc('receiver_uid_current_uid'),
-        ).thenReturn(mockInverseDocRef);
+        when(() => mockRequestsRef.doc('current_uid_receiver_uid'))
+            .thenReturn(mockDocRef);
+        when(() => mockRequestsRef.doc('receiver_uid_current_uid'))
+            .thenReturn(mockInverseDocRef);
         final mockRateLimitDocRef = MockDocumentReference();
-        when(
-          () => mockRateLimitsRef.doc('current_uid'),
-        ).thenReturn(mockRateLimitDocRef);
+        when(() => mockRateLimitsRef.doc('current_uid'))
+            .thenReturn(mockRateLimitDocRef);
+
+        final exception = MockFirebaseFunctionsException();
+        when(() => exception.code).thenReturn('resource-exhausted');
+        when(() => mockSendRequestCallable.call<void>(any()))
+            .thenThrow(exception);
 
         expect(
           () => friendService.sendRequest('receiver_uid'),
           throwsA(
-            isA<FirebaseException>().having(
+            isA<FirebaseFunctionsException>().having(
               (error) => error.code,
               'code',
               'resource-exhausted',
@@ -322,14 +295,15 @@ void main() {
         );
       });
 
-      test('propaga error si Firestore falla', () async {
-        when(
-          () => mockRequestsRef.doc(any()),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+      test('propaga error si la callable falla', () async {
+        final exception = MockFirebaseFunctionsException();
+        when(() => exception.code).thenReturn('internal');
+        when(() => mockSendRequestCallable.call<void>(any()))
+            .thenThrow(exception);
 
         expect(
           () => friendService.sendRequest('receiver_uid'),
-          throwsA(isA<FirebaseException>()),
+          throwsA(same(exception)),
         );
       });
     });
@@ -337,12 +311,10 @@ void main() {
     group('acceptRequest', () {
       test('delega la aceptación en la callable privilegiada', () async {
         final mockCallable = MockHttpsCallable();
-        when(
-          () => mockFunctions.httpsCallable('acceptFriendRequest'),
-        ).thenReturn(mockCallable);
-        when(
-          () => mockCallable.call<void>(any()),
-        ).thenAnswer((_) async => MockHttpsCallableResult<void>());
+        when(() => mockFunctions.httpsCallable('acceptFriendRequest'))
+            .thenReturn(mockCallable);
+        when(() => mockCallable.call<void>(any()))
+            .thenAnswer((_) async => MockHttpsCallableResult<void>());
 
         await friendService.acceptRequest('req_123', 'other_uid');
 
@@ -368,27 +340,23 @@ void main() {
     });
 
     group('cancelRequest', () {
-      test(
-        'elimina el documento solo si sigue pendiente y enviado por usuario actual',
-        () async {
-          final fakeTransaction = FakeTransaction();
-          mockFirestore.fakeTransaction = fakeTransaction;
+      test('elimina el documento solo si sigue pendiente y enviado por usuario actual', () async {
+        final fakeTransaction = FakeTransaction();
+        mockFirestore.fakeTransaction = fakeTransaction;
 
-          final mockDocRef = MockDocumentReference();
-          when(() => mockRequestsRef.doc('req_123')).thenReturn(mockDocRef);
+        final mockDocRef = MockDocumentReference();
+        when(() => mockRequestsRef.doc('req_123')).thenReturn(mockDocRef);
 
-          final mockRequestSnap = MockDocumentSnapshot();
-          when(() => mockRequestSnap.exists).thenReturn(true);
-          when(
-            () => mockRequestSnap.data(),
-          ).thenReturn({'senderId': 'current_uid', 'status': 'pending'});
-          fakeTransaction.getResult = mockRequestSnap;
+        final mockRequestSnap = MockDocumentSnapshot();
+        when(() => mockRequestSnap.exists).thenReturn(true);
+        when(() => mockRequestSnap.data())
+            .thenReturn({'senderId': 'current_uid', 'status': 'pending'});
+        fakeTransaction.getResult = mockRequestSnap;
 
-          await friendService.cancelRequest('req_123');
+        await friendService.cancelRequest('req_123');
 
-          expect(fakeTransaction.deletes, [mockDocRef]);
-        },
-      );
+        expect(fakeTransaction.deletes, [mockDocRef]);
+      });
 
       test('no elimina una solicitud que ya no esta pendiente', () async {
         final fakeTransaction = FakeTransaction();
@@ -399,9 +367,8 @@ void main() {
 
         final mockRequestSnap = MockDocumentSnapshot();
         when(() => mockRequestSnap.exists).thenReturn(true);
-        when(
-          () => mockRequestSnap.data(),
-        ).thenReturn({'senderId': 'current_uid', 'status': 'accepted'});
+        when(() => mockRequestSnap.data())
+            .thenReturn({'senderId': 'current_uid', 'status': 'accepted'});
         fakeTransaction.getResult = mockRequestSnap;
 
         await friendService.cancelRequest('req_123');
@@ -461,9 +428,8 @@ void main() {
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(
-          () => mockDocRef.get(),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+        when(() => mockDocRef.get())
+            .thenThrow(FirebaseException(plugin: 'firestore'));
 
         expect(
           () => friendService.areFriends('other_uid'),
@@ -488,9 +454,8 @@ void main() {
         final currentUserRef = MockDocumentReference();
         final currentUserSnap = MockDocumentSnapshot();
         when(() => mockUsersRef.doc('current_uid')).thenReturn(currentUserRef);
-        when(
-          () => currentUserRef.get(),
-        ).thenAnswer((_) async => currentUserSnap);
+        when(() => currentUserRef.get())
+            .thenAnswer((_) async => currentUserSnap);
         when(() => currentUserSnap.data()).thenReturn({
           'friends': ['friend_uid'],
           'blockedUsers': ['blocked_uid'],
@@ -502,23 +467,19 @@ void main() {
         final sentSnap = MockQuerySnapshot();
         final sentDoc = MockQueryDocumentSnapshot();
         final sentForFriendDoc = MockQueryDocumentSnapshot();
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
-        ).thenReturn(sentQ1);
-        when(
-          () => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')),
-        ).thenReturn(sentQ2);
-        when(
-          () => sentQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(sentQ3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'))
+            .thenReturn(sentQ1);
+        when(() => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')))
+            .thenReturn(sentQ2);
+        when(() => sentQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(sentQ3);
         when(() => sentQ3.get()).thenAnswer((_) async => sentSnap);
         when(() => sentSnap.docs).thenReturn([sentDoc, sentForFriendDoc]);
         when(() => sentDoc.id).thenReturn('current_uid_sent_uid');
         when(() => sentDoc.data()).thenReturn({'receiverId': 'sent_uid'});
         when(() => sentForFriendDoc.id).thenReturn('current_uid_friend_uid');
-        when(
-          () => sentForFriendDoc.data(),
-        ).thenReturn({'receiverId': 'friend_uid'});
+        when(() => sentForFriendDoc.data())
+            .thenReturn({'receiverId': 'friend_uid'});
 
         final receivedQ1 = MockQuery();
         final receivedQ2 = MockQuery();
@@ -529,22 +490,18 @@ void main() {
         when(
           () => mockRequestsRef.where('receiverId', isEqualTo: 'current_uid'),
         ).thenReturn(receivedQ1);
-        when(
-          () => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')),
-        ).thenReturn(receivedQ2);
-        when(
-          () => receivedQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(receivedQ3);
+        when(() => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')))
+            .thenReturn(receivedQ2);
+        when(() => receivedQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(receivedQ3);
         when(() => receivedQ3.get()).thenAnswer((_) async => receivedSnap);
-        when(
-          () => receivedSnap.docs,
-        ).thenReturn([receivedDoc, receivedForSentDoc]);
+        when(() => receivedSnap.docs)
+            .thenReturn([receivedDoc, receivedForSentDoc]);
         when(() => receivedDoc.id).thenReturn('received_uid_current_uid');
         when(() => receivedDoc.data()).thenReturn({'senderId': 'received_uid'});
         when(() => receivedForSentDoc.id).thenReturn('sent_uid_current_uid');
-        when(
-          () => receivedForSentDoc.data(),
-        ).thenReturn({'senderId': 'sent_uid'});
+        when(() => receivedForSentDoc.data())
+            .thenReturn({'senderId': 'sent_uid'});
 
         final result = await friendService.getRelationships([
           'friend_uid',
@@ -592,24 +549,20 @@ void main() {
         final currentUserRef = MockDocumentReference();
         final currentUserSnap = MockDocumentSnapshot();
         when(() => mockUsersRef.doc('current_uid')).thenReturn(currentUserRef);
-        when(
-          () => currentUserRef.get(),
-        ).thenAnswer((_) async => currentUserSnap);
+        when(() => currentUserRef.get())
+            .thenAnswer((_) async => currentUserSnap);
         when(() => currentUserSnap.data()).thenReturn({});
 
         final sentQ1 = MockQuery();
         final sentQ2 = MockQuery();
         final sentQ3 = MockQuery();
         final sentSnap = MockQuerySnapshot();
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
-        ).thenReturn(sentQ1);
-        when(
-          () => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')),
-        ).thenReturn(sentQ2);
-        when(
-          () => sentQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(sentQ3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'))
+            .thenReturn(sentQ1);
+        when(() => sentQ1.where('receiverId', whereIn: any(named: 'whereIn')))
+            .thenReturn(sentQ2);
+        when(() => sentQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(sentQ3);
         when(() => sentQ3.get()).thenAnswer((_) async => sentSnap);
         when(() => sentSnap.docs).thenReturn([]);
 
@@ -620,12 +573,10 @@ void main() {
         when(
           () => mockRequestsRef.where('receiverId', isEqualTo: 'current_uid'),
         ).thenReturn(receivedQ1);
-        when(
-          () => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')),
-        ).thenReturn(receivedQ2);
-        when(
-          () => receivedQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(receivedQ3);
+        when(() => receivedQ1.where('senderId', whereIn: any(named: 'whereIn')))
+            .thenReturn(receivedQ2);
+        when(() => receivedQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(receivedQ3);
         when(() => receivedQ3.get()).thenAnswer((_) async => receivedSnap);
         when(() => receivedSnap.docs).thenReturn([]);
 
@@ -662,15 +613,12 @@ void main() {
         final mockSentQ2 = MockQuery();
         final mockSentQ3 = MockQuery();
         final mockSentSnap = MockQuerySnapshot();
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockSentQ1);
-        when(
-          () => mockSentQ1.where('receiverId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockSentQ2);
-        when(
-          () => mockSentQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockSentQ3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'))
+            .thenReturn(mockSentQ1);
+        when(() => mockSentQ1.where('receiverId', isEqualTo: 'other_uid'))
+            .thenReturn(mockSentQ2);
+        when(() => mockSentQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockSentQ3);
         when(() => mockSentQ3.limit(1)).thenReturn(mockSentQ3);
         when(() => mockSentQ3.get()).thenAnswer((_) async => mockSentSnap);
         when(() => mockSentSnap.docs).thenReturn([]);
@@ -679,15 +627,12 @@ void main() {
         final mockRecvQ2 = MockQuery();
         final mockRecvQ3 = MockQuery();
         final mockRecvSnap = MockQuerySnapshot();
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockRecvQ1);
-        when(
-          () => mockRecvQ1.where('receiverId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockRecvQ2);
-        when(
-          () => mockRecvQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockRecvQ3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'))
+            .thenReturn(mockRecvQ1);
+        when(() => mockRecvQ1.where('receiverId', isEqualTo: 'current_uid'))
+            .thenReturn(mockRecvQ2);
+        when(() => mockRecvQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockRecvQ3);
         when(() => mockRecvQ3.limit(1)).thenReturn(mockRecvQ3);
         when(() => mockRecvQ3.get()).thenAnswer((_) async => mockRecvSnap);
         when(() => mockRecvSnap.docs).thenReturn([]);
@@ -713,19 +658,15 @@ void main() {
         final mockSentSnapshot = MockQuerySnapshot();
         final mockSentDoc = MockQueryDocumentSnapshot();
 
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockSentQuery1);
-        when(
-          () => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockSentQuery2);
-        when(
-          () => mockSentQuery2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockSentQuery3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'))
+            .thenReturn(mockSentQuery1);
+        when(() => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'))
+            .thenReturn(mockSentQuery2);
+        when(() => mockSentQuery2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockSentQuery3);
         when(() => mockSentQuery3.limit(1)).thenReturn(mockSentQuery3);
-        when(
-          () => mockSentQuery3.get(),
-        ).thenAnswer((_) async => mockSentSnapshot);
+        when(() => mockSentQuery3.get())
+            .thenAnswer((_) async => mockSentSnapshot);
         when(() => mockSentSnapshot.docs).thenReturn([mockSentDoc]);
         when(() => mockSentDoc.id).thenReturn('sent_req_id');
 
@@ -734,15 +675,12 @@ void main() {
         final mockRecvQ2 = MockQuery();
         final mockRecvQ3 = MockQuery();
         final mockRecvSnap = MockQuerySnapshot();
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockRecvQ1);
-        when(
-          () => mockRecvQ1.where('receiverId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockRecvQ2);
-        when(
-          () => mockRecvQ2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockRecvQ3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'))
+            .thenReturn(mockRecvQ1);
+        when(() => mockRecvQ1.where('receiverId', isEqualTo: 'current_uid'))
+            .thenReturn(mockRecvQ2);
+        when(() => mockRecvQ2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockRecvQ3);
         when(() => mockRecvQ3.limit(1)).thenReturn(mockRecvQ3);
         when(() => mockRecvQ3.get()).thenAnswer((_) async => mockRecvSnap);
         when(() => mockRecvSnap.docs).thenReturn([]);
@@ -772,16 +710,13 @@ void main() {
           when(
             () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
           ).thenReturn(mockSentQuery1);
-          when(
-            () => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'),
-          ).thenReturn(mockSentQuery2);
-          when(
-            () => mockSentQuery2.where('status', isEqualTo: 'pending'),
-          ).thenReturn(mockSentQuery3);
+          when(() => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'))
+              .thenReturn(mockSentQuery2);
+          when(() => mockSentQuery2.where('status', isEqualTo: 'pending'))
+              .thenReturn(mockSentQuery3);
           when(() => mockSentQuery3.limit(1)).thenReturn(mockSentQuery3);
-          when(
-            () => mockSentQuery3.get(),
-          ).thenAnswer((_) async => mockSentSnapshot);
+          when(() => mockSentQuery3.get())
+              .thenAnswer((_) async => mockSentSnapshot);
           when(() => mockSentSnapshot.docs).thenReturn([]);
 
           // Solicitud recibida
@@ -791,19 +726,16 @@ void main() {
           final mockRecvSnapshot = MockQuerySnapshot();
           final mockRecvDoc = MockQueryDocumentSnapshot();
 
-          when(
-            () => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'),
-          ).thenReturn(mockRecvQuery1);
+          when(() => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'))
+              .thenReturn(mockRecvQuery1);
           when(
             () => mockRecvQuery1.where('receiverId', isEqualTo: 'current_uid'),
           ).thenReturn(mockRecvQuery2);
-          when(
-            () => mockRecvQuery2.where('status', isEqualTo: 'pending'),
-          ).thenReturn(mockRecvQuery3);
+          when(() => mockRecvQuery2.where('status', isEqualTo: 'pending'))
+              .thenReturn(mockRecvQuery3);
           when(() => mockRecvQuery3.limit(1)).thenReturn(mockRecvQuery3);
-          when(
-            () => mockRecvQuery3.get(),
-          ).thenAnswer((_) async => mockRecvSnapshot);
+          when(() => mockRecvQuery3.get())
+              .thenAnswer((_) async => mockRecvSnapshot);
           when(() => mockRecvSnapshot.docs).thenReturn([mockRecvDoc]);
           when(() => mockRecvDoc.id).thenReturn('recv_req_id');
 
@@ -828,19 +760,15 @@ void main() {
         final mockSentQuery3 = MockQuery();
         final mockSentSnapshot = MockQuerySnapshot();
 
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockSentQuery1);
-        when(
-          () => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockSentQuery2);
-        when(
-          () => mockSentQuery2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockSentQuery3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'current_uid'))
+            .thenReturn(mockSentQuery1);
+        when(() => mockSentQuery1.where('receiverId', isEqualTo: 'other_uid'))
+            .thenReturn(mockSentQuery2);
+        when(() => mockSentQuery2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockSentQuery3);
         when(() => mockSentQuery3.limit(1)).thenReturn(mockSentQuery3);
-        when(
-          () => mockSentQuery3.get(),
-        ).thenAnswer((_) async => mockSentSnapshot);
+        when(() => mockSentQuery3.get())
+            .thenAnswer((_) async => mockSentSnapshot);
         when(() => mockSentSnapshot.docs).thenReturn([]);
 
         // No hay solicitud recibida
@@ -849,19 +777,15 @@ void main() {
         final mockRecvQuery3 = MockQuery();
         final mockRecvSnapshot = MockQuerySnapshot();
 
-        when(
-          () => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'),
-        ).thenReturn(mockRecvQuery1);
-        when(
-          () => mockRecvQuery1.where('receiverId', isEqualTo: 'current_uid'),
-        ).thenReturn(mockRecvQuery2);
-        when(
-          () => mockRecvQuery2.where('status', isEqualTo: 'pending'),
-        ).thenReturn(mockRecvQuery3);
+        when(() => mockRequestsRef.where('senderId', isEqualTo: 'other_uid'))
+            .thenReturn(mockRecvQuery1);
+        when(() => mockRecvQuery1.where('receiverId', isEqualTo: 'current_uid'))
+            .thenReturn(mockRecvQuery2);
+        when(() => mockRecvQuery2.where('status', isEqualTo: 'pending'))
+            .thenReturn(mockRecvQuery3);
         when(() => mockRecvQuery3.limit(1)).thenReturn(mockRecvQuery3);
-        when(
-          () => mockRecvQuery3.get(),
-        ).thenAnswer((_) async => mockRecvSnapshot);
+        when(() => mockRecvQuery3.get())
+            .thenAnswer((_) async => mockRecvSnapshot);
         when(() => mockRecvSnapshot.docs).thenReturn([]);
 
         final result = await friendService.getRelationship('other_uid');
@@ -873,9 +797,8 @@ void main() {
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(
-          () => mockDocRef.get(),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+        when(() => mockDocRef.get())
+            .thenThrow(FirebaseException(plugin: 'firestore'));
 
         expect(
           () => friendService.getRelationship('other_uid'),
@@ -897,16 +820,13 @@ void main() {
         final mockDirectRequestSnap = MockDocumentSnapshot();
         final mockInverseRequestSnap = MockDocumentSnapshot();
 
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-        when(
-          () => mockRequestsRef.doc('current_uid_other_uid'),
-        ).thenReturn(mockDirectRequestRef);
-        when(
-          () => mockRequestsRef.doc('other_uid_current_uid'),
-        ).thenReturn(mockInverseRequestRef);
+        when(() => mockRequestsRef.doc('current_uid_other_uid'))
+            .thenReturn(mockDirectRequestRef);
+        when(() => mockRequestsRef.doc('other_uid_current_uid'))
+            .thenReturn(mockInverseRequestRef);
         when(() => mockDirectRequestSnap.exists).thenReturn(true);
         when(() => mockInverseRequestSnap.exists).thenReturn(true);
         when(() => mockCurrentUserSnap.data()).thenReturn({
@@ -945,16 +865,13 @@ void main() {
         final mockDirectRequestSnap = MockDocumentSnapshot();
         final mockInverseRequestSnap = MockDocumentSnapshot();
 
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-        when(
-          () => mockRequestsRef.doc('current_uid_other_uid'),
-        ).thenReturn(mockDirectRequestRef);
-        when(
-          () => mockRequestsRef.doc('other_uid_current_uid'),
-        ).thenReturn(mockInverseRequestRef);
+        when(() => mockRequestsRef.doc('current_uid_other_uid'))
+            .thenReturn(mockDirectRequestRef);
+        when(() => mockRequestsRef.doc('other_uid_current_uid'))
+            .thenReturn(mockInverseRequestRef);
         when(() => mockDirectRequestSnap.exists).thenReturn(false);
         when(() => mockInverseRequestSnap.exists).thenReturn(false);
         when(() => mockCurrentUserSnap.data()).thenReturn({'friends': []});
@@ -974,9 +891,8 @@ void main() {
     group('unblockUser', () {
       test('elimina al usuario de blockedUsers', () async {
         final mockCurrentUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockCurrentUserDoc.update(any())).thenAnswer((_) async {});
 
         await friendService.unblockUser('other_uid');
@@ -1002,16 +918,13 @@ void main() {
         final mockOtherUserDoc = MockDocumentReference();
         final mockDirectRequestRef = MockDocumentReference();
         final mockInverseRequestRef = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-        when(
-          () => mockRequestsRef.doc('current_uid_other_uid'),
-        ).thenReturn(mockDirectRequestRef);
-        when(
-          () => mockRequestsRef.doc('other_uid_current_uid'),
-        ).thenReturn(mockInverseRequestRef);
+        when(() => mockRequestsRef.doc('current_uid_other_uid'))
+            .thenReturn(mockDirectRequestRef);
+        when(() => mockRequestsRef.doc('other_uid_current_uid'))
+            .thenReturn(mockInverseRequestRef);
 
         final mockDirectRequestSnap = MockDocumentSnapshot();
         final mockInverseRequestSnap = MockDocumentSnapshot();
@@ -1051,16 +964,13 @@ void main() {
         final mockOtherUserDoc = MockDocumentReference();
         final mockDirectRequestRef = MockDocumentReference();
         final mockInverseRequestRef = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-        when(
-          () => mockRequestsRef.doc('current_uid_other_uid'),
-        ).thenReturn(mockDirectRequestRef);
-        when(
-          () => mockRequestsRef.doc('other_uid_current_uid'),
-        ).thenReturn(mockInverseRequestRef);
+        when(() => mockRequestsRef.doc('current_uid_other_uid'))
+            .thenReturn(mockDirectRequestRef);
+        when(() => mockRequestsRef.doc('other_uid_current_uid'))
+            .thenReturn(mockInverseRequestRef);
 
         final mockDirectRequestSnap = MockDocumentSnapshot();
         final mockInverseRequestSnap = MockDocumentSnapshot();
@@ -1080,13 +990,11 @@ void main() {
       test('propaga error si Firestore falla', () async {
         final mockCurrentUserDoc = MockDocumentReference();
         final mockOtherUserDoc = MockDocumentReference();
-        when(
-          () => mockUsersRef.doc('current_uid'),
-        ).thenReturn(mockCurrentUserDoc);
+        when(() => mockUsersRef.doc('current_uid'))
+            .thenReturn(mockCurrentUserDoc);
         when(() => mockUsersRef.doc('other_uid')).thenReturn(mockOtherUserDoc);
-        when(
-          () => mockRequestsRef.doc(any()),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+        when(() => mockRequestsRef.doc(any()))
+            .thenThrow(FirebaseException(plugin: 'firestore'));
 
         expect(
           () => friendService.removeFriend('other_uid'),

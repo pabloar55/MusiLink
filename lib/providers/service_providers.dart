@@ -79,6 +79,7 @@ final chatServiceProvider = Provider<ChatService>((ref) {
   return ChatService(
     firestore: ref.watch(firebaseFirestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
   );
 });
 

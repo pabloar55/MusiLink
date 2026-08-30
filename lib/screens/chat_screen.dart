@@ -345,9 +345,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     _messageController.clear();
     try {
-      await ref
-          .read(chatServiceProvider)
-          .sendMessage(widget.chatId, text, otherUid: widget.otherUserId);
+      await ref.read(chatServiceProvider).sendMessage(widget.chatId, text);
     } on FirebaseException catch (e) {
       if (!mounted) return;
       if (_messageController.text.isEmpty) {
@@ -376,12 +374,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   void _showWriteError(FirebaseException? error) {
     final l10n = AppLocalizations.of(context)!;
-    final message = error?.code == 'permission-denied'
-        ? l10n.chatNotFriendsCannotSend
-        : l10n.genericError;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    final message = switch (error?.code) {
+      'permission-denied' => l10n.chatNotFriendsCannotSend,
+      'resource-exhausted' => l10n.authErrorTooManyRequests,
+      _ => l10n.genericError,
+    };
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _scrollToBottom({bool animate = true}) {
@@ -414,11 +413,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           try {
             await ref
                 .read(chatServiceProvider)
-                .sendTrackMessage(
-                  widget.chatId,
-                  track,
-                  otherUid: widget.otherUserId,
-                );
+                .sendTrackMessage(widget.chatId, track);
             _scrollToBottom();
           } on FirebaseException catch (e) {
             if (mounted) _showWriteError(e);

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.expireDailySongs = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -25,6 +25,9 @@ var chat_1 = require("./chat");
 Object.defineProperty(exports, "onNewMessage", { enumerable: true, get: function () { return chat_1.onNewMessage; } });
 Object.defineProperty(exports, "onChatSoftDeleted", { enumerable: true, get: function () { return chat_1.onChatSoftDeleted; } });
 Object.defineProperty(exports, "onChatMessageDeleted", { enumerable: true, get: function () { return chat_1.onChatMessageDeleted; } });
+var social_writes_1 = require("./social_writes");
+Object.defineProperty(exports, "sendChatMessage", { enumerable: true, get: function () { return social_writes_1.sendChatMessage; } });
+Object.defineProperty(exports, "sendFriendRequest", { enumerable: true, get: function () { return social_writes_1.sendFriendRequest; } });
 var daily_song_1 = require("./daily_song");
 Object.defineProperty(exports, "expireDailySongs", { enumerable: true, get: function () { return daily_song_1.expireDailySongs; } });
 //# sourceMappingURL=index.js.map

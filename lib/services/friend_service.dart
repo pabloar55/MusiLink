@@ -5,7 +5,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/utils/error_reporter.dart';
-import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 
@@ -39,121 +38,14 @@ class FriendService with AuthenticatedService {
       .collection(FirestoreCollections.friendRequests);
   late final CollectionReference<Map<String, dynamic>> _privateUsersRef =
       _firestore.collection(FirestoreCollections.userPrivate);
-  late final CollectionReference<Map<String, dynamic>> _usersRef = _firestore
-      .collection(FirestoreCollections.users);
-  late final CollectionReference<Map<String, dynamic>> _rateLimitsRef =
-      _firestore.collection(FirestoreCollections.rateLimits);
-
-  static const Duration _friendRequestRateLimitWindow = Duration(minutes: 10);
-  static const int _maxFriendRequestsPerWindow = 20;
-
-  bool _friendRequestRateLimitReached(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) {
-    final data = snap.data() ?? const <String, dynamic>{};
-    final windowStart = data['friendRequestWindowStart'] as Timestamp?;
-    final count = (data['friendRequestCount'] as int?) ?? 0;
-    if (windowStart == null || count < _maxFriendRequestsPerWindow) {
-      return false;
-    }
-    return DateTime.now().difference(windowStart.toDate()) <=
-        _friendRequestRateLimitWindow;
-  }
-
-  Map<String, Object?> _nextFriendRequestRateLimit(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) {
-    final data = snap.data() ?? const <String, dynamic>{};
-    final windowStart = data['friendRequestWindowStart'] as Timestamp?;
-    final count = (data['friendRequestCount'] as int?) ?? 0;
-    final shouldReset =
-        windowStart == null ||
-        DateTime.now().difference(windowStart.toDate()) >
-            _friendRequestRateLimitWindow;
-
-    return {
-      'lastFriendRequestAt': FieldValue.serverTimestamp(),
-      'friendRequestWindowStart': shouldReset
-          ? FieldValue.serverTimestamp()
-          : windowStart,
-      'friendRequestCount': shouldReset ? 1 : count + 1,
-    };
-  }
-
   // ─── Solicitudes ────────────────────────────────────────
 
   /// Envía una solicitud de amistad a [receiverUid].
   Future<void> sendRequest(String receiverUid) async {
     if (receiverUid == currentUid) return;
-    final now = DateTime.now();
-    final docId = '${currentUid}_$receiverUid';
-    final request = FriendRequest(
-      id: docId,
-      senderId: currentUid,
-      receiverId: receiverUid,
-      status: FriendRequestStatus.pending,
-      createdAt: now,
-      updatedAt: now,
-    );
     try {
-      // Atomic read-then-write on the deterministic doc ID eliminates the
-      // check-then-act race without a collection query.
-      final docRef = _requestsRef.doc(docId);
-      final inverseDocRef = _requestsRef.doc('${receiverUid}_$currentUid');
-      final limiterRef = _rateLimitsRef.doc(currentUid);
-      final currentUserRef = _privateUsersRef.doc(currentUid);
-      final receiverPublicRef = _usersRef.doc(receiverUid);
-      await _firestore.runTransaction((tx) async {
-        final receiverPublicSnap = await tx.get(receiverPublicRef);
-        final receiverPublicData = receiverPublicSnap.data();
-        if (!receiverPublicSnap.exists ||
-            receiverPublicData?['username'] == AppUser.deletedUsername) {
-          return;
-        }
-
-        final currentUserSnap = await tx.get(currentUserRef);
-        final currentData = currentUserSnap.data() ?? {};
-        final blockedByMe = List<String>.from(
-          currentData['blockedUsers'] as List? ?? [],
-        );
-        if (blockedByMe.contains(receiverUid)) return;
-        final friends = List<String>.from(
-          currentData['friends'] as List? ?? [],
-        );
-        if (friends.contains(receiverUid)) return;
-
-        final inverseSnapshot = await tx.get(inverseDocRef);
-        if (inverseSnapshot.exists &&
-            inverseSnapshot.data()?['status'] ==
-                FriendRequestStatus.pending.name) {
-          // El usuario actual es el receptor de la solicitud inversa. No se
-          // autoacepta: debe pasar por acceptFriendRequest para que solo una
-          // acción explícita del receptor cree la amistad en el backend.
-          return;
-        }
-
-        final snapshot = await tx.get(docRef);
-        if (snapshot.exists) return;
-
-        final limiterSnap = await tx.get(limiterRef);
-        if (_friendRequestRateLimitReached(limiterSnap)) {
-          throw FirebaseException(
-            plugin: 'cloud_firestore',
-            code: 'resource-exhausted',
-            message: 'Friend request rate limit reached.',
-          );
-        }
-        tx.set(docRef, {
-          ...request.toFirestore(),
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        tx.set(
-          limiterRef,
-          _nextFriendRequestRateLimit(limiterSnap),
-          SetOptions(merge: true),
-        );
-      });
+      final callable = _functions.httpsCallable('sendFriendRequest');
+      await callable.call<void>({'receiverId': receiverUid});
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;

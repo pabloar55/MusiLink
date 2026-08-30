@@ -92,6 +92,9 @@ jobs:
       - name: Test username claims
         run: npm --prefix .. run test:functions:usernames
 
+      - name: Test social writes
+        run: npm run test:social
+
       - name: Test chat cleanup
         run: npm --prefix .. run test:functions:chat
 

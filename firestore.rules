@@ -308,26 +308,9 @@ service cloud.firestore {
         && (resource == null
             || request.auth.uid == resource.data.senderId
             || request.auth.uid == resource.data.receiverId);
-      // Solo el remitente puede crear, con ID determinista senderId_receiverId.
-      // El ID determinista hace que un segundo intento sea tratado como update
-      // (rechazado por la regla de update), previniendo solicitudes duplicadas.
-      allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly([
-          'senderId',
-          'receiverId',
-          'status',
-          'createdAt',
-          'updatedAt',
-        ])
-        && request.resource.data.senderId == request.auth.uid
-        && request.resource.data.receiverId != request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time
-        && friendRequestRateLimitAllows(request.auth.uid)
-        && canUsersInteract(request.resource.data.senderId, request.resource.data.receiverId)
-        && requestId == request.resource.data.senderId + '_' + request.resource.data.receiverId
-        && !exists(/databases/$(database)/documents/friend_requests/$(request.resource.data.receiverId + '_' + request.resource.data.senderId));
+      // La creación y su rate limit se realizan exclusivamente mediante
+      // sendFriendRequest, usando un único reloj de servidor.
+      allow create: if false;
       // La aceptación se realiza exclusivamente mediante acceptFriendRequest.
       allow update: if false;
       // Ambos pueden eliminar
@@ -403,139 +386,9 @@ service cloud.firestore {
         && after.unreadCounts[otherId] == before.unreadCounts[otherId];
     }
 
-    function messageRateLimitAllows(userId) {
-      let after = getAfter(/databases/$(database)/documents/rate_limits/$(userId)).data;
-      let before = get(/databases/$(database)/documents/rate_limits/$(userId)).data;
-      return after.lastMessageAt == request.time
-        && (
-          !exists(/databases/$(database)/documents/rate_limits/$(userId))
-          || !('messageWindowStart' in before)
-          || request.time > before.messageWindowStart + duration.value(10, 's')
-          || (
-            after.messageWindowStart == before.messageWindowStart
-            && after.messageCount == before.messageCount + 1
-            && after.messageCount <= 20
-          )
-        )
-        && (
-          exists(/databases/$(database)/documents/rate_limits/$(userId))
-          && ('messageWindowStart' in before)
-          && request.time <= before.messageWindowStart + duration.value(10, 's')
-          || (
-            after.messageWindowStart == request.time
-            && after.messageCount == 1
-          )
-        );
-    }
-
-    function friendRequestRateLimitAllows(userId) {
-      let after = getAfter(/databases/$(database)/documents/rate_limits/$(userId)).data;
-      let before = get(/databases/$(database)/documents/rate_limits/$(userId)).data;
-      return after.lastFriendRequestAt == request.time
-        && (
-          !exists(/databases/$(database)/documents/rate_limits/$(userId))
-          || !('friendRequestWindowStart' in before)
-          || request.time > before.friendRequestWindowStart + duration.value(10, 'm')
-          || (
-            after.friendRequestWindowStart == before.friendRequestWindowStart
-            && after.friendRequestCount == before.friendRequestCount + 1
-            && after.friendRequestCount <= 20
-          )
-        )
-        && (
-          exists(/databases/$(database)/documents/rate_limits/$(userId))
-          && ('friendRequestWindowStart' in before)
-          && request.time <= before.friendRequestWindowStart + duration.value(10, 'm')
-          || (
-            after.friendRequestWindowStart == request.time
-            && after.friendRequestCount == 1
-          )
-        );
-    }
-
-    function validRateLimitCreate() {
-      return request.resource.data.keys().hasOnly([
-          'lastMessageAt',
-          'messageWindowStart',
-          'messageCount',
-          'lastFriendRequestAt',
-          'friendRequestWindowStart',
-          'friendRequestCount',
-        ])
-        && (!('lastMessageAt' in request.resource.data)
-            || (
-              request.resource.data.lastMessageAt == request.time
-              && request.resource.data.messageWindowStart == request.time
-              && request.resource.data.messageCount == 1
-            ))
-        && (!('lastFriendRequestAt' in request.resource.data)
-            || (
-              request.resource.data.lastFriendRequestAt == request.time
-              && request.resource.data.friendRequestWindowStart == request.time
-              && request.resource.data.friendRequestCount == 1
-            ));
-    }
-
-    function validMessageRateLimitUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['lastMessageAt', 'messageWindowStart', 'messageCount'])
-        && request.resource.data.lastMessageAt == request.time
-        && (
-          !('messageWindowStart' in resource.data)
-          || request.time > resource.data.messageWindowStart + duration.value(10, 's')
-          || (
-            request.resource.data.messageWindowStart == resource.data.messageWindowStart
-            && request.resource.data.messageCount == resource.data.messageCount + 1
-            && request.resource.data.messageCount <= 20
-          )
-        )
-        && (
-          ('messageWindowStart' in resource.data)
-          && request.time <= resource.data.messageWindowStart + duration.value(10, 's')
-          || (
-            request.resource.data.messageWindowStart == request.time
-            && request.resource.data.messageCount == 1
-          )
-        );
-    }
-
-    function validFriendRequestRateLimitUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['lastFriendRequestAt', 'friendRequestWindowStart', 'friendRequestCount'])
-        && request.resource.data.lastFriendRequestAt == request.time
-        && (
-          !('friendRequestWindowStart' in resource.data)
-          || request.time > resource.data.friendRequestWindowStart + duration.value(10, 'm')
-          || (
-            request.resource.data.friendRequestWindowStart == resource.data.friendRequestWindowStart
-            && request.resource.data.friendRequestCount == resource.data.friendRequestCount + 1
-            && request.resource.data.friendRequestCount <= 20
-          )
-        )
-        && (
-          ('friendRequestWindowStart' in resource.data)
-          && request.time <= resource.data.friendRequestWindowStart + duration.value(10, 'm')
-          || (
-            request.resource.data.friendRequestWindowStart == request.time
-            && request.resource.data.friendRequestCount == 1
-          )
-        );
-    }
-
     match /rate_limits/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && isActiveUser(userId)
-        && validRateLimitCreate();
-      allow update: if request.auth != null
-        && request.auth.uid == userId
-        && isActiveUser(userId)
-        && (
-          validMessageRateLimitUpdate()
-          || validFriendRequestRateLimitUpdate()
-        );
-      allow delete: if false;
+      // Contadores internos mantenidos exclusivamente por Cloud Functions.
+      allow read, write: if false;
     }
 
     match /chats/{chatId} {
@@ -630,52 +483,9 @@ service cloud.firestore {
         allow read: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
 
-        // Solo un participante puede crear un mensaje, y debe ser el remitente
-        allow create: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
-          && request.resource.data.keys().hasOnly([
-            'senderId',
-            'text',
-            'timestamp',
-            'read',
-            'type',
-            'trackData',
-          ])
-          && request.resource.data.keys().hasAll([
-            'senderId',
-            'text',
-            'timestamp',
-            'read',
-            'type',
-          ])
-          && canUsersInteract(
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-          )
-          && areMutualFriends(
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-          )
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.timestamp == request.time
-          && request.resource.data.read == false
-          && request.resource.data.type in ['text', 'track']
-          && (
-            (
-              request.resource.data.type == 'text'
-              && !('trackData' in request.resource.data)
-            )
-            ||
-            (
-              request.resource.data.type == 'track'
-              && 'trackData' in request.resource.data
-              && validTrackData(request.resource.data.trackData)
-            )
-          )
-          && messageRateLimitAllows(request.auth.uid)
-          && request.resource.data.text is string
-          && request.resource.data.text.toUtf8().size() > 0
-          && request.resource.data.text.toUtf8().size() <= 2000;
+        // La creación y su rate limit se realizan exclusivamente mediante
+        // sendChatMessage, usando un único reloj de servidor.
+        allow create: if false;
 
         // La lectura solo puede hacerla el receptor (false -> true). En una
         // reacción, cada participante solo puede cambiar su propia pertenencia.

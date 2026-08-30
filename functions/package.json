@@ -6,7 +6,7 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test:account-deletion": "npm run build && node --test test/account_deletion.test.cjs",
-    "test:recommendation-index-migration": "node --test test/recommendation_index_migration.test.cjs",
+    "test:social": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/social_writes.test.cjs\"",
     "test:unit": "npm run build && node --test test/unit/*.test.cjs"
   },
   "engines": {
