@@ -17,7 +17,8 @@
             "flutterMode": "profile",
             "args": [
                 "--web-port",
-                "5051"
+                "5051",
+                "--dart-define=USE_APP_CHECK_DEBUG_PROVIDER=true"
             ]
         },
         {
@@ -27,7 +28,8 @@
             "flutterMode": "release",
             "args": [
                 "--web-port",
-                "5051"
+                "5051",
+                "--dart-define=USE_APP_CHECK_DEBUG_PROVIDER=true"
             ]
         }
     ]
