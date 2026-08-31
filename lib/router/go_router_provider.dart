@@ -36,6 +36,17 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
   final notifier = AppRouterNotifier(
     auth: ref.watch(firebaseAuthProvider),
     initialState: ref.watch(routerBootstrapStateProvider),
+    readCachedUserState: (loginUid) {
+      final cached = UserSetupCache.read(prefs, loginUid);
+      if (cached == null) return null;
+      return (
+        usernameSet: cached.usernameSet,
+        artistsSelected: cached.artistsSelected,
+        onboardingDone: cached.onboardingDone,
+        photoSetupDone: cached.photoSetupDone,
+        deletionPending: null,
+      );
+    },
     fetchUserState: (loginUid) async {
       final deletionPendingFuture = (() async {
         try {

@@ -144,6 +144,7 @@ Future<AppRouterBootstrapState> _loadRouterBootstrapState(
     photoSetupDone: photoSetupDone,
     deletionPending: deletionPending,
     setupStateKnown: setupStateKnown,
+    userUid: uid,
   );
 }
 

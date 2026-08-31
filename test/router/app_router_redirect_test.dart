@@ -16,10 +16,10 @@ void main() {
   setUp(() {
     mockAuth = MockFirebaseAuth();
     mockUser = MockUser();
+    when(() => mockUser.uid).thenReturn('uid123');
     authStream = StreamController<User?>.broadcast();
-    when(
-      () => mockAuth.authStateChanges(),
-    ).thenAnswer((_) => authStream.stream);
+    when(() => mockAuth.authStateChanges())
+        .thenAnswer((_) => authStream.stream);
   });
 
   tearDown(() => authStream.close());
@@ -103,6 +103,7 @@ void main() {
           photoSetupDone: true,
           deletionPending: true,
           setupStateKnown: true,
+          userUid: 'uid123',
         ),
         fetchUserState: (_) async => (
           usernameSet: true,
@@ -184,6 +185,7 @@ void main() {
           photoSetupDone: true,
           deletionPending: false,
           setupStateKnown: true,
+          userUid: 'uid123',
         ),
         fetchUserState: (_) => Future.error(Exception('offline')),
       );
@@ -194,6 +196,67 @@ void main() {
       expect(n.setupStateKnown, isTrue);
       expect(n.usernameSet, isTrue);
       expect(n.artistsSelected, isTrue);
+      expect(appRedirect(n, '/'), isNull);
+      n.dispose();
+    });
+
+    test('restaura la caché del UID si el refresco tras login falla', () async {
+      when(() => mockUser.uid).thenReturn('uid123');
+      when(() => mockAuth.currentUser).thenReturn(null);
+      final n = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+          deletionPending: false,
+          setupStateKnown: true,
+        ),
+        readCachedUserState: (_) => (
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: null,
+        ),
+        fetchUserState: (_) => Future.error(TimeoutException('offline')),
+      );
+
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(n.setupStateKnown, isTrue);
+      expect(n.usernameSet, isTrue);
+      expect(n.artistsSelected, isTrue);
+      expect(appRedirect(n, '/auth'), '/');
+      n.dispose();
+    });
+
+    test('sin caché un timeout mantiene el setup desconocido', () async {
+      when(() => mockUser.uid).thenReturn('uid123');
+      when(() => mockAuth.currentUser).thenReturn(null);
+      final n = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+          deletionPending: false,
+          setupStateKnown: true,
+        ),
+        readCachedUserState: (_) => null,
+        fetchUserState: (_) => Future.error(TimeoutException('offline')),
+      );
+
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(n.setupStateKnown, isFalse);
+      expect(appRedirect(n, '/auth'), '/');
       expect(appRedirect(n, '/'), isNull);
       n.dispose();
     });

@@ -12,6 +12,7 @@ typedef UserSetupState = ({
 });
 
 typedef FetchUserSetupState = Future<UserSetupState> Function(String uid);
+typedef ReadCachedUserSetupState = UserSetupState? Function(String uid);
 typedef PersistUserSetupState = Future<void> Function(
   String uid,
   UserSetupState state,
@@ -25,6 +26,7 @@ class AppRouterBootstrapState {
     required this.photoSetupDone,
     required this.deletionPending,
     required this.setupStateKnown,
+    this.userUid,
   });
 
   final bool usernameSet;
@@ -33,6 +35,7 @@ class AppRouterBootstrapState {
   final bool photoSetupDone;
   final bool deletionPending;
   final bool setupStateKnown;
+  final String? userUid;
 }
 
 /// Notifier que dispara los redirects de GoRouter cuando cambia
@@ -44,6 +47,7 @@ class AppRouterNotifier extends ChangeNotifier {
     required this._auth,
     AppRouterBootstrapState? initialState,
     FetchUserSetupState? fetchUserState,
+    ReadCachedUserSetupState? readCachedUserState,
     PersistUserSetupState? persistUserState,
   }) {
     if (initialState != null) {
@@ -54,14 +58,19 @@ class AppRouterNotifier extends ChangeNotifier {
         photoSetupDone: initialState.photoSetupDone,
         deletionPending: initialState.deletionPending,
         setupStateKnown: initialState.setupStateKnown,
+        setupStateUid: initialState.userUid,
         fetchUserState: fetchUserState,
+        readCachedUserState: readCachedUserState,
         persistUserState: persistUserState,
       );
     }
   }
 
   StreamSubscription<User?>? _sub;
+  Timer? _retryTimer;
   int _authGeneration = 0;
+  int _retryAttempt = 0;
+  String? _setupStateUid;
   bool _initialized = false;
   bool _usernameSet = false;
   bool _artistsSelected = false;
@@ -80,6 +89,7 @@ class AppRouterNotifier extends ChangeNotifier {
   bool get setupStateKnown => _setupStateKnown;
 
   FetchUserSetupState? _fetchUserState;
+  ReadCachedUserSetupState? _readCachedUserState;
   PersistUserSetupState? _persistUserState;
 
   /// Marca el router como inicializado, inicia la escucha de authStateChanges
@@ -91,7 +101,9 @@ class AppRouterNotifier extends ChangeNotifier {
     required bool photoSetupDone,
     bool deletionPending = false,
     bool setupStateKnown = true,
+    String? setupStateUid,
     FetchUserSetupState? fetchUserState,
+    ReadCachedUserSetupState? readCachedUserState,
     PersistUserSetupState? persistUserState,
   }) {
     _initialized = true;
@@ -101,11 +113,16 @@ class AppRouterNotifier extends ChangeNotifier {
     _photoSetupDone = photoSetupDone;
     _deletionPending = deletionPending;
     _setupStateKnown = setupStateKnown;
+    _setupStateUid = setupStateUid;
     _fetchUserState = fetchUserState;
+    _readCachedUserState = readCachedUserState;
     _persistUserState = persistUserState;
     _sub?.cancel();
-    _sub = _auth.authStateChanges().listen((user) async {
+    _sub = _auth.authStateChanges().listen((user) {
       final generation = ++_authGeneration;
+      _retryTimer?.cancel();
+      _retryTimer = null;
+      _retryAttempt = 0;
       if (user == null) {
         _usernameSet = false;
         _artistsSelected = false;
@@ -113,41 +130,89 @@ class AppRouterNotifier extends ChangeNotifier {
         _photoSetupDone = false;
         _deletionPending = false;
         _setupStateKnown = true;
+        _setupStateUid = null;
         notifyListeners();
       } else if (_fetchUserState != null) {
-        // Re-consultar Firestore al hacer login para evitar que usuarios
-        // existentes (que reinstalaron la app) pasen por el flujo de setup.
-        final previousStateKnown = _setupStateKnown;
-        if (!_usernameSet) {
-          _setupStateKnown = false;
-          notifyListeners();
-        }
-        try {
-          final state = await _fetchUserState!(user.uid);
-          if (generation != _authGeneration ||
-              _auth.currentUser?.uid != user.uid) {
-            return;
-          }
-          _usernameSet = state.usernameSet;
-          _artistsSelected = state.artistsSelected;
-          _onboardingDone = state.onboardingDone;
-          _photoSetupDone = state.photoSetupDone;
-          final deletionPending = state.deletionPending;
-          if (deletionPending != null) {
-            _deletionPending = deletionPending;
-          }
+        // El estado anterior puede pertenecer a la pantalla sin sesión o a
+        // otra cuenta. Solo es seguro reutilizar un snapshot del mismo UID.
+        final cachedState = _readCachedState(user.uid);
+        if (cachedState != null) {
+          _deletionPending = false;
+          _applySetupState(cachedState);
           _setupStateKnown = true;
-          _persistState(user.uid);
-        } catch (_) {
-          if (generation != _authGeneration ||
-              _auth.currentUser?.uid != user.uid) {
-            return;
-          }
-          _setupStateKnown = previousStateKnown;
+          _setupStateUid = user.uid;
+        } else if (!_setupStateKnown || _setupStateUid != user.uid) {
+          _usernameSet = false;
+          _artistsSelected = false;
+          _onboardingDone = false;
+          _photoSetupDone = false;
+          _deletionPending = false;
+          _setupStateKnown = false;
+          _setupStateUid = user.uid;
         }
         notifyListeners();
+        unawaited(_refreshUserState(user, generation));
       } else {
         notifyListeners();
+      }
+    });
+  }
+
+  UserSetupState? _readCachedState(String uid) {
+    try {
+      return _readCachedUserState?.call(uid);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refreshUserState(User user, int generation) async {
+    try {
+      final state = await _fetchUserState!(user.uid);
+      if (!_isCurrentAuthUser(user, generation)) return;
+      _applySetupState(state);
+      _setupStateKnown = true;
+      _setupStateUid = user.uid;
+      _retryAttempt = 0;
+      _persistState(user.uid);
+      notifyListeners();
+    } catch (_) {
+      if (!_isCurrentAuthUser(user, generation)) return;
+      // Si no había snapshot para este UID, el perfil sigue siendo
+      // desconocido. Un fallo de red nunca equivale a un usuario nuevo.
+      _scheduleRetry(user, generation);
+    }
+  }
+
+  bool _isCurrentAuthUser(User user, int generation) =>
+      generation == _authGeneration && _auth.currentUser?.uid == user.uid;
+
+  void _applySetupState(UserSetupState state) {
+    _usernameSet = state.usernameSet;
+    _artistsSelected = state.artistsSelected;
+    _onboardingDone = state.onboardingDone;
+    _photoSetupDone = state.photoSetupDone;
+    final deletionPending = state.deletionPending;
+    if (deletionPending != null) {
+      _deletionPending = deletionPending;
+    }
+  }
+
+  void _scheduleRetry(User user, int generation) {
+    if (_retryTimer != null) return;
+    const delays = <Duration>[
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+      Duration(seconds: 8),
+      Duration(seconds: 16),
+      Duration(seconds: 30),
+    ];
+    final delay = delays[_retryAttempt.clamp(0, delays.length - 1)];
+    if (_retryAttempt < delays.length - 1) _retryAttempt++;
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      if (_isCurrentAuthUser(user, generation)) {
+        unawaited(_refreshUserState(user, generation));
       }
     });
   }
@@ -156,6 +221,7 @@ class AppRouterNotifier extends ChangeNotifier {
   void setUsernameSet() {
     _usernameSet = true;
     _setupStateKnown = true;
+    _setupStateUid = _auth.currentUser?.uid;
     _persistCurrentState();
     notifyListeners();
   }
@@ -165,6 +231,7 @@ class AppRouterNotifier extends ChangeNotifier {
   void setArtistsSelected() {
     _artistsSelected = true;
     _setupStateKnown = true;
+    _setupStateUid = _auth.currentUser?.uid;
     _persistCurrentState();
     notifyListeners();
   }
@@ -174,6 +241,7 @@ class AppRouterNotifier extends ChangeNotifier {
   void setOnboardingDone() {
     _onboardingDone = true;
     _setupStateKnown = true;
+    _setupStateUid = _auth.currentUser?.uid;
     _persistCurrentState();
     notifyListeners();
   }
@@ -182,6 +250,7 @@ class AppRouterNotifier extends ChangeNotifier {
   void setPhotoSetupDone() {
     _photoSetupDone = true;
     _setupStateKnown = true;
+    _setupStateUid = _auth.currentUser?.uid;
     _persistCurrentState();
     notifyListeners();
   }
@@ -222,6 +291,7 @@ class AppRouterNotifier extends ChangeNotifier {
   @override
   void dispose() {
     _authGeneration++;
+    _retryTimer?.cancel();
     _sub?.cancel();
     super.dispose();
   }
@@ -241,7 +311,8 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
     return location == '/deleting-account' ? null : '/deleting-account';
   }
   if (!notifier.setupStateKnown) {
-    if (location == '/onboarding' ||
+    if (location == '/auth' ||
+        location == '/onboarding' ||
         location == '/username-setup' ||
         location == '/photo-setup' ||
         location == '/artist-select') {
