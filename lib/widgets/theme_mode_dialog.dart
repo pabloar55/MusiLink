@@ -32,6 +32,7 @@ Future<ThemeMode?> showThemeModeDialog({
                 isDefaultAction: option.mode == currentMode,
                 onPressed: () => Navigator.of(dialogContext).pop(option.mode),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     SizedBox(

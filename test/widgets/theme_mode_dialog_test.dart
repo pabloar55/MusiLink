@@ -57,6 +57,12 @@ void main() {
     expect(find.text('Sistema'), findsOneWidget);
     expect(find.text('Claro'), findsOneWidget);
     expect(find.text('Oscuro'), findsOneWidget);
+    final actions = tester
+        .widgetList<CupertinoDialogAction>(find.byType(CupertinoDialogAction))
+        .toList();
+    for (final action in actions.take(3)) {
+      expect((action.child as Row).mainAxisSize, MainAxisSize.min);
+    }
 
     await tester.tap(find.text('Oscuro'));
     await tester.pumpAndSettle();
