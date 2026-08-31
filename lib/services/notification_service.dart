@@ -51,7 +51,7 @@ class NotificationService {
   static const _channelNoSoundName = 'MusiLink Notifications (no sound)';
   static const _channelSilentId = 'musilink_high_silent';
   static const _channelSilentName = 'MusiLink Notifications (silent)';
-  static const _supportedPreferredLocales = {'en', 'es', 'fr'};
+  static const _supportedPreferredLocales = {'el', 'en', 'es', 'fr'};
   static const _pendingClearUidKey = 'pending_fcm_clear_uid';
   static const _installationIdKey = 'push_installation_id';
   static const _webVapidKey =

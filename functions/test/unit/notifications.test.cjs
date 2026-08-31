@@ -30,6 +30,7 @@ test('notificationPath builds encoded chat routes and domain fallbacks', () => {
 });
 
 test('preferredLocale accepts regional locales and falls back to English', () => {
+  assert.equal(preferredLocale({ preferredLocale: 'el-GR' }), 'el');
   assert.equal(preferredLocale({ preferredLocale: 'es-ES' }), 'es');
   assert.equal(preferredLocale({ preferredLocale: 'FR_ca' }), 'fr');
   assert.equal(preferredLocale({ preferredLocale: 'de-DE' }), 'en');

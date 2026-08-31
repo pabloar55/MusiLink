@@ -10,19 +10,22 @@ const firebase_1 = require("./firebase");
 const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
 const defaultLocale = 'en';
-const supportedLocales = new Set(['en', 'es', 'fr']);
+const supportedLocales = new Set(['el', 'en', 'es', 'fr']);
 exports.notificationText = {
     friendRequest: {
+        el: (name) => `${name} σας έστειλε αίτημα φιλίας`,
         en: (name) => `${name} sent you a friend request`,
         es: (name) => `${name} te envió una solicitud de amistad`,
         fr: (name) => `${name} vous a envoyé une demande d'amitié`,
     },
     friendRequestAccepted: {
+        el: (name) => `${name} αποδέχτηκε το αίτημα φιλίας σας`,
         en: (name) => `${name} accepted your friend request`,
         es: (name) => `${name} aceptó tu solicitud de amistad`,
         fr: (name) => `${name} a accepté votre demande d'amitié`,
     },
     dailySongExpired: {
+        el: () => 'Το τραγούδι της ημέρας σας έληξε. Μοιραστείτε ένα νέο!',
         en: () => 'Your song of the day has expired. Share a new one!',
         es: () => '¡Tu canción del día ha caducado! Publica una nueva.',
         fr: () => 'Votre chanson du jour a expiré. Partagez-en une nouvelle !',
