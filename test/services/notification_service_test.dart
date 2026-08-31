@@ -40,6 +40,45 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('friend request notifications reuse an ID per sender', () {
+    const first = RemoteMessage(
+      messageId: 'message-1',
+      data: {'type': 'friend_request', 'senderId': 'alice'},
+      notification: RemoteNotification(title: 'MusiLink', body: 'Solicitud'),
+    );
+    const repeated = RemoteMessage(
+      messageId: 'message-2',
+      data: {'type': 'friend_request', 'senderId': 'alice'},
+      notification: RemoteNotification(title: 'MusiLink', body: 'Solicitud'),
+    );
+    const otherSender = RemoteMessage(
+      messageId: 'message-3',
+      data: {'type': 'friend_request', 'senderId': 'bob'},
+      notification: RemoteNotification(title: 'MusiLink', body: 'Solicitud'),
+    );
+
+    expect(foregroundNotificationId(first), foregroundNotificationId(repeated));
+    expect(
+      foregroundNotificationId(first),
+      isNot(foregroundNotificationId(otherSender)),
+    );
+  });
+
+  test('accepted request notifications reuse an ID per accepter', () {
+    const first = RemoteMessage(
+      messageId: 'message-1',
+      data: {'type': 'friend_request_accepted', 'accepterId': 'alice'},
+      notification: RemoteNotification(title: 'MusiLink', body: 'Aceptada'),
+    );
+    const repeated = RemoteMessage(
+      messageId: 'message-2',
+      data: {'type': 'friend_request_accepted', 'accepterId': 'alice'},
+      notification: RemoteNotification(title: 'MusiLink', body: 'Aceptada'),
+    );
+
+    expect(foregroundNotificationId(first), foregroundNotificationId(repeated));
+  });
+
   test('processes launch notification only once across logins', () async {
     final messaging = MockFirebaseMessaging();
     final firestore = MockFirebaseFirestore();

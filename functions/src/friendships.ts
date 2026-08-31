@@ -30,6 +30,15 @@ export function userHasBlocked(data: unknown, otherUid: string): boolean {
   return stringList(blockedUsers).includes(otherUid);
 }
 
+export function friendRequestNotificationIsCoolingDown(
+  lastNotifiedAt: unknown,
+  now: Timestamp,
+): boolean {
+  if (!(lastNotifiedAt instanceof Timestamp)) return false;
+  return now.toMillis() - lastNotifiedAt.toMillis()
+    < friendRequestNotificationCooldownMs;
+}
+
 async function shouldNotifyFriendRequest(
   senderId: string,
   receiverId: string,
@@ -43,10 +52,7 @@ async function shouldNotifyFriendRequest(
     const lastNotifiedAt = limitSnap.data()?.lastNotifiedAt as Timestamp | undefined;
     const now = Timestamp.now();
 
-    if (
-      lastNotifiedAt &&
-      now.toMillis() - lastNotifiedAt.toMillis() < friendRequestNotificationCooldownMs
-    ) {
+    if (friendRequestNotificationIsCoolingDown(lastNotifiedAt, now)) {
       return false;
     }
 
@@ -260,10 +266,18 @@ export const onFriendRequestDeleted = onDocumentDeleted(
       const receiverId = request.receiverId as string | undefined;
       if (!senderId || !receiverId) return;
 
-      await db
+      const limitRef = db
         .collection(friendRequestNotificationLimitsCollection)
-        .doc(`${senderId}_${receiverId}`)
-        .delete();
+        .doc(`${senderId}_${receiverId}`);
+      await db.runTransaction(async (tx) => {
+        const limitSnap = await tx.get(limitRef);
+        if (!limitSnap.exists) return;
+
+        const lastNotifiedAt = limitSnap.data()?.lastNotifiedAt;
+        if (!friendRequestNotificationIsCoolingDown(lastNotifiedAt, Timestamp.now())) {
+          tx.delete(limitRef);
+        }
+      });
     } catch (error) {
       logger.error('onFriendRequestDeleted: unhandled error', {
         requestId: event.params.requestId,

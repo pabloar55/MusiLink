@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = void 0;
 exports.userHasBlocked = userHasBlocked;
+exports.friendRequestNotificationIsCoolingDown = friendRequestNotificationIsCoolingDown;
 const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
@@ -16,6 +17,12 @@ function userHasBlocked(data, otherUid) {
     const blockedUsers = data?.blockedUsers;
     return (0, firestore_values_1.stringList)(blockedUsers).includes(otherUid);
 }
+function friendRequestNotificationIsCoolingDown(lastNotifiedAt, now) {
+    if (!(lastNotifiedAt instanceof firestore_1.Timestamp))
+        return false;
+    return now.toMillis() - lastNotifiedAt.toMillis()
+        < friendRequestNotificationCooldownMs;
+}
 async function shouldNotifyFriendRequest(senderId, receiverId) {
     const limitRef = firebase_1.db
         .collection(friendRequestNotificationLimitsCollection)
@@ -24,8 +31,7 @@ async function shouldNotifyFriendRequest(senderId, receiverId) {
         const limitSnap = await tx.get(limitRef);
         const lastNotifiedAt = limitSnap.data()?.lastNotifiedAt;
         const now = firestore_1.Timestamp.now();
-        if (lastNotifiedAt &&
-            now.toMillis() - lastNotifiedAt.toMillis() < friendRequestNotificationCooldownMs) {
+        if (friendRequestNotificationIsCoolingDown(lastNotifiedAt, now)) {
             return false;
         }
         tx.set(limitRef, { senderId, receiverId, lastNotifiedAt: now }, { merge: true });
@@ -193,10 +199,18 @@ exports.onFriendRequestDeleted = (0, firestore_2.onDocumentDeleted)({ document: 
         const receiverId = request.receiverId;
         if (!senderId || !receiverId)
             return;
-        await firebase_1.db
+        const limitRef = firebase_1.db
             .collection(friendRequestNotificationLimitsCollection)
-            .doc(`${senderId}_${receiverId}`)
-            .delete();
+            .doc(`${senderId}_${receiverId}`);
+        await firebase_1.db.runTransaction(async (tx) => {
+            const limitSnap = await tx.get(limitRef);
+            if (!limitSnap.exists)
+                return;
+            const lastNotifiedAt = limitSnap.data()?.lastNotifiedAt;
+            if (!friendRequestNotificationIsCoolingDown(lastNotifiedAt, firestore_1.Timestamp.now())) {
+                tx.delete(limitRef);
+            }
+        });
     }
     catch (error) {
         v2_1.logger.error('onFriendRequestDeleted: unhandled error', {

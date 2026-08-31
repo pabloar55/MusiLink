@@ -14,6 +14,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum PushPermissionState { unsupported, notDetermined, denied, enabled }
 
+int _stableNotificationId(String key) {
+  var hash = 0;
+  for (final codeUnit in key.codeUnits) {
+    hash = ((hash * 31) + codeUnit) & 0x7fffffff;
+  }
+  return hash;
+}
+
+@visibleForTesting
+int foregroundNotificationId(RemoteMessage message) {
+  final type = message.data['type'];
+  final relatedUserId = switch (type) {
+    'friend_request' => message.data['senderId'],
+    'friend_request_accepted' => message.data['accepterId'],
+    _ => null,
+  };
+  if (type is String && relatedUserId is String && relatedUserId.isNotEmpty) {
+    return _stableNotificationId('$type:$relatedUserId');
+  }
+
+  final platformTag = message.notification?.android?.tag;
+  if (platformTag != null && platformTag.isNotEmpty) {
+    return _stableNotificationId(platformTag);
+  }
+
+  return message.messageId?.hashCode ?? message.notification.hashCode;
+}
+
 class NotificationService {
   NotificationService({
     required this._messaging,
@@ -337,9 +365,9 @@ class NotificationService {
       (false, true) => _channelNoSoundName,
       (false, false) => _channelSilentName,
     };
-    // Messages from the same chat share a stable ID so they replace each
+    // Repeated social notifications share a stable ID so they replace each
     // other in the notification drawer instead of stacking indefinitely.
-    final notifId = chatId != null ? chatId.hashCode : n.hashCode;
+    final notifId = foregroundNotificationId(message);
     _localNotifications.show(
       id: notifId,
       title: n.title,
