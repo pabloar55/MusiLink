@@ -235,6 +235,10 @@
 
   "settingsTitle": "Ajustes",
   "settingsAppearance": "Apariencia",
+  "settingsTheme": "Tema",
+  "themeSystem": "Sistema",
+  "themeLight": "Claro",
+  "themeDark": "Oscuro",
   "settingsNotifications": "Notificaciones",
   "settingsVibration": "Vibración",
   "settingsSound": "Sonido",

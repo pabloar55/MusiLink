@@ -270,6 +270,10 @@
 
   "settingsTitle": "Ρυθμίσεις",
   "settingsAppearance": "Εμφάνιση",
+  "settingsTheme": "Θέμα",
+  "themeSystem": "Σύστημα",
+  "themeLight": "Φωτεινό",
+  "themeDark": "Σκοτεινό",
   "settingsNotifications": "Ειδοποιήσεις",
   "settingsVibration": "Δόνηση",
   "settingsSound": "Ήχος",

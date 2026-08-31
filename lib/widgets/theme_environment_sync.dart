@@ -16,6 +16,7 @@ class ThemeEnvironmentSync extends StatefulWidget {
 class _ThemeEnvironmentSyncState extends State<ThemeEnvironmentSync> {
   Brightness? _lastBrightness;
   Color? _lastNavigationBarColor;
+  SystemUiOverlayStyle? _androidOverlayStyle;
 
   @override
   void didChangeDependencies() {
@@ -34,21 +35,29 @@ class _ThemeEnvironmentSyncState extends State<ThemeEnvironmentSync> {
     syncWebTheme(brightness);
 
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      SystemChrome.setSystemUIOverlayStyle(
-        SystemUiOverlayStyle(
-          systemNavigationBarColor: navigationBarColor,
-          systemNavigationBarDividerColor: Colors.transparent,
-          systemNavigationBarIconBrightness: brightness == Brightness.dark
-              ? Brightness.light
-              : Brightness.dark,
-          // Android adds a dark contrast scrim in three-button navigation by
-          // default. The app bar already provides an accessible solid color.
-          systemNavigationBarContrastEnforced: false,
-        ),
+      _androidOverlayStyle = SystemUiOverlayStyle(
+        systemNavigationBarColor: navigationBarColor,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        // Android adds a dark contrast scrim in three-button navigation by
+        // default. The app bar already provides an accessible solid color.
+        systemNavigationBarContrastEnforced: false,
       );
     }
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    final overlayStyle = _androidOverlayStyle;
+    if (overlayStyle == null) return widget.child;
+
+    // Keeping this style in the layer tree lets Flutter combine it with an
+    // AppBar's status-bar style and reapply the lower bar after theme changes.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: widget.child,
+    );
+  }
 }

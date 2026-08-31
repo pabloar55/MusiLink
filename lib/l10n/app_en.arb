@@ -270,6 +270,10 @@
 
   "settingsTitle": "Settings",
   "settingsAppearance": "Appearance",
+  "settingsTheme": "Theme",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
   "settingsNotifications": "Notifications",
   "settingsVibration": "Vibration",
   "settingsSound": "Sound",

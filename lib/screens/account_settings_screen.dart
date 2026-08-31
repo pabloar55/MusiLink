@@ -22,6 +22,7 @@ import 'package:musi_link/widgets/image_source_picker.dart';
 import 'package:musi_link/widgets/deleting_account_dialog.dart';
 import 'package:musi_link/widgets/reauth_password_dialog.dart';
 import 'package:musi_link/widgets/signing_out_dialog.dart';
+import 'package:musi_link/widgets/theme_mode_dialog.dart';
 import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
@@ -34,6 +35,21 @@ class AccountSettingsScreen extends ConsumerStatefulWidget {
 
 class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   bool _isUploadingPhoto = false;
+
+  Future<void> _selectThemeMode(ThemeMode currentMode) async {
+    final l10n = AppLocalizations.of(context)!;
+    final selectedMode = await showThemeModeDialog(
+      context: context,
+      currentMode: currentMode,
+      title: l10n.settingsTheme,
+      systemLabel: l10n.themeSystem,
+      lightLabel: l10n.themeLight,
+      darkLabel: l10n.themeDark,
+      cancelLabel: l10n.friendsCancel,
+    );
+    if (selectedMode == null || !mounted) return;
+    ref.read(themeModeProvider.notifier).setThemeMode(selectedMode);
+  }
 
   Future<void> _goToProfile() async {
     final appUser = ref.read(currentUserProvider).asData?.value;
@@ -225,7 +241,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final isDarkMode = ref.watch(isDarkProvider);
+    final themeMode = ref.watch(themeModeProvider);
     final vibrationEnabled = ref.watch(vibrationEnabledProvider);
     final soundEnabled = ref.watch(soundEnabledProvider);
     final cs = Theme.of(context).colorScheme;
@@ -267,12 +283,13 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
               const SizedBox(height: AppTokens.spaceSM),
               _SettingsCard(
                 children: [
-                  _SwitchTile(
-                    icon: LucideIcons.moon,
-                    label: l10n.menuDarkMode,
-                    value: isDarkMode,
-                    onChanged: (_) =>
-                        ref.read(themeModeProvider.notifier).toggleDarkLight(),
+                  _ThemePickerTile(
+                    value: themeMode,
+                    label: l10n.settingsTheme,
+                    systemLabel: l10n.themeSystem,
+                    lightLabel: l10n.themeLight,
+                    darkLabel: l10n.themeDark,
+                    onTap: () => _selectThemeMode(themeMode),
                   ),
                 ],
               ),
@@ -549,6 +566,60 @@ class _SwitchTile extends StatelessWidget {
       title: Text(label),
       value: value,
       onChanged: onChanged,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceLG,
+        vertical: AppTokens.spaceXS,
+      ),
+    );
+  }
+}
+
+class _ThemePickerTile extends StatelessWidget {
+  final ThemeMode value;
+  final String label;
+  final String systemLabel;
+  final String lightLabel;
+  final String darkLabel;
+  final VoidCallback onTap;
+
+  const _ThemePickerTile({
+    required this.value,
+    required this.label,
+    required this.systemLabel,
+    required this.lightLabel,
+    required this.darkLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final currentLabel = switch (value) {
+      ThemeMode.system => systemLabel,
+      ThemeMode.light => lightLabel,
+      ThemeMode.dark => darkLabel,
+    };
+
+    return ListTile(
+      leading: Icon(
+        LucideIcons.palette,
+        size: 22,
+        color: cs.onSurfaceVariant,
+      ),
+      title: Text(label),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(currentLabel, style: TextStyle(color: cs.onSurfaceVariant)),
+          const SizedBox(width: AppTokens.spaceSM),
+          Icon(
+            LucideIcons.chevronRight,
+            size: 18,
+            color: cs.onSurfaceVariant,
+          ),
+        ],
+      ),
+      onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppTokens.spaceLG,
         vertical: AppTokens.spaceXS,

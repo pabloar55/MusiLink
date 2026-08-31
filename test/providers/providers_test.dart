@@ -90,6 +90,22 @@ void main() {
       notifier.toggleDarkLight();
       expect(container.read(themeModeProvider), ThemeMode.dark);
     });
+
+    test('setThemeMode permite seleccionar system, light y dark', () {
+      final container = _themeContainer(savedMode: 'dark');
+      addTearDown(container.dispose);
+
+      final notifier = container.read(themeModeProvider.notifier);
+
+      notifier.setThemeMode(ThemeMode.system);
+      expect(container.read(themeModeProvider), ThemeMode.system);
+
+      notifier.setThemeMode(ThemeMode.light);
+      expect(container.read(themeModeProvider), ThemeMode.light);
+
+      notifier.setThemeMode(ThemeMode.dark);
+      expect(container.read(themeModeProvider), ThemeMode.dark);
+    });
   });
 
   group('isDarkProvider', () {

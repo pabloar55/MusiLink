@@ -622,6 +622,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsAppearance => 'Εμφάνιση';
 
   @override
+  String get settingsTheme => 'Θέμα';
+
+  @override
+  String get themeSystem => 'Σύστημα';
+
+  @override
+  String get themeLight => 'Φωτεινό';
+
+  @override
+  String get themeDark => 'Σκοτεινό';
+
+  @override
   String get settingsNotifications => 'Ειδοποιήσεις';
 
   @override
