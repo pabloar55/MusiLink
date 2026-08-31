@@ -144,6 +144,10 @@ service cloud.firestore {
         );
     }
 
+    function validPreferredLocale(locale) {
+      return locale in ['el', 'en', 'es', 'fr'];
+    }
+
     function validPrivateProfile(userId, data) {
       return validBlockedUsers(userId, data)
         && validFriends(userId, data)
@@ -153,7 +157,7 @@ service cloud.firestore {
         && (!('lastLogin' in data) || data.lastLogin is timestamp)
         && (!('deletedAt' in data) || data.deletedAt is timestamp)
         && (!('preferredLocale' in data)
-          || data.preferredLocale in ['en', 'es', 'fr'])
+          || validPreferredLocale(data.preferredLocale))
         && (!('notifSound' in data) || data.notifSound is bool)
         && (!('notifVibration' in data) || data.notifVibration is bool);
     }
@@ -175,7 +179,7 @@ service cloud.firestore {
         && data.token.toUtf8().size() > 0
         && data.token.toUtf8().size() <= 4096
         && data.platform in ['android', 'ios', 'web']
-        && data.preferredLocale in ['en', 'es', 'fr']
+        && validPreferredLocale(data.preferredLocale)
         && data.updatedAt == request.time;
     }
 

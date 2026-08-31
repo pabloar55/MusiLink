@@ -163,6 +163,17 @@ test('un perfil privado nuevo debe comenzar sin amigos', async () => {
   }));
 });
 
+test('el propietario puede guardar griego como idioma preferido', async () => {
+  await seedActiveUser('alice');
+
+  await assertSucceeds(updateDoc(doc(dbFor('alice'), 'user_private/alice'), {
+    preferredLocale: 'el',
+  }));
+  await assertFails(updateDoc(doc(dbFor('alice'), 'user_private/alice'), {
+    preferredLocale: 'de',
+  }));
+});
+
 test('cada usuario solo puede gestionar sus propios tokens push válidos', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');
@@ -171,7 +182,7 @@ test('cada usuario solo puede gestionar sus propios tokens push válidos', async
   const validToken = {
     token: 'fcm-token',
     platform: 'web',
-    preferredLocale: 'es',
+    preferredLocale: 'el',
     updatedAt: serverTimestamp(),
   };
 
@@ -185,6 +196,16 @@ test('cada usuario solo puede gestionar sus propios tokens push válidos', async
     {
       ...validToken,
       platform: 'unknown',
+    },
+  ));
+  await assertFails(setDoc(
+    doc(
+      dbFor('alice'),
+      'user_private/alice/push_tokens/invalidlocaleabcdefgh',
+    ),
+    {
+      ...validToken,
+      preferredLocale: 'de',
     },
   ));
 });
