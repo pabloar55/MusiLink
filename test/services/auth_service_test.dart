@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/services/auth_service.dart';
 
@@ -330,6 +333,57 @@ void main() {
         },
       );
 
+      test('procesa una sola vez el resultado móvil aunque authenticate emita un evento', () async {
+        final authenticationEvents =
+            StreamController<GoogleSignInAuthenticationEvent>.broadcast(
+              sync: true,
+            );
+        mockGoogleSignIn = MockGoogleSignIn(
+          authenticationEvents: authenticationEvents.stream,
+        );
+        authService = AuthService(
+          mockUserService,
+          auth: mockAuth,
+          googleSignIn: mockGoogleSignIn,
+          notificationService: mockNotificationService,
+        );
+        addTearDown(() async {
+          await authService.dispose();
+          await authenticationEvents.close();
+        });
+
+        final mockGoogleUser = MockGoogleSignInAccount();
+        final mockGoogleAuth = MockGoogleSignInAuthentication();
+        final mockUser = MockUser();
+        final mockCredential = MockUserCredential();
+        final signInEvent = GoogleSignInAuthenticationEventSignIn(
+          user: mockGoogleUser,
+        );
+
+        when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+        when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(true);
+        when(() => mockGoogleSignIn.authenticate()).thenAnswer((_) async {
+          authenticationEvents.add(signInEvent);
+          return mockGoogleUser;
+        });
+        when(() => mockGoogleUser.authentication).thenReturn(mockGoogleAuth);
+        when(() => mockGoogleAuth.idToken).thenReturn('id_token_123');
+        when(() => mockAuth.signInWithCredential(any()))
+            .thenAnswer((_) async => mockCredential);
+        when(() => mockCredential.user).thenReturn(mockUser);
+        when(() => mockUser.uid).thenReturn('google_uid');
+        when(() => mockUserService.userExists('google_uid'))
+            .thenAnswer((_) async => true);
+        when(() => mockUserService.updateLastLogin('google_uid'))
+            .thenAnswer((_) async {});
+
+        final result = await authService.signInWithGoogle();
+
+        expect(result, mockUser);
+        verify(() => mockAuth.signInWithCredential(any())).called(1);
+        verify(() => mockUserService.updateLastLogin('google_uid')).called(1);
+      });
+
       test('actualiza lastLogin si ya existe el usuario', () async {
         final mockGoogleUser = MockGoogleSignInAccount();
         final mockGoogleAuth = MockGoogleSignInAuthentication();
@@ -404,6 +458,116 @@ void main() {
         ).called(1);
         verifyNever(() => mockGoogleSignIn.authenticate());
       });
+    });
+
+    group('Google authenticationEvents', () {
+      test('procesa mediante el stream los resultados del botón web', () async {
+        final authenticationEvents =
+            StreamController<GoogleSignInAuthenticationEvent>.broadcast();
+        mockGoogleSignIn = MockGoogleSignIn(
+          authenticationEvents: authenticationEvents.stream,
+        );
+        authService = AuthService(
+          mockUserService,
+          auth: mockAuth,
+          googleSignIn: mockGoogleSignIn,
+          notificationService: mockNotificationService,
+        );
+        addTearDown(() async {
+          await authService.dispose();
+          await authenticationEvents.close();
+        });
+
+        final processed = Completer<void>();
+        final mockGoogleUser = MockGoogleSignInAccount();
+        final mockGoogleAuth = MockGoogleSignInAuthentication();
+        final mockUser = MockUser();
+        final mockCredential = MockUserCredential();
+
+        when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+        when(() => mockGoogleUser.authentication).thenReturn(mockGoogleAuth);
+        when(() => mockGoogleAuth.idToken).thenReturn('web_id_token');
+        when(() => mockAuth.signInWithCredential(any()))
+            .thenAnswer((_) async => mockCredential);
+        when(() => mockCredential.user).thenReturn(mockUser);
+        when(() => mockUser.uid).thenReturn('web_uid');
+        when(() => mockUserService.userExists('web_uid'))
+            .thenAnswer((_) async => true);
+        when(() => mockUserService.updateLastLogin('web_uid'))
+            .thenAnswer((_) async {
+              processed.complete();
+            });
+
+        await authService.initializeGoogleSignInForWeb();
+        authenticationEvents.add(
+          GoogleSignInAuthenticationEventSignIn(user: mockGoogleUser),
+        );
+        await processed.future;
+
+        verify(() => mockAuth.signInWithCredential(any())).called(1);
+        verify(() => mockUserService.updateLastLogin('web_uid')).called(1);
+      });
+    });
+
+    group('reauthenticateWithGoogle', () {
+      test(
+        'no inicia sesión desde el evento antes de validar la cuenta',
+        () async {
+          final authenticationEvents =
+              StreamController<GoogleSignInAuthenticationEvent>.broadcast(
+                sync: true,
+              );
+          mockGoogleSignIn = MockGoogleSignIn(
+            authenticationEvents: authenticationEvents.stream,
+          );
+          authService = AuthService(
+            mockUserService,
+            auth: mockAuth,
+            googleSignIn: mockGoogleSignIn,
+            notificationService: mockNotificationService,
+          );
+          addTearDown(() async {
+            await authService.dispose();
+            await authenticationEvents.close();
+          });
+
+          final currentUser = MockUser();
+          final wrongGoogleUser = MockGoogleSignInAccount();
+          final wrongGoogleAuth = MockGoogleSignInAuthentication();
+          final wrongFirebaseUser = MockUser();
+          final wrongCredential = MockUserCredential();
+
+          when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+          when(() => mockGoogleSignIn.supportsAuthenticate()).thenReturn(true);
+          when(() => mockGoogleSignIn.authenticate()).thenAnswer((_) async {
+            authenticationEvents.add(
+              GoogleSignInAuthenticationEventSignIn(user: wrongGoogleUser),
+            );
+            return wrongGoogleUser;
+          });
+          when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async {});
+          when(() => wrongGoogleUser.email).thenReturn('other@example.com');
+          when(() => wrongGoogleUser.authentication)
+              .thenReturn(wrongGoogleAuth);
+          when(() => wrongGoogleAuth.idToken).thenReturn('wrong_id_token');
+          when(() => mockAuth.currentUser).thenReturn(currentUser);
+          when(() => currentUser.email).thenReturn('current@example.com');
+          when(() => mockAuth.signInWithCredential(any()))
+              .thenAnswer((_) async => wrongCredential);
+          when(() => wrongCredential.user).thenReturn(wrongFirebaseUser);
+          when(() => wrongFirebaseUser.uid).thenReturn('wrong_uid');
+          when(() => mockUserService.userExists('wrong_uid'))
+              .thenAnswer((_) async => false);
+
+          await expectLater(
+            authService.reauthenticateWithGoogle(),
+            throwsA(isA<GoogleAccountMismatchException>()),
+          );
+
+          verifyNever(() => mockAuth.signInWithCredential(any()));
+          verify(() => mockGoogleSignIn.signOut()).called(1);
+        },
+      );
     });
 
     group('signOut', () {

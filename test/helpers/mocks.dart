@@ -27,9 +27,13 @@ class MockFirebaseFunctionsException extends Mock
 
 // ── Google Sign-In ───────────────────────────────────────────
 class MockGoogleSignIn extends Mock implements GoogleSignIn {
+  MockGoogleSignIn({
+    this.authenticationEvents =
+        const Stream<GoogleSignInAuthenticationEvent>.empty(),
+  });
+
   @override
-  Stream<GoogleSignInAuthenticationEvent> get authenticationEvents =>
-      const Stream.empty();
+  final Stream<GoogleSignInAuthenticationEvent> authenticationEvents;
 }
 
 class MockGoogleSignInAccount extends Mock implements GoogleSignInAccount {}

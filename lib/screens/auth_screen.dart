@@ -42,7 +42,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   void initState() {
     super.initState();
     if (kIsWeb) {
-      unawaited(ref.read(authServiceProvider).initializeGoogleSignIn());
+      unawaited(ref.read(authServiceProvider).initializeGoogleSignInForWeb());
     }
     if (widget.accountDeletionNotice != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

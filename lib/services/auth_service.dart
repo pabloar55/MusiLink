@@ -33,14 +33,21 @@ class AuthService {
   Future<void> _ensureGoogleInitialized() async {
     _googleInitialization ??= _googleSignIn.initialize();
     await _googleInitialization;
+  }
+
+  /// Inicializa Google Sign-In y escucha los resultados del botón web.
+  ///
+  /// En móvil, [authenticate] ya devuelve la cuenta y también publica el
+  /// evento de autenticación. Por eso el listener se reserva para web, donde
+  /// el botón del SDK entrega el resultado exclusivamente mediante el stream.
+  Future<void> initializeGoogleSignInForWeb() async {
+    await _ensureGoogleInitialized();
     _googleAuthSubscription ??= _googleSignIn.authenticationEvents.listen(
       (event) => unawaited(_handleGoogleAuthenticationEvent(event)),
       onError: (Object error, StackTrace stack) =>
           unawaited(reportError(error, stack)),
     );
   }
-
-  Future<void> initializeGoogleSignIn() => _ensureGoogleInitialized();
 
   /// Usuario actual de Firebase
   User? get currentUser => _auth.currentUser;
