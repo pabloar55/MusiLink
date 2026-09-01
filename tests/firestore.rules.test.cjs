@@ -557,6 +557,16 @@ test('exige reloj de servidor y cooldown para cambios de identidad', async () =>
     displayName: 'Alice 3',
     profileIdentityUpdatedAt: serverTimestamp(),
   }));
+  await seed('users/alice', {
+    displayName: 'Alice 2',
+    username: 'alice_name',
+    photoUrl: '',
+    profileIdentityUpdatedAt: new Date(Date.now() - 11_000),
+  });
+  await assertSucceeds(updateDoc(userRef, {
+    displayName: 'Alice 3',
+    profileIdentityUpdatedAt: serverTimestamp(),
+  }));
   await assertFails(updateDoc(userRef, {
     profileIdentityUpdatedAt: null,
   }));

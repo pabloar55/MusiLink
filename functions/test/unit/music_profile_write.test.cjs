@@ -80,6 +80,7 @@ function fakeFirestore({
   limiterData = {},
 } = {}) {
   const updates = [];
+  const sets = [];
   const refs = new Map();
   const firestore = {
     doc(path) {
@@ -112,11 +113,13 @@ function fakeFirestore({
         update(ref, fields) {
           updates.push({ ref, fields });
         },
-        set() {},
+        set(ref, fields) {
+          sets.push({ ref, fields });
+        },
       });
     },
   };
-  return { firestore, updates };
+  return { firestore, sets, updates };
 }
 
 test('writes only the authenticated user profile through one transaction', async () => {
@@ -151,8 +154,8 @@ test('rate limits repeated changed music profiles', async () => {
   const now = Timestamp.fromMillis(60_000);
   const { firestore, updates } = fakeFirestore({
     limiterData: {
-      musicProfileWindowStart: Timestamp.fromMillis(30_000),
-      musicProfileWriteCount: 6,
+      musicProfileTokens: 0,
+      musicProfileTokensUpdatedAt: Timestamp.fromMillis(55_000),
     },
   });
 
@@ -161,6 +164,25 @@ test('rate limits repeated changed music profiles', async () => {
     (error) => error?.code === 'resource-exhausted',
   );
   assert.deepEqual(updates, []);
+});
+
+test('refills one music profile change every ten seconds', async () => {
+  const now = Timestamp.fromMillis(60_000);
+  const { firestore, sets, updates } = fakeFirestore({
+    limiterData: {
+      musicProfileTokens: 0,
+      musicProfileTokensUpdatedAt: Timestamp.fromMillis(50_000),
+    },
+  });
+
+  const updated = await writeMusicProfile(firestore, 'alice', [], now);
+
+  assert.equal(updated, true);
+  assert.equal(updates.length, 1);
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].ref.path, 'rate_limits/alice');
+  assert.equal(sets[0].fields.musicProfileTokens, 0);
+  assert.equal(sets[0].fields.musicProfileTokensUpdatedAt, now);
 });
 
 test('does not write inactive or deletion-pending profiles', async () => {

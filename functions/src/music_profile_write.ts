@@ -19,8 +19,8 @@ const maxGenreNameBytes = 200;
 const maxImageUrlBytes = 2048;
 const spotifyArtistIdPattern = /^[A-Za-z0-9]{22}$/;
 const spotifyImageUrlPattern = /^https:\/\/i[.]scdn[.]co\/image\/[A-Za-z0-9]+$/;
-const musicProfileRateWindowMs = 60_000;
-const maxMusicProfileWritesPerWindow = 6;
+const musicProfileRateCapacity = 6;
+const musicProfileTokenRefillMs = 10_000;
 
 interface ArtistPayload {
   name: string;
@@ -185,6 +185,26 @@ function nonNegativeInteger(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function availableMusicProfileTokens(
+  limiterData: DocumentData,
+  now: Timestamp,
+): number {
+  const storedTokens = limiterData.musicProfileTokens;
+  const storedAt = limiterData.musicProfileTokensUpdatedAt;
+  if (typeof storedTokens !== 'number'
+      || !Number.isFinite(storedTokens)
+      || storedTokens < 0
+      || !(storedAt instanceof Timestamp)) {
+    return musicProfileRateCapacity;
+  }
+
+  const elapsedMs = Math.max(0, now.toMillis() - storedAt.toMillis());
+  return Math.min(
+    musicProfileRateCapacity,
+    storedTokens + elapsedMs / musicProfileTokenRefillMs,
+  );
+}
+
 export async function writeMusicProfile(
   firestore: Firestore,
   uid: string,
@@ -210,13 +230,8 @@ export async function writeMusicProfile(
     if (sameMusicProfile(userData, fields)) return false;
 
     const limiterData = limiterSnapshot.data() ?? {};
-    const storedWindowStart = limiterData.musicProfileWindowStart;
-    const inCurrentWindow = storedWindowStart instanceof Timestamp
-      && now.toMillis() - storedWindowStart.toMillis() <= musicProfileRateWindowMs;
-    const currentCount = inCurrentWindow
-      ? nonNegativeInteger(limiterData.musicProfileWriteCount)
-      : 0;
-    if (currentCount >= maxMusicProfileWritesPerWindow) {
+    const availableTokens = availableMusicProfileTokens(limiterData, now);
+    if (availableTokens < 1) {
       throw new HttpsError('resource-exhausted', 'Music profile rate limit reached.');
     }
 
@@ -229,8 +244,10 @@ export async function writeMusicProfile(
     }
     transaction.update(userRef, userUpdates);
     transaction.set(limiterRef, {
-      musicProfileWindowStart: inCurrentWindow ? storedWindowStart : now,
-      musicProfileWriteCount: currentCount + 1,
+      musicProfileTokens: availableTokens - 1,
+      musicProfileTokensUpdatedAt: now,
+      musicProfileWindowStart: FieldValue.delete(),
+      musicProfileWriteCount: FieldValue.delete(),
     }, { merge: true });
     return true;
   });

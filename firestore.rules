@@ -130,7 +130,7 @@ service cloud.firestore {
         && request.resource.data.profileIdentityUpdatedAt == request.time
         && (
           !('profileIdentityUpdatedAt' in resource.data)
-          || request.time >= resource.data.profileIdentityUpdatedAt + duration.value(1, 'm')
+          || request.time >= resource.data.profileIdentityUpdatedAt + duration.value(10, 's')
         )
       );
     }

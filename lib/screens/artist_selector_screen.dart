@@ -221,6 +221,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
   bool _isSearching = false;
   bool _isSaving = false;
+  bool _allowPop = false;
   Timer? _debounce;
   String _lastQuery = '';
   int _searchGeneration = 0;
@@ -246,20 +247,33 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (uid == null) return;
       final currentUser = ref.read(currentUserProvider).asData?.value;
-      var user = currentUser?.uid == uid ? currentUser : null;
-      if (user?.topArtists.isEmpty ?? true) {
+      final cachedUser = currentUser?.uid == uid ? currentUser : null;
+      var user = cachedUser;
+      try {
+        // La referencia de cambios debe ser la última versión confirmada por
+        // el servidor, no el provider aún en caché de un guardado anterior.
         user = await ref
             .read(userServiceProvider)
-            .getUser(uid, bypassCache: true);
+            .getUser(
+              uid,
+              bypassCache: true,
+              serverOnly: true,
+              reportErrors: false,
+            );
+      } catch (e, st) {
+        if (cachedUser == null) rethrow;
+        reportError(e, st).ignore();
       }
       if (!mounted || user == null) return;
       final loadedUser = user;
       setState(() {
-        _selected.addAll(
-          _dedupeArtists(
-            loadedUser.topArtists.take(MusicProfileLimits.maxArtists),
-          ),
-        );
+        _selected
+          ..clear()
+          ..addAll(
+            _dedupeArtists(
+              loadedUser.topArtists.take(MusicProfileLimits.maxArtists),
+            ),
+          );
         _originalArtistKeys = _selected.map(_artistKey).toList();
         _preferredSuggestionArtistKey = _selected.isEmpty
             ? null
@@ -508,25 +522,64 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     return false;
   }
 
-  void _saveAndPop() {
+  void _popAfterRebuild() {
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.pop();
+    });
+  }
+
+  Future<void> _saveAndPop() async {
+    if (_isSaving) return;
+
+    if (!_hasChanges) {
+      _popAfterRebuild();
+      return;
+    }
+    if (_selected.length < _minArtists) {
+      final missing = _minArtists - _selected.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.artistSelectorContinueLocked(missing),
+          ),
+        ),
+      );
+      return;
+    }
+
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    final musicProfileService = ref.read(musicProfileServiceProvider);
-    final userService = ref.read(userServiceProvider);
-    final container = ProviderScope.containerOf(context);
-    final selected = List<Artist>.from(_selected);
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
+      );
+      return;
+    }
 
-    if (mounted) context.pop();
-
-    if (uid == null || selected.length < _minArtists || !_hasChanges) return;
-    musicProfileService
-        .saveManualArtists(selected)
-        .then((_) {
-          userService.clearCache();
-          container.invalidate(currentUserProvider);
-        })
-        .catchError((e, StackTrace st) {
-          reportError(e, st).ignore();
-        });
+    setState(() => _isSaving = true);
+    try {
+      await ref
+          .read(musicProfileServiceProvider)
+          .saveManualArtists(List<Artist>.from(_selected));
+      ref.read(userServiceProvider).clearCache();
+      ref.invalidate(currentUserProvider);
+      _popAfterRebuild();
+    } catch (e, st) {
+      if (!isRateLimitError(e)) reportError(e, st).ignore();
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isRateLimitError(e)
+                ? l10n.authErrorTooManyRequests
+                : l10n.genericError,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -559,9 +612,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     final isKeyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return PopScope(
-      canPop: !widget.isEditMode,
+      canPop: !widget.isEditMode || _allowPop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && widget.isEditMode) _saveAndPop();
+        if (!didPop && widget.isEditMode) unawaited(_saveAndPop());
       },
       child: Scaffold(
         body: SafeArea(
@@ -577,7 +630,21 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                 ),
                 child: Row(
                   children: [
-                    if (widget.isEditMode) BackButton(onPressed: _saveAndPop),
+                    if (widget.isEditMode)
+                      _isSaving
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : BackButton(
+                              onPressed: () => unawaited(_saveAndPop()),
+                            ),
                     Text(
                       l10n.artistSelectorTitle,
                       style: Theme.of(context).textTheme.headlineSmall

@@ -18,8 +18,8 @@ const maxGenreNameBytes = 200;
 const maxImageUrlBytes = 2048;
 const spotifyArtistIdPattern = /^[A-Za-z0-9]{22}$/;
 const spotifyImageUrlPattern = /^https:\/\/i[.]scdn[.]co\/image\/[A-Za-z0-9]+$/;
-const musicProfileRateWindowMs = 60_000;
-const maxMusicProfileWritesPerWindow = 6;
+const musicProfileRateCapacity = 6;
+const musicProfileTokenRefillMs = 10_000;
 function utf8Length(value) {
     return Buffer.byteLength(value, 'utf8');
 }
@@ -151,6 +151,18 @@ function sameMusicProfile(current, next) {
 function nonNegativeInteger(value) {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }
+function availableMusicProfileTokens(limiterData, now) {
+    const storedTokens = limiterData.musicProfileTokens;
+    const storedAt = limiterData.musicProfileTokensUpdatedAt;
+    if (typeof storedTokens !== 'number'
+        || !Number.isFinite(storedTokens)
+        || storedTokens < 0
+        || !(storedAt instanceof firestore_1.Timestamp)) {
+        return musicProfileRateCapacity;
+    }
+    const elapsedMs = Math.max(0, now.toMillis() - storedAt.toMillis());
+    return Math.min(musicProfileRateCapacity, storedTokens + elapsedMs / musicProfileTokenRefillMs);
+}
 async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Timestamp.now()) {
     const userRef = firestore.doc(`users/${uid}`);
     const deletionRef = firestore.doc(`account_deletions/${uid}`);
@@ -171,13 +183,8 @@ async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Time
         if (sameMusicProfile(userData, fields))
             return false;
         const limiterData = limiterSnapshot.data() ?? {};
-        const storedWindowStart = limiterData.musicProfileWindowStart;
-        const inCurrentWindow = storedWindowStart instanceof firestore_1.Timestamp
-            && now.toMillis() - storedWindowStart.toMillis() <= musicProfileRateWindowMs;
-        const currentCount = inCurrentWindow
-            ? nonNegativeInteger(limiterData.musicProfileWriteCount)
-            : 0;
-        if (currentCount >= maxMusicProfileWritesPerWindow) {
+        const availableTokens = availableMusicProfileTokens(limiterData, now);
+        if (availableTokens < 1) {
             throw new https_1.HttpsError('resource-exhausted', 'Music profile rate limit reached.');
         }
         const recommendationProfileChanged = !sameRecommendationProfile(userData, fields);
@@ -190,8 +197,10 @@ async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Time
         }
         transaction.update(userRef, userUpdates);
         transaction.set(limiterRef, {
-            musicProfileWindowStart: inCurrentWindow ? storedWindowStart : now,
-            musicProfileWriteCount: currentCount + 1,
+            musicProfileTokens: availableTokens - 1,
+            musicProfileTokensUpdatedAt: now,
+            musicProfileWindowStart: firestore_1.FieldValue.delete(),
+            musicProfileWriteCount: firestore_1.FieldValue.delete(),
         }, { merge: true });
         return true;
     });
