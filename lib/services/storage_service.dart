@@ -11,7 +11,13 @@ class StorageService {
     try {
       final ref = _storage.ref('profile_photos/$uid');
       final bytes = await imageFile.readAsBytes();
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      await ref.putData(
+        bytes,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          cacheControl: 'private,max-age=86400',
+        ),
+      );
       return await ref.getDownloadURL();
     } catch (e, st) {
       await reportError(e, st);

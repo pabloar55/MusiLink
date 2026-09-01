@@ -34,6 +34,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   cached_network_image: ^4.0.0
+  file: ^7.0.1
+  flutter_cache_manager: ^3.4.2
+  image: ^4.9.2
   image_picker: ^1.2.3
   firebase_storage: ^13.4.3
   firebase_remote_config: ^6.5.5

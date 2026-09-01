@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
+import 'package:musi_link/services/notification_avatar_cache.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -91,8 +91,7 @@ class NotificationService {
   static const _apnsTokenRetryDelay = Duration(milliseconds: 300);
   static const _chatHistoryKey = 'chat_notification_history';
   static const _maxMessagesPerChat = 5;
-  static const _avatarDownloadTimeout = Duration(seconds: 3);
-  static const _maxAvatarBytes = 1024 * 1024;
+  static final _notificationAvatarCache = NotificationAvatarCache();
 
   Future<void> initialize() async {
     final initialization = _platformInitialization ??= _initializePlatform();
@@ -426,9 +425,12 @@ class NotificationService {
       senderName: senderName,
       text: messageText,
     );
-    final senderIcon = await _downloadSenderIcon(
+    final senderIconBytes = await _notificationAvatarCache.load(
       data['senderPhotoUrl'] as String?,
     );
+    final senderIcon = senderIconBytes == null
+        ? null
+        : ByteArrayAndroidIcon(senderIconBytes);
     final vibrate = prefs.getBool(kVibrationKey) ?? true;
     final sound = prefs.getBool(kSoundKey) ?? true;
     final channelId = switch ((sound, vibrate)) {
@@ -480,30 +482,6 @@ class NotificationService {
       ),
       payload: jsonEncode(data),
     );
-  }
-
-  static Future<AndroidIcon<Object>?> _downloadSenderIcon(
-    String? rawUrl,
-  ) async {
-    final uri = rawUrl == null ? null : Uri.tryParse(rawUrl.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
-
-    try {
-      final response = await http.get(uri).timeout(_avatarDownloadTimeout);
-      final contentType = response.headers['content-type'];
-      final isImage =
-          contentType == null || contentType.toLowerCase().startsWith('image/');
-      if (response.statusCode != 200 ||
-          !isImage ||
-          response.bodyBytes.isEmpty ||
-          response.bodyBytes.length > _maxAvatarBytes) {
-        return null;
-      }
-      return ByteArrayAndroidIcon(response.bodyBytes);
-    } catch (_) {
-      // The avatar is optional; notification delivery must not depend on it.
-      return null;
-    }
   }
 
   static Future<List<Map<String, Object>>> _appendChatMessage({
