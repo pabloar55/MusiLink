@@ -437,6 +437,24 @@ test('rechaza usernames, URLs y trackData fuera de contrato', async () => {
   }));
 });
 
+test('los campos del perfil musical solo pueden ser escritos por backend', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+
+  for (const update of [
+    { topArtists: [1] },
+    { topGenres: [1] },
+    { topArtistNames: ['Radiohead'] },
+    { topArtistKeys: ['name:radiohead'] },
+    { topGenreNames: ['alternative rock'] },
+    { artistIdentityVersion: 1 },
+    { musicDataUpdatedAt: serverTimestamp() },
+    { recommendationsRefreshRequestedAt: serverTimestamp() },
+  ]) {
+    await assertFails(updateDoc(userRef, update));
+  }
+});
+
 test('solo acepta URLs canónicas de canciones de Spotify', async () => {
   await seedActiveUser('alice');
   const userRef = doc(dbFor('alice'), 'users/alice');

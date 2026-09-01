@@ -141,6 +141,7 @@ final Provider<MusicProfileService> musicProfileServiceProvider =
         ref.watch(musicCatalogServiceProvider),
         firestore: ref.watch(firebaseFirestoreProvider),
         auth: ref.watch(firebaseAuthProvider),
+        functions: ref.watch(firebaseFunctionsProvider),
       );
     });
 

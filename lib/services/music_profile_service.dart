@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/artist.dart' as app;
@@ -19,11 +20,13 @@ class MusicProfileService with AuthenticatedService {
     this._musicCatalogService, {
     required this._firestore,
     required this._auth,
+    required this._functions,
   });
 
   final MusicCatalogService _musicCatalogService;
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
   @override
   FirebaseAuth get auth => _auth;
@@ -76,31 +79,16 @@ class MusicProfileService with AuthenticatedService {
     return List<DiscoveryResult>.unmodifiable(results);
   }
 
-  Future<void> saveManualArtists(
-    String uid,
-    List<app.Artist> selectedArtists,
-  ) async {
+  Future<void> saveManualArtists(List<app.Artist> selectedArtists) async {
     try {
+      // Fail before catalog hydration when the session has already expired.
+      currentUid;
       final artists = await _hydrateMissingArtistDetails(
         selectedArtists.take(MusicProfileLimits.maxArtists).toList(),
       );
-      final genres = _musicCatalogService.getTopGenresFromArtists(
-        artists,
-        MusicProfileLimits.maxGenres,
-      );
-      final updatedAt = FieldValue.serverTimestamp();
-
-      await _usersRef.doc(uid).update({
-        'topArtists': artists.map((a) => a.toMap()).toList(),
-        'topGenres': genres.map((g) => g.toMap()).toList(),
-        'topArtistNames': artists.map((a) => a.name).toList(),
-        'topArtistKeys': artistIdentityKeys(artists),
-        'topGenreNames': genres.map((g) => g.name).toList(),
-        'artistIdentityVersion': artistIdentityVersion,
-        'musicDataUpdatedAt': updatedAt,
-        // Permite distinguir un resultado vacío real del breve intervalo
-        // entre guardar el perfil y terminar la Cloud Function.
-        'recommendationsRefreshRequestedAt': updatedAt,
+      final callable = _functions.httpsCallable('saveMusicProfile');
+      await callable.call<void>({
+        'artists': artists.map((artist) => artist.toMap()).toList(),
       });
       clearCache();
     } catch (e, stack) {

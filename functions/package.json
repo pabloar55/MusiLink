@@ -7,7 +7,9 @@
     "logs": "firebase functions:log",
     "test:account-deletion": "npm run build && node --test test/account_deletion.test.cjs",
     "test:social": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/social_writes.test.cjs\"",
-    "test:unit": "npm run build && node --test test/unit/*.test.cjs"
+    "test:music-profile": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/music_profile_write.test.cjs\"",
+    "test:unit": "npm run build && node --test test/unit/*.test.cjs",
+    "sanitize:music-profiles": "node scripts/sanitize_music_profiles.cjs"
   },
   "engines": {
     "node": "24"

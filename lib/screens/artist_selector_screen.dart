@@ -519,7 +519,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
     if (uid == null || selected.length < _minArtists || !_hasChanges) return;
     musicProfileService
-        .saveManualArtists(uid, selected)
+        .saveManualArtists(selected)
         .then((_) {
           userService.clearCache();
           container.invalidate(currentUserProvider);
@@ -536,9 +536,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (uid == null) return;
 
-      await ref
-          .read(musicProfileServiceProvider)
-          .saveManualArtists(uid, _selected);
+      await ref.read(musicProfileServiceProvider).saveManualArtists(_selected);
       ref.read(userServiceProvider).clearCache();
       ref.invalidate(currentUserProvider);
 

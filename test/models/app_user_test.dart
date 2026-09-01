@@ -121,6 +121,70 @@ void main() {
       expect(user.topArtistNames.last, 'Artist 29');
     });
 
+    test('fromMap descarta elementos musicales malformados sin lanzar', () {
+      final user = AppUser.fromMap(
+        uid: 'uid1',
+        data: {
+          'displayName': 'Test User',
+          'topArtists': [
+            1,
+            {'name': 'Broken genres', 'genres': 1},
+            {
+              'name': 'Radiohead',
+              'imageUrl': '',
+              'genres': ['alternative rock'],
+            },
+          ],
+          'topGenres': [
+            1,
+            {'name': 'broken', 'count': 'many'},
+            {'name': 'alternative', 'count': 1, 'percentage': 50},
+          ],
+        },
+      );
+
+      expect(user, isNotNull);
+      expect(user!.topArtists.map((artist) => artist.name), ['Radiohead']);
+      expect(user.topGenres.map((genre) => genre.name), ['alternative']);
+    });
+
+    test('fromMap no convierte valores arbitrarios en nombres musicales', () {
+      final user = AppUser.fromMap(
+        uid: 'uid1',
+        data: {
+          'displayName': 'Test User',
+          'topArtistNames': [
+            1,
+            {'injected': true},
+            ' Radiohead ',
+          ],
+          'topArtistKeys': [false, ' name:radiohead '],
+          'topGenreNames': [null, ' alternative '],
+        },
+      );
+
+      expect(user!.topArtistNames, ['Radiohead']);
+      expect(user.topArtistKeys, ['name:radiohead']);
+      expect(user.topGenreNames, ['alternative']);
+    });
+
+    test('fromMap tolera tipos inválidos en timestamps y dailySong', () {
+      final user = AppUser.fromMap(
+        uid: 'uid1',
+        data: {
+          'displayName': 'Test User',
+          'musicDataUpdatedAt': 'yesterday',
+          'dailySong': 1,
+          'dailySongUpdatedAt': false,
+        },
+      );
+
+      expect(user, isNotNull);
+      expect(user!.musicDataUpdatedAt, isNull);
+      expect(user.dailySong, isNull);
+      expect(user.dailySongUpdatedAt, isNull);
+    });
+
     test('copyWith actualiza dailySong', () {
       final original = createTestUser();
       const track = Track(

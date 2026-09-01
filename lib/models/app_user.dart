@@ -62,47 +62,68 @@ class AppUser {
     required Map<String, dynamic> data,
   }) {
     if (uid.isEmpty) return null;
+    final musicDataUpdatedAt = data['musicDataUpdatedAt'];
+    final dailySongUpdatedAt = data['dailySongUpdatedAt'];
     return AppUser(
       uid: uid,
       displayName: (data['displayName'] ?? '').toString(),
       username: (data['username'] ?? '').toString(),
       photoUrl: (data['photoUrl'] ?? '').toString(),
-      topArtists:
-          (data['topArtists'] as List<dynamic>?)
-              ?.map((e) => Artist.fromMap(e as Map<String, dynamic>))
-              .take(MusicProfileLimits.maxArtists)
-              .toList() ??
-          [],
-      topGenres:
-          (data['topGenres'] as List<dynamic>?)
-              ?.map((e) => Genre.fromMap(e as Map<String, dynamic>))
-              .take(MusicProfileLimits.maxGenres)
-              .toList() ??
-          [],
-      topArtistNames:
-          (data['topArtistNames'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .take(MusicProfileLimits.maxArtists)
-              .toList() ??
-          [],
-      topArtistKeys:
-          (data['topArtistKeys'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .take(MusicProfileLimits.maxArtists)
-              .toList() ??
-          [],
-      topGenreNames:
-          (data['topGenreNames'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .take(MusicProfileLimits.maxGenres)
-              .toList() ??
-          [],
-      musicDataUpdatedAt: (data['musicDataUpdatedAt'] as Timestamp?)?.toDate(),
-      dailySong: data['dailySong'] != null
-          ? Track.fromMap(data['dailySong'] as Map<String, dynamic>)
+      topArtists: _parseList(
+        data['topArtists'],
+        Artist.tryFromMap,
+        MusicProfileLimits.maxArtists,
+      ),
+      topGenres: _parseList(
+        data['topGenres'],
+        Genre.tryFromMap,
+        MusicProfileLimits.maxGenres,
+      ),
+      topArtistNames: _parseStrings(
+        data['topArtistNames'],
+        MusicProfileLimits.maxArtists,
+      ),
+      topArtistKeys: _parseStrings(
+        data['topArtistKeys'],
+        MusicProfileLimits.maxArtists,
+      ),
+      topGenreNames: _parseStrings(
+        data['topGenreNames'],
+        MusicProfileLimits.maxGenres,
+      ),
+      musicDataUpdatedAt: musicDataUpdatedAt is Timestamp
+          ? musicDataUpdatedAt.toDate()
           : null,
-      dailySongUpdatedAt: (data['dailySongUpdatedAt'] as Timestamp?)?.toDate(),
+      dailySong: Track.tryFromMap(data['dailySong']),
+      dailySongUpdatedAt: dailySongUpdatedAt is Timestamp
+          ? dailySongUpdatedAt.toDate()
+          : null,
     );
+  }
+
+  static List<T> _parseList<T>(
+    Object? value,
+    T? Function(Object?) parser,
+    int limit,
+  ) {
+    if (value is! List) return const [];
+    final parsed = <T>[];
+    for (final item in value) {
+      final result = parser(item);
+      if (result != null) parsed.add(result);
+      if (parsed.length >= limit) break;
+    }
+    return parsed;
+  }
+
+  static List<String> _parseStrings(Object? value, int limit) {
+    if (value is! List) return const [];
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .take(limit)
+        .toList(growable: false);
   }
 
   Map<String, dynamic> toFirestore() {

@@ -232,16 +232,8 @@ service cloud.firestore {
           'username',
           'photoUrl',
           'spotifyId',
-          'topArtists',
-          'topGenres',
-          'topArtistNames',
-          'topArtistKeys',
-          'topGenreNames',
-          'artistIdentityVersion',
-          'musicDataUpdatedAt',
           'dailySong',
           'dailySongUpdatedAt',
-          'recommendationsRefreshRequestedAt',
         ])
         && validPublicProfile(userId, request.resource.data)
         && keepsUsernameOrAnonymizes(userId);

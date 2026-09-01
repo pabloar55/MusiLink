@@ -4,6 +4,7 @@ export { searchSpotifyArtists, searchSpotifyTracks } from './spotify';
 export { getSimilarArtists } from './lastfm';
 export { requestAccountDeletion, processAccountDeletion } from './account_deletion';
 export { createUserProfile } from './user_profile';
+export { saveMusicProfile } from './music_profile_write';
 export {
   onUserMusicProfileCreated,
   onUserMusicProfileChanged,

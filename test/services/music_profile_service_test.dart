@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/artist.dart' as app;
 import 'package:musi_link/models/app_user.dart';
-import 'package:musi_link/models/genre.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 
@@ -414,6 +413,8 @@ void main() {
   group('MusicProfileService discovery (backend recommendations)', () {
     late MockFirebaseFirestore mockFirestore;
     late MockFirebaseAuth mockAuth;
+    late MockFirebaseFunctions mockFunctions;
+    late MockHttpsCallable mockSaveMusicProfileCallable;
     late MockUser mockCurrentUser;
     late MockCollectionReference mockUsersRef;
     late MockCollectionReference mockRecommendationsRef;
@@ -439,9 +440,8 @@ void main() {
     }) {
       when(() => mockUsersRef.doc(myUid)).thenReturn(mockMyDocRef);
       when(() => mockMyDocRef.get()).thenAnswer((_) async => mockMyDocSnap);
-      when(
-        () => mockMyDocRef.get(any()),
-      ).thenAnswer((_) async => mockMyDocSnap);
+      when(() => mockMyDocRef.get(any()))
+          .thenAnswer((_) async => mockMyDocSnap);
       when(() => mockMyDocSnap.exists).thenReturn(true);
       when(() => mockMyDocSnap.id).thenReturn(myUid);
       when(() => mockMyDocSnap.data()).thenReturn({
@@ -465,23 +465,21 @@ void main() {
       List<MockQueryDocumentSnapshot> pageAt(int index) =>
           recommendationDocs.skip(index * 20).take(20).toList(growable: false);
 
-      when(
-        () => mockRecommendationLimitQuery.get(),
-      ).thenAnswer((_) async => buildSnapshot(pageAt(0)));
-      when(
-        () => mockRecommendationLimitQuery.get(any()),
-      ).thenAnswer((_) async => buildSnapshot(pageAt(0)));
-      when(
-        () => mockRecommendationNextPageQuery.get(),
-      ).thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
-      when(
-        () => mockRecommendationNextPageQuery.get(any()),
-      ).thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
+      when(() => mockRecommendationLimitQuery.get())
+          .thenAnswer((_) async => buildSnapshot(pageAt(0)));
+      when(() => mockRecommendationLimitQuery.get(any()))
+          .thenAnswer((_) async => buildSnapshot(pageAt(0)));
+      when(() => mockRecommendationNextPageQuery.get())
+          .thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
+      when(() => mockRecommendationNextPageQuery.get(any()))
+          .thenAnswer((_) async => buildSnapshot(pageAt(nextPageIndex++)));
     }
 
     setUp(() {
       mockFirestore = MockFirebaseFirestore();
       mockAuth = MockFirebaseAuth();
+      mockFunctions = MockFirebaseFunctions();
+      mockSaveMusicProfileCallable = MockHttpsCallable();
       mockCurrentUser = MockUser();
       mockUsersRef = MockCollectionReference();
       mockRecommendationsRef = MockCollectionReference();
@@ -502,30 +500,30 @@ void main() {
 
       when(() => mockAuth.currentUser).thenReturn(mockCurrentUser);
       when(() => mockCurrentUser.uid).thenReturn(myUid);
+      when(() => mockFunctions.httpsCallable('saveMusicProfile'))
+          .thenReturn(mockSaveMusicProfileCallable);
+      when(() => mockSaveMusicProfileCallable.call<void>(any()))
+          .thenAnswer((_) async => MockHttpsCallableResult<void>());
       when(() => mockFirestore.collection(any())).thenReturn(mockUsersRef);
 
       stubMyUserDoc();
       when(() => mockMyDocRef.update(any())).thenAnswer((_) async {});
 
-      when(
-        () => mockMyDocRef.collection('recommendations'),
-      ).thenReturn(mockRecommendationsRef);
-      when(
-        () => mockRecommendationsRef.orderBy('score', descending: true),
-      ).thenReturn(mockRecommendationOrderQuery);
-      when(
-        () => mockRecommendationOrderQuery.limit(any()),
-      ).thenReturn(mockRecommendationLimitQuery);
-      when(
-        () => mockRecommendationOrderQuery.startAfterDocument(any()),
-      ).thenReturn(mockRecommendationStartAfterQuery);
-      when(
-        () => mockRecommendationStartAfterQuery.limit(any()),
-      ).thenReturn(mockRecommendationNextPageQuery);
+      when(() => mockMyDocRef.collection('recommendations'))
+          .thenReturn(mockRecommendationsRef);
+      when(() => mockRecommendationsRef.orderBy('score', descending: true))
+          .thenReturn(mockRecommendationOrderQuery);
+      when(() => mockRecommendationOrderQuery.limit(any()))
+          .thenReturn(mockRecommendationLimitQuery);
+      when(() => mockRecommendationOrderQuery.startAfterDocument(any()))
+          .thenReturn(mockRecommendationStartAfterQuery);
+      when(() => mockRecommendationStartAfterQuery.limit(any()))
+          .thenReturn(mockRecommendationNextPageQuery);
       service = MusicProfileService(
         mockMusicCatalogService,
         firestore: mockFirestore,
         auth: mockAuth,
+        functions: mockFunctions,
       );
     });
 
@@ -533,12 +531,10 @@ void main() {
       'getStoredCompatibilityWith uses stored score and shared names',
       () async {
         const otherUser = AppUser(uid: 'other1', displayName: 'Other');
-        when(
-          () => mockRecommendationsRef.doc(otherUser.uid),
-        ).thenReturn(mockStoredRecommendationDocRef);
-        when(
-          () => mockStoredRecommendationDocRef.get(),
-        ).thenAnswer((_) async => mockStoredRecommendationDocSnap);
+        when(() => mockRecommendationsRef.doc(otherUser.uid))
+            .thenReturn(mockStoredRecommendationDocRef);
+        when(() => mockStoredRecommendationDocRef.get())
+            .thenAnswer((_) async => mockStoredRecommendationDocSnap);
         when(() => mockStoredRecommendationDocSnap.exists).thenReturn(true);
         when(() => mockStoredRecommendationDocSnap.data()).thenReturn({
           'score': 50,
@@ -558,59 +554,44 @@ void main() {
 
     group('saveManualArtists', () {
       test('completa fotos pendientes antes de guardar artistas', () async {
-        when(
-          () => mockMusicCatalogService.searchArtists('Radiohead', limit: 1),
-        ).thenAnswer(
-          (_) async => const [
-            app.Artist(
-              name: 'Radiohead',
-              imageUrl: 'https://example.com/radiohead.jpg',
-              genres: ['alternative rock'],
-              spotifyId: 'spotify-radiohead',
-            ),
-          ],
-        );
-        when(
-          () => mockMusicCatalogService.getTopGenresFromArtists(
-            any<List<app.Artist>>(),
-            10,
-          ),
-        ).thenReturn(const <Genre>[]);
-
-        await service.saveManualArtists(myUid, const [
+        when(() => mockMusicCatalogService.searchArtists('Radiohead', limit: 1))
+            .thenAnswer(
+              (_) async => const [
+                app.Artist(
+                  name: 'Radiohead',
+                  imageUrl: 'https://i.scdn.co/image/radiohead123',
+                  genres: ['alternative rock'],
+                  spotifyId: '4Z8W4fKeB5YxbusRsdQVPb',
+                ),
+              ],
+            );
+        await service.saveManualArtists(const [
           app.Artist(name: 'Radiohead', imageUrl: '', genres: []),
           app.Artist(
             name: 'Queen',
-            imageUrl: 'https://example.com/queen.jpg',
+            imageUrl: 'https://i.scdn.co/image/queen123',
             genres: ['rock'],
           ),
         ]);
 
-        final update = Map<String, dynamic>.from(
-          verify(() => mockMyDocRef.update(captureAny())).captured.single
+        final payload = Map<String, dynamic>.from(
+          verify(() => mockSaveMusicProfileCallable.call<void>(captureAny()))
+                  .captured
+                  .single
               as Map,
         );
         final artists = List<Map<String, dynamic>>.from(
-          (update['topArtists'] as List).map(
+          (payload['artists'] as List).map(
             (artist) => Map<String, dynamic>.from(artist as Map),
           ),
         );
 
         expect(artists[0]['name'], 'Radiohead');
-        expect(artists[0]['imageUrl'], 'https://example.com/radiohead.jpg');
+        expect(artists[0]['imageUrl'], 'https://i.scdn.co/image/radiohead123');
         expect(artists[0]['genres'], ['alternative rock']);
-        expect(artists[0]['spotifyId'], 'spotify-radiohead');
-        expect(artists[1]['imageUrl'], 'https://example.com/queen.jpg');
-        expect(update['topArtistKeys'], [
-          'spotify:spotify-radiohead',
-          'name:queen',
-        ]);
-        expect(update['artistIdentityVersion'], 1);
-        expect(update['musicDataUpdatedAt'], isA<FieldValue>());
-        expect(
-          update['recommendationsRefreshRequestedAt'],
-          same(update['musicDataUpdatedAt']),
-        );
+        expect(artists[0]['spotifyId'], '4Z8W4fKeB5YxbusRsdQVPb');
+        expect(artists[1]['imageUrl'], 'https://i.scdn.co/image/queen123');
+        verifyNever(() => mockMyDocRef.update(any()));
       });
 
       test('guarda como máximo los primeros 30 artistas', () async {
@@ -618,36 +599,23 @@ void main() {
           50,
           (index) => app.Artist(
             name: 'Artist $index',
-            imageUrl: 'https://example.com/$index.jpg',
+            imageUrl: 'https://i.scdn.co/image/artist$index',
             genres: const ['rock'],
-            spotifyId: 'artist-$index',
+            spotifyId: index.toString().padLeft(22, '0'),
           ),
         );
-        when(
-          () => mockMusicCatalogService.getTopGenresFromArtists(
-            any<List<app.Artist>>(),
-            10,
-          ),
-        ).thenReturn(const <Genre>[]);
+        await service.saveManualArtists(selected);
 
-        await service.saveManualArtists(myUid, selected);
-
-        final capturedArtists =
-            verify(
-                  () => mockMusicCatalogService.getTopGenresFromArtists(
-                    captureAny(),
-                    10,
-                  ),
-                ).captured.single
-                as List<app.Artist>;
-        final update = Map<String, dynamic>.from(
-          verify(() => mockMyDocRef.update(captureAny())).captured.single
+        final payload = Map<String, dynamic>.from(
+          verify(() => mockSaveMusicProfileCallable.call<void>(captureAny()))
+                  .captured
+                  .single
               as Map,
         );
+        final capturedArtists = payload['artists'] as List;
         expect(capturedArtists, hasLength(30));
-        expect(capturedArtists.last.name, 'Artist 29');
-        expect(update['topArtistNames'], hasLength(30));
-        expect((update['topArtistNames'] as List).last, 'Artist 29');
+        expect((capturedArtists.last as Map)['name'], 'Artist 29');
+        verifyNever(() => mockMyDocRef.update(any()));
       });
     });
 
@@ -722,9 +690,8 @@ void main() {
               requestedAt.millisecondsSinceEpoch + 1,
             ),
           });
-          when(
-            () => mockMyDocRef.snapshots(),
-          ).thenAnswer((_) => Stream.value(generatedDoc));
+          when(() => mockMyDocRef.snapshots())
+              .thenAnswer((_) => Stream.value(generatedDoc));
           stubStoredRecommendations(
             recommendationDocs: [buildRecommendationDoc('other1')],
           );
