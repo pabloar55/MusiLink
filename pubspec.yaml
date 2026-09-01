@@ -1,7 +1,7 @@
 name: musi_link
 description: "MusiLink - Connect through music."
 publish_to: 'none'
-version: 1.0.22+27
+version: 1.0.23+28
 
 environment:
   sdk: ^3.13.0
