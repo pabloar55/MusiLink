@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/providers/user_profile_provider.dart';
+import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/widgets/artist_tile.dart';
 import 'package:musi_link/widgets/genre_tile.dart';
 import 'package:musi_link/widgets/filter_button.dart';
@@ -28,7 +28,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = AppLocalizations.of(context)!;
-    final userAsync = ref.watch(currentUserProvider);
+    final userAsync = ref.watch(effectiveCurrentUserProvider);
 
     return Column(
       children: [
@@ -64,8 +64,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
                 itemBuilder: (_, _) => const SkeletonStatsTile(),
               ),
             ),
-            error: (err, st) =>
-                Center(child: Text(l10n.statsNoData)),
+            error: (err, st) => Center(child: Text(l10n.statsNoData)),
             data: (user) {
               if (user == null) {
                 return Center(child: Text(l10n.statsNoData));
@@ -76,10 +75,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
                 }
                 return ListView.builder(
                   itemCount: user.topArtists.length,
-                  itemBuilder: (_, i) => ArtistTile(
-                    artist: user.topArtists[i],
-                    rank: i + 1,
-                  ),
+                  itemBuilder: (_, i) =>
+                      ArtistTile(artist: user.topArtists[i], rank: i + 1),
                 );
               } else {
                 if (user.topGenres.isEmpty) {
@@ -87,10 +84,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen>
                 }
                 return ListView.builder(
                   itemCount: user.topGenres.length,
-                  itemBuilder: (_, i) => GenreTile(
-                    genre: user.topGenres[i],
-                    rank: i + 1,
-                  ),
+                  itemBuilder: (_, i) =>
+                      GenreTile(genre: user.topGenres[i], rank: i + 1),
                 );
               }
             },

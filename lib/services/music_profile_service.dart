@@ -92,7 +92,7 @@ class MusicProfileService with AuthenticatedService {
       });
       clearCache();
     } catch (e, stack) {
-      await reportError(e, stack);
+      if (!isRateLimitError(e)) await reportError(e, stack);
       rethrow;
     }
   }

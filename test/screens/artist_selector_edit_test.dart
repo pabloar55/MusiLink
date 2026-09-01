@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,10 +10,12 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/artist.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/artist_selector_screen.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/mocks.dart';
 
@@ -33,8 +34,10 @@ void main() {
   setUpAll(() => registerFallbackValue(<Artist>[]));
 
   testWidgets(
-    'editar espera al guardado, muestra el error y permite reintentar',
+    'editar sale sin esperar a Firebase y reabre con los cambios pendientes',
     (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
       final auth = MockFirebaseAuth();
       final authUser = MockUser();
       final userService = MockUserService();
@@ -58,6 +61,7 @@ void main() {
         genres: ['rock'],
         spotifyId: '1234567890123456789012',
       );
+      final remoteSave = Completer<void>();
 
       when(() => auth.currentUser).thenReturn(authUser);
       when(() => authUser.uid).thenReturn('alice');
@@ -73,9 +77,8 @@ void main() {
           .thenAnswer((_) async => const []);
       when(() => catalogService.searchArtists('new', limit: 10))
           .thenAnswer((_) async => const [addedArtist]);
-      when(
-        () => profileService.saveManualArtists(any()),
-      ).thenThrow(FirebaseException(plugin: 'functions', code: 'unavailable'));
+      when(() => profileService.saveManualArtists(any()))
+          .thenAnswer((_) => remoteSave.future);
 
       final router = GoRouter(
         routes: [
@@ -98,6 +101,7 @@ void main() {
             userServiceProvider.overrideWithValue(userService),
             musicCatalogServiceProvider.overrideWithValue(catalogService),
             musicProfileServiceProvider.overrideWithValue(profileService),
+            sharedPreferencesProvider.overrideWithValue(preferences),
             currentUserProvider.overrideWith((_) => Stream.value(cachedUser)),
           ],
           child: MaterialApp.router(
@@ -122,20 +126,18 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ArtistSelectorScreen), findsOneWidget);
-      expect(
-        find.text('Something went wrong. Please try again.'),
-        findsOneWidget,
-      );
-      verify(() => profileService.saveManualArtists(any())).called(1);
-
-      when(() => profileService.saveManualArtists(any()))
-          .thenAnswer((_) async {});
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-
       expect(find.text('Profile'), findsOneWidget);
       verify(() => profileService.saveManualArtists(any())).called(1);
+
+      unawaited(router.push('/artists'));
+      await tester.pumpAndSettle();
+      expect(find.text(addedArtist.name), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Profile'), findsOneWidget);
+
+      remoteSave.complete();
+      await tester.pump();
     },
   );
 }

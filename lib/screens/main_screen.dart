@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/widgets/user_avatar_button.dart';
@@ -64,6 +65,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
     WidgetsBinding.instance.addObserver(this);
     // Initialize FCM: permisos, token, canal Android, listeners
     ref.read(notificationServiceProvider).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(musicProfileSyncCoordinatorProvider).resume();
+    });
     // FCM: app abierta desde notificación en background
     _messageOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((
       message,
@@ -103,6 +107,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(notificationServiceProvider).saveTokenIfGranted();
+      ref.read(musicProfileSyncCoordinatorProvider).resume();
     }
   }
 

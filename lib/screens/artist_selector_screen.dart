@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/artist.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/go_router_provider.dart';
@@ -221,6 +222,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
 
   bool _isSearching = false;
   bool _isSaving = false;
+  bool _isLeaving = false;
   bool _allowPop = false;
   Timer? _debounce;
   String _lastQuery = '';
@@ -246,6 +248,16 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     try {
       final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (uid == null) return;
+      final syncCoordinator = ref.read(musicProfileSyncCoordinatorProvider);
+      syncCoordinator.resume();
+      final pendingArtists = syncCoordinator.pendingArtists(uid);
+      if (pendingArtists != null) {
+        _applyLoadedArtists(pendingArtists);
+        await _loadSuggestions(
+          artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
+        );
+        return;
+      }
       final currentUser = ref.read(currentUserProvider).asData?.value;
       final cachedUser = currentUser?.uid == uid ? currentUser : null;
       var user = cachedUser;
@@ -265,26 +277,26 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         reportError(e, st).ignore();
       }
       if (!mounted || user == null) return;
-      final loadedUser = user;
-      setState(() {
-        _selected
-          ..clear()
-          ..addAll(
-            _dedupeArtists(
-              loadedUser.topArtists.take(MusicProfileLimits.maxArtists),
-            ),
-          );
-        _originalArtistKeys = _selected.map(_artistKey).toList();
-        _preferredSuggestionArtistKey = _selected.isEmpty
-            ? null
-            : _artistKey(_selected.first);
-      });
+      _applyLoadedArtists(user.topArtists);
       await _loadSuggestions(
         artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
       );
     } catch (e, st) {
       reportError(e, st).ignore();
     }
+  }
+
+  void _applyLoadedArtists(Iterable<Artist> artists) {
+    if (!mounted) return;
+    setState(() {
+      _selected
+        ..clear()
+        ..addAll(_dedupeArtists(artists.take(MusicProfileLimits.maxArtists)));
+      _originalArtistKeys = _selected.map(_artistKey).toList();
+      _preferredSuggestionArtistKey = _selected.isEmpty
+          ? null
+          : _artistKey(_selected.first);
+    });
   }
 
   @override
@@ -531,54 +543,27 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   }
 
   Future<void> _saveAndPop() async {
-    if (_isSaving) return;
+    if (_isLeaving) return;
+    _isLeaving = true;
 
     if (!_hasChanges) {
       _popAfterRebuild();
       return;
     }
-    if (_selected.length < _minArtists) {
-      final missing = _minArtists - _selected.length;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.artistSelectorContinueLocked(missing),
-          ),
-        ),
-      );
-      return;
-    }
-
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
     if (uid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
-      );
+      _popAfterRebuild();
       return;
     }
 
-    setState(() => _isSaving = true);
     try {
       await ref
-          .read(musicProfileServiceProvider)
-          .saveManualArtists(List<Artist>.from(_selected));
-      ref.read(userServiceProvider).clearCache();
-      ref.invalidate(currentUserProvider);
+          .read(musicProfileSyncCoordinatorProvider)
+          .enqueue(uid, List<Artist>.from(_selected));
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+    } finally {
       _popAfterRebuild();
-    } catch (e, st) {
-      if (!isRateLimitError(e)) reportError(e, st).ignore();
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isRateLimitError(e)
-                ? l10n.authErrorTooManyRequests
-                : l10n.genericError,
-          ),
-        ),
-      );
     }
   }
 
