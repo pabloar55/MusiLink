@@ -44,6 +44,7 @@ const phases = [
     'owned_recommendations',
     'referencing_recommendations',
     'recommendation_profile',
+    'recommendation_sync_state',
     'username_reservations',
     'rate_limits',
     'storage',
@@ -343,6 +344,9 @@ async function verifyCleanup(uid) {
     if ((await db.doc(`music_recommendation_profiles/${uid}`).get()).exists) {
         return 'recommendation_profile';
     }
+    if ((await db.doc(`recommendation_sync_state/${uid}`).get()).exists) {
+        return 'recommendation_sync_state';
+    }
     for (let index = 0; index < reactionEmojis.length; index += 1) {
         const emoji = reactionEmojis[index];
         const snapshot = await db
@@ -434,6 +438,9 @@ async function processPhase(uid, job) {
         }
         case 'recommendation_profile':
             await db.doc(`music_recommendation_profiles/${uid}`).delete();
+            return { nextPhase: 'recommendation_sync_state', processed: 1 };
+        case 'recommendation_sync_state':
+            await db.doc(`recommendation_sync_state/${uid}`).delete();
             return { nextPhase: 'username_reservations', processed: 1 };
         case 'username_reservations': {
             const count = await commitDeletes(db.collection('usernames').where('uid', '==', uid));

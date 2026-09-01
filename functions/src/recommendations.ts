@@ -3,7 +3,7 @@ import {
   DocumentReference,
   FieldValue,
   Timestamp,
-  WriteBatch,
+  Transaction,
 } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import {
@@ -16,6 +16,7 @@ import { stringList, timestampMillis } from './firestore_values';
 
 const recommendationProfilesCollection = 'music_recommendation_profiles';
 const recommendationsCollection = 'recommendations';
+const recommendationSyncStateCollection = 'recommendation_sync_state';
 const maxRecommendationInputArtists = 30;
 const maxRecommendationInputGenres = 10;
 const maxArtistCandidateProfiles = 300;
@@ -109,6 +110,16 @@ function recommendationRefreshRequested(
   const beforeMillis = timestampMillis(before?.recommendationsRefreshRequestedAt);
   const afterMillis = timestampMillis(after?.recommendationsRefreshRequestedAt);
   return afterMillis !== undefined && afterMillis !== beforeMillis;
+}
+
+function musicProfileVersion(data: DocumentData | undefined): number {
+  const value = data?.musicProfileVersion;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function compareTimestamps(left: Timestamp, right: Timestamp): number {
+  if (left.seconds !== right.seconds) return left.seconds - right.seconds;
+  return left.nanoseconds - right.nanoseconds;
 }
 
 function normalizedMusicKey(value: string): string {
@@ -387,17 +398,6 @@ async function keepDeletedProfileMinimal(
   });
 }
 
-async function commitBatches(
-  operations: Array<(batch: WriteBatch) => void>,
-): Promise<void> {
-  const batchSize = 400;
-  for (let i = 0; i < operations.length; i += batchSize) {
-    const batch = db.batch();
-    operations.slice(i, i + batchSize).forEach((operation) => operation(batch));
-    await batch.commit();
-  }
-}
-
 function recommendationSnapshotData(
   snapshot: PublicProfileSnapshot,
   generatedAt: Timestamp,
@@ -432,45 +432,80 @@ async function loadPublicProfileSnapshots(
 async function updateStoredProfileSnapshots(
   uid: string,
   snapshot: PublicProfileSnapshot,
+  eventId: string,
+  eventUpdatedAt: Timestamp,
 ): Promise<void> {
-  const generatedAt = Timestamp.now();
+  const userRef = userDocRef(uid);
+  const syncRef = db.collection(recommendationSyncStateCollection).doc(uid);
+  const claimed = await db.runTransaction(async (transaction) => {
+    const [current, sync] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(syncRef),
+    ]);
+    const currentSnapshot = readPublicProfileSnapshot(current.data());
+    if (!currentSnapshot || publicProfileIdentityChanged(currentSnapshot, snapshot)) return false;
+
+    const syncData = sync.data();
+    if (syncData?.completedIdentityEventId === eventId) return false;
+    const targetAt = syncData?.targetIdentityEventUpdatedAt;
+    if (targetAt instanceof Timestamp && compareTimestamps(targetAt, eventUpdatedAt) > 0) {
+      return false;
+    }
+
+    transaction.set(syncRef, {
+      targetIdentityEventId: eventId,
+      targetIdentityEventUpdatedAt: eventUpdatedAt,
+      targetIdentityRequestedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+  if (!claimed) return;
+
   const recommendations = await db
     .collectionGroup(recommendationsCollection)
     .where('userId', '==', uid)
     .get();
-  if (recommendations.empty) return;
+  for (const page of chunks(recommendations.docs, 300)) {
+    const applied = await db.runTransaction(async (transaction) => {
+      const [current, sync, ...targets] = await transaction.getAll(
+        userRef,
+        syncRef,
+        ...page.map((doc) => doc.ref),
+      );
+      const currentSnapshot = readPublicProfileSnapshot(current.data());
+      if (!currentSnapshot || publicProfileIdentityChanged(currentSnapshot, snapshot)) {
+        return false;
+      }
+      if (sync.data()?.targetIdentityEventId !== eventId) return false;
 
-  await commitBatches(recommendations.docs.map((doc) => (batch) => {
-    batch.set(doc.ref, recommendationSnapshotData(snapshot, generatedAt), { merge: true });
-  }));
+      const generatedAt = Timestamp.now();
+      targets.forEach((target) => {
+        if (!target.exists) return;
+        transaction.update(target.ref, {
+          'profileSnapshot.displayName': snapshot.displayName,
+          'profileSnapshot.username': snapshot.username,
+          'profileSnapshot.photoUrl': snapshot.photoUrl,
+          snapshotGeneratedAt: generatedAt,
+        });
+      });
+      return true;
+    });
+    if (!applied) return;
+  }
+
+  await db.runTransaction(async (transaction) => {
+    const sync = await transaction.get(syncRef);
+    if (sync.data()?.targetIdentityEventId !== eventId) return;
+    transaction.set(syncRef, {
+      completedIdentityEventId: eventId,
+      completedIdentityEventUpdatedAt: eventUpdatedAt,
+      completedIdentityAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
 
   logger.info('updateStoredProfileSnapshots: updated recommendation snapshots', {
     uid,
     recommendationCount: recommendations.size,
-  });
-}
-
-async function updateRecommendationProfile(
-  uid: string,
-  profile: UserMusicProfile,
-): Promise<void> {
-  const ref = db.collection(recommendationProfilesCollection).doc(uid);
-  const artistKeys = artistMatchKeys(profile);
-  const genreKeys = genreMatchKeys(profile);
-  if (artistKeys.length === 0 && genreKeys.length === 0) {
-    await ref.delete();
-    return;
-  }
-
-  await ref.set({
-    uid,
-    schemaVersion: recommendationProfileSchemaVersion,
-    artistMatchKeys: artistKeys,
-    genreMatchKeys: genreKeys,
-    topArtistNames: profile.topArtistNames,
-    topArtistKeys: profile.topArtistKeys,
-    topGenreNames: profile.topGenreNames,
-    updatedAt: FieldValue.serverTimestamp(),
   });
 }
 
@@ -512,50 +547,45 @@ export function calculateRecommendation(
   };
 }
 
-async function deleteExistingRecommendations(uid: string): Promise<void> {
-  const existing = await db
-    .collection(`users/${uid}/${recommendationsCollection}`)
-    .get();
-  if (existing.empty) return;
-
-  await commitBatches(
-    existing.docs.map((doc) => (batch) => batch.delete(doc.ref)),
-  );
+interface RecommendationWrite {
+  ref: DocumentReference;
+  data?: DocumentData;
 }
 
-async function deleteStaleRecommendations(
+interface OwnRecommendationPlan {
+  writes: RecommendationWrite[];
+  staleRefs: DocumentReference[];
+  count: number;
+  candidateDocumentsRead: number;
+  candidateCount: number;
+}
+
+async function planOwnRecommendations(
   uid: string,
-  currentRecommendationIds: Set<string>,
-): Promise<void> {
-  const existing = await db
+  profile: UserMusicProfile,
+  sourceVersion: number,
+  generatedAt: Timestamp,
+): Promise<OwnRecommendationPlan> {
+  const existingPromise = db
     .collection(`users/${uid}/${recommendationsCollection}`)
     .get();
-  const staleDocs = existing.docs.filter((doc) => !currentRecommendationIds.has(doc.id));
-  if (staleDocs.length === 0) return;
-
-  await commitBatches(staleDocs.map((doc) => (batch) => batch.delete(doc.ref)));
-}
-
-async function refreshRecommendations(uid: string, profile: UserMusicProfile): Promise<void> {
-  const generatedAt = Timestamp.now();
-
   if (profile.topArtistNames.length === 0 && profile.topGenreNames.length === 0) {
-    await deleteExistingRecommendations(uid);
-    await userDocRef(uid).update({
-      recommendationsGeneratedAt: generatedAt,
-      recommendationsCount: 0,
-    });
-    return;
+    const existing = await existingPromise;
+    return {
+      writes: [],
+      staleRefs: existing.docs.map((doc) => doc.ref),
+      count: 0,
+      candidateDocumentsRead: 0,
+      candidateCount: 0,
+    };
   }
 
   const { candidates, documentsRead } = await findCandidateProfiles(uid, [profile]);
-
   const calculatedRecommendations = [...candidates.values()]
     .map((candidate) => calculateRecommendation(profile, candidate))
     .filter((result): result is RecommendationResult => result !== null)
     .sort((a, b) => b.score - a.score)
     .slice(0, maxStoredRecommendations);
-
   const profilesByUid = await loadPublicProfileSnapshots(
     calculatedRecommendations.map((recommendation) => recommendation.uid),
   );
@@ -563,35 +593,30 @@ async function refreshRecommendations(uid: string, profile: UserMusicProfile): P
     const profileSnapshot = profilesByUid.get(recommendation.uid);
     return profileSnapshot ? [{ recommendation, profileSnapshot }] : [];
   });
-
   const recommendationIds = new Set(
     recommendations.map(({ recommendation }) => recommendation.uid),
   );
-  await commitBatches(recommendations.map(({ recommendation, profileSnapshot }) => (batch) => {
-    batch.set(
-      db.doc(`users/${uid}/${recommendationsCollection}/${recommendation.uid}`),
-      {
+  const existing = await existingPromise;
+  return {
+    writes: recommendations.map(({ recommendation, profileSnapshot }) => ({
+      ref: db.doc(`users/${uid}/${recommendationsCollection}/${recommendation.uid}`),
+      data: {
         userId: recommendation.uid,
         score: recommendation.score,
         sharedArtistNames: recommendation.sharedArtistNames,
         sharedGenreNames: recommendation.sharedGenreNames,
         generatedAt,
+        sourceMusicProfileVersion: sourceVersion,
         ...recommendationSnapshotData(profileSnapshot, generatedAt),
       },
-    );
-  }));
-  await deleteStaleRecommendations(uid, recommendationIds);
-  await userDocRef(uid).update({
-    recommendationsGeneratedAt: generatedAt,
-    recommendationsCount: recommendations.length,
-  });
-
-  logger.info('refreshRecommendations: generated recommendations', {
-    uid,
+    })),
+    staleRefs: existing.docs
+      .filter((doc) => !recommendationIds.has(doc.id))
+      .map((doc) => doc.ref),
+    count: recommendations.length,
     candidateDocumentsRead: documentsRead,
     candidateCount: candidates.size,
-    recommendationCount: recommendations.length,
-  });
+  };
 }
 
 async function matchingCandidateProfiles(
@@ -602,14 +627,15 @@ async function matchingCandidateProfiles(
   return new Map([...candidates.entries()].slice(0, maxReciprocalRecommendationUsers));
 }
 
-async function updateReciprocalRecommendations(
+function planReciprocalRecommendations(
   uid: string,
   profile: UserMusicProfile,
   profileSnapshot: PublicProfileSnapshot,
   candidates: Map<string, CandidateProfile>,
-): Promise<void> {
-  const generatedAt = Timestamp.now();
-  await commitBatches([...candidates.values()].map((candidate) => (batch) => {
+  sourceVersion: number,
+  generatedAt: Timestamp,
+): RecommendationWrite[] {
+  return [...candidates.values()].map((candidate) => {
     const recommendation = calculateRecommendation(candidate, {
       uid,
       topArtistNames: profile.topArtistNames,
@@ -619,23 +645,47 @@ async function updateReciprocalRecommendations(
     const ref = db.doc(`users/${candidate.uid}/${recommendationsCollection}/${uid}`);
 
     if (recommendation === null) {
-      batch.delete(ref);
-      return;
+      return { ref };
     }
 
-    batch.set(ref, {
-      userId: uid,
-      score: recommendation.score,
-      sharedArtistNames: recommendation.sharedArtistNames,
-      sharedGenreNames: recommendation.sharedGenreNames,
-      generatedAt,
-      ...recommendationSnapshotData(profileSnapshot, generatedAt),
-    });
-  }));
+    return {
+      ref,
+      data: {
+        userId: uid,
+        score: recommendation.score,
+        sharedArtistNames: recommendation.sharedArtistNames,
+        sharedGenreNames: recommendation.sharedGenreNames,
+        generatedAt,
+        sourceMusicProfileVersion: sourceVersion,
+        ...recommendationSnapshotData(profileSnapshot, generatedAt),
+      },
+    };
+  });
+}
 
-  logger.info('updateReciprocalRecommendations: updated candidates', {
+function writeRecommendationProfile(
+  transaction: Transaction,
+  uid: string,
+  profile: UserMusicProfile,
+  sourceVersion: number,
+): void {
+  const ref = db.collection(recommendationProfilesCollection).doc(uid);
+  const artistKeys = artistMatchKeys(profile);
+  const genreKeys = genreMatchKeys(profile);
+  if (artistKeys.length === 0 && genreKeys.length === 0) {
+    transaction.delete(ref);
+    return;
+  }
+  transaction.set(ref, {
     uid,
-    candidateCount: candidates.size,
+    schemaVersion: recommendationProfileSchemaVersion,
+    sourceMusicProfileVersion: sourceVersion,
+    artistMatchKeys: artistKeys,
+    genreMatchKeys: genreKeys,
+    topArtistNames: profile.topArtistNames,
+    topArtistKeys: profile.topArtistKeys,
+    topGenreNames: profile.topGenreNames,
+    updatedAt: FieldValue.serverTimestamp(),
   });
 }
 
@@ -644,20 +694,75 @@ async function rebuildMusicRecommendations(
   before: UserMusicProfile,
   after: UserMusicProfile,
   profileSnapshot: PublicProfileSnapshot,
+  sourceVersion: number,
   options: { forceSelfRefresh?: boolean } = {},
 ): Promise<void> {
   const profileChanged = musicProfileChanged(before, after);
   const forceSelfRefresh = options.forceSelfRefresh === true;
   if (!profileChanged && !forceSelfRefresh) return;
 
+  const initial = await userDocRef(uid).get();
+  if (musicProfileVersion(initial.data()) !== sourceVersion
+      || musicProfileChanged(readMusicProfile(initial.data()), after)) {
+    logger.info('rebuildMusicRecommendations: coalesced obsolete event', {
+      uid,
+      sourceVersion,
+    });
+    return;
+  }
+
   const reciprocalCandidates = profileChanged
     ? await matchingCandidateProfiles(uid, [before, after])
     : new Map<string, CandidateProfile>();
-  if (profileChanged) await updateRecommendationProfile(uid, after);
-  await refreshRecommendations(uid, after);
-  if (profileChanged) {
-    await updateReciprocalRecommendations(uid, after, profileSnapshot, reciprocalCandidates);
+  const generatedAt = Timestamp.now();
+  const ownPlan = await planOwnRecommendations(uid, after, sourceVersion, generatedAt);
+  const reciprocalWrites = profileChanged
+    ? planReciprocalRecommendations(
+      uid,
+      after,
+      profileSnapshot,
+      reciprocalCandidates,
+      sourceVersion,
+      generatedAt,
+    )
+    : [];
+  const writeCount = ownPlan.writes.length + ownPlan.staleRefs.length
+    + reciprocalWrites.length + (profileChanged ? 1 : 0) + 1;
+  if (writeCount > 500) {
+    throw new Error(`Recommendation publication exceeds Firestore's 500-write limit: ${writeCount}.`);
   }
+
+  const published = await db.runTransaction(async (transaction) => {
+    const current = await transaction.get(userDocRef(uid));
+    if (musicProfileVersion(current.data()) !== sourceVersion
+        || musicProfileChanged(readMusicProfile(current.data()), after)) {
+      return false;
+    }
+
+    if (profileChanged) writeRecommendationProfile(transaction, uid, after, sourceVersion);
+    ownPlan.writes.forEach((write) => transaction.set(write.ref, write.data!));
+    ownPlan.staleRefs.forEach((ref) => transaction.delete(ref));
+    reciprocalWrites.forEach((write) => {
+      if (write.data) transaction.set(write.ref, write.data);
+      else transaction.delete(write.ref);
+    });
+    transaction.update(userDocRef(uid), {
+      recommendationsGeneratedAt: generatedAt,
+      recommendationsGeneratedForMusicProfileVersion: sourceVersion,
+      recommendationsCount: ownPlan.count,
+    });
+    return true;
+  });
+
+  logger.info('rebuildMusicRecommendations: publication finished', {
+    uid,
+    sourceVersion,
+    published,
+    candidateDocumentsRead: ownPlan.candidateDocumentsRead,
+    candidateCount: ownPlan.candidateCount,
+    recommendationCount: ownPlan.count,
+    reciprocalCount: reciprocalWrites.length,
+  });
 }
 
 // ── Función 2 — Recomendaciones musicales ─────────────────────────────────────
@@ -680,7 +785,7 @@ export const onUserMusicProfileCreated = onDocumentCreated(
         topArtistNames: [],
         topArtistKeys: [],
         topGenreNames: [],
-      }, after, profileSnapshot);
+      }, after, profileSnapshot, musicProfileVersion(afterData));
       await keepDeletedProfileMinimal(event.params.userId, afterData);
     } catch (error) {
       logger.error('onUserMusicProfileCreated: unhandled error', {
@@ -705,11 +810,22 @@ export const onUserMusicProfileChanged = onDocumentUpdated(
       if (!afterSnapshot) {
         throw new Error('A valid public profile is required to update recommendations.');
       }
-      await rebuildMusicRecommendations(event.params.userId, before, after, afterSnapshot, {
-        forceSelfRefresh: recommendationRefreshRequested(beforeData, afterData),
-      });
-      if (publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
-        await updateStoredProfileSnapshots(event.params.userId, afterSnapshot);
+      await rebuildMusicRecommendations(
+        event.params.userId,
+        before,
+        after,
+        afterSnapshot,
+        musicProfileVersion(afterData),
+        { forceSelfRefresh: recommendationRefreshRequested(beforeData, afterData) },
+      );
+      if (afterSnapshot.username !== 'deleted_user'
+          && publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
+        await updateStoredProfileSnapshots(
+          event.params.userId,
+          afterSnapshot,
+          event.id,
+          event.data!.after.updateTime,
+        );
       }
       await keepDeletedProfileMinimal(event.params.userId, afterData);
     } catch (error) {

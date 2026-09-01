@@ -216,6 +216,13 @@ class MusicProfileService with AuthenticatedService {
       return false;
     }
 
+    final requestedVersion = data['musicProfileVersion'];
+    final generatedVersion =
+        data['recommendationsGeneratedForMusicProfileVersion'];
+    if (requestedVersion is int) {
+      return generatedVersion is! int || generatedVersion < requestedVersion;
+    }
+
     final requestedAt = data['recommendationsRefreshRequestedAt'];
     final generatedAt = data['recommendationsGeneratedAt'];
     if (requestedAt is! Timestamp) {

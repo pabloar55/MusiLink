@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { Timestamp } = require('firebase-admin/firestore');
 
 const {
   buildMusicProfileFields,
@@ -71,7 +72,13 @@ test('rejects oversized lists, duplicate identities, and extra top-level fields'
   assertInvalidArgument(() => parseMusicProfilePayload({ artists: [], uid: 'victim' }));
 });
 
-function fakeFirestore({ userExists = true, deleted = false, deletionPending = false } = {}) {
+function fakeFirestore({
+  userExists = true,
+  deleted = false,
+  deletionPending = false,
+  userData = {},
+  limiterData = {},
+} = {}) {
   const updates = [];
   const refs = new Map();
   const firestore = {
@@ -86,16 +93,26 @@ function fakeFirestore({ userExists = true, deleted = false, deletionPending = f
           if (ref.path === 'users/alice') {
             return {
               exists: userExists,
+              data() {
+                return {
+                  username: deleted ? 'deleted_user' : 'alice',
+                  ...userData,
+                };
+              },
               get(field) {
                 return field === 'username' && deleted ? 'deleted_user' : 'alice';
               },
             };
           }
-          return { exists: deletionPending };
+          return {
+            exists: ref.path === 'account_deletions/alice' && deletionPending,
+            data() { return ref.path === 'rate_limits/alice' ? limiterData : {}; },
+          };
         },
         update(ref, fields) {
           updates.push({ ref, fields });
         },
+        set() {},
       });
     },
   };
@@ -112,6 +129,38 @@ test('writes only the authenticated user profile through one transaction', async
   assert.equal(updates[0].ref.path, 'users/alice');
   assert.deepEqual(updates[0].fields.topArtists, []);
   assert.deepEqual(updates[0].fields.topGenres, []);
+  assert.equal(updates[0].fields.musicProfileVersion, 1);
+});
+
+test('coalesces an identical music profile without requesting recommendations', async () => {
+  const fields = buildMusicProfileFields([], Timestamp.fromMillis(1));
+  const { firestore, updates } = fakeFirestore({ userData: fields });
+
+  const updated = await writeMusicProfile(
+    firestore,
+    'alice',
+    [],
+    Timestamp.fromMillis(2),
+  );
+
+  assert.equal(updated, false);
+  assert.deepEqual(updates, []);
+});
+
+test('rate limits repeated changed music profiles', async () => {
+  const now = Timestamp.fromMillis(60_000);
+  const { firestore, updates } = fakeFirestore({
+    limiterData: {
+      musicProfileWindowStart: Timestamp.fromMillis(30_000),
+      musicProfileWriteCount: 6,
+    },
+  });
+
+  await assert.rejects(
+    writeMusicProfile(firestore, 'alice', [], now),
+    (error) => error?.code === 'resource-exhausted',
+  );
+  assert.deepEqual(updates, []);
 });
 
 test('does not write inactive or deletion-pending profiles', async () => {

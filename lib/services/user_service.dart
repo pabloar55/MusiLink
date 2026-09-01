@@ -217,7 +217,19 @@ class UserService {
       }
       if (photoUrl != null) updates['photoUrl'] = photoUrl;
       if (updates.isNotEmpty) {
-        await _usersRef.doc(uid).update(updates);
+        updates['profileIdentityUpdatedAt'] = FieldValue.serverTimestamp();
+        final userRef = _usersRef.doc(uid);
+        try {
+          await userRef.update(updates);
+        } on FirebaseException catch (error) {
+          // Permite publicar esta versión del cliente antes que las reglas que
+          // introducen el cooldown. Tras desplegar las reglas, el fallback
+          // también queda denegado y no puede eludir el límite.
+          if (error.code != 'permission-denied') rethrow;
+          final legacyUpdates = Map<String, dynamic>.from(updates)
+            ..remove('profileIdentityUpdatedAt');
+          await userRef.update(legacyUpdates);
+        }
         _userCache.remove(uid);
       }
     } catch (e, stack) {

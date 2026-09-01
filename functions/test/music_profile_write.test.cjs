@@ -54,6 +54,7 @@ test('writes a complete server-owned music profile atomically', async () => {
   assert.deepEqual(data.topArtistKeys, ['spotify:4Z8W4fKeB5YxbusRsdQVPb']);
   assert.deepEqual(data.topGenreNames, ['alternative rock']);
   assert.equal(data.artistIdentityVersion, 1);
+  assert.equal(data.musicProfileVersion, 1);
   assert.ok(data.musicDataUpdatedAt instanceof Timestamp);
   assert.ok(data.recommendationsRefreshRequestedAt instanceof Timestamp);
 });

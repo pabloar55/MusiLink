@@ -109,7 +109,30 @@ service cloud.firestore {
         && (!('dailySong' in data) || validTrackData(data.dailySong))
         && (!('dailySongUpdatedAt' in data) || data.dailySongUpdatedAt is timestamp)
         && (!('recommendationsRefreshRequestedAt' in data)
-          || data.recommendationsRefreshRequestedAt is timestamp);
+          || data.recommendationsRefreshRequestedAt is timestamp)
+        && (!('musicProfileVersion' in data)
+          || data.musicProfileVersion is int && data.musicProfileVersion >= 0)
+        && (!('recommendationsGeneratedForMusicProfileVersion' in data)
+          || data.recommendationsGeneratedForMusicProfileVersion is int
+          && data.recommendationsGeneratedForMusicProfileVersion >= 0)
+        && (!('profileIdentityUpdatedAt' in data)
+          || data.profileIdentityUpdatedAt is timestamp);
+    }
+
+    function validIdentityUpdateCooldown() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let identityChanged = changed.hasAny(['displayName', 'username', 'photoUrl']);
+      return (
+        !identityChanged
+        && !changed.hasAny(['profileIdentityUpdatedAt'])
+      ) || (
+        changed.hasAll(['profileIdentityUpdatedAt'])
+        && request.resource.data.profileIdentityUpdatedAt == request.time
+        && (
+          !('profileIdentityUpdatedAt' in resource.data)
+          || request.time >= resource.data.profileIdentityUpdatedAt + duration.value(1, 'm')
+        )
+      );
     }
 
     function ownsUsernameAfter(userId, username) {
@@ -231,11 +254,13 @@ service cloud.firestore {
           'displayName',
           'username',
           'photoUrl',
+          'profileIdentityUpdatedAt',
           'spotifyId',
           'dailySong',
           'dailySongUpdatedAt',
         ])
         && validPublicProfile(userId, request.resource.data)
+        && validIdentityUpdateCooldown()
         && keepsUsernameOrAnonymizes(userId);
       allow delete: if false;
 

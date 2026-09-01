@@ -64,6 +64,7 @@ async function claimUsernameAndCreateProfile(db, uid, email, data) {
                 displayName,
                 username,
                 photoUrl: '',
+                musicProfileVersion: 0,
             });
         }
         if (!privateProfile.exists) {

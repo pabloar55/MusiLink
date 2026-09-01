@@ -105,6 +105,7 @@ export async function claimUsernameAndCreateProfile(
         displayName,
         username,
         photoUrl: '',
+        musicProfileVersion: 0,
       });
     }
     if (!privateProfile.exists) {

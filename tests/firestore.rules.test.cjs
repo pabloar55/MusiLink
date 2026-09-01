@@ -99,6 +99,7 @@ test('un usuario no puede cambiar su username activo', async () => {
 
   await assertFails(updateDoc(doc(dbFor('alice'), 'users/alice'), {
     username: 'bob_name',
+    profileIdentityUpdatedAt: serverTimestamp(),
   }));
 });
 
@@ -110,6 +111,7 @@ test('la anonimización libera la reserva en el mismo batch', async () => {
     displayName: 'Deleted user',
     username: 'deleted_user',
     photoUrl: '',
+    profileIdentityUpdatedAt: serverTimestamp(),
   });
   batch.delete(doc(db, 'usernames/alice_name'));
 
@@ -523,6 +525,7 @@ test('solo acepta la foto del bucket y ruta propios del usuario', async () => {
 
   await assertSucceeds(updateDoc(userRef, {
     photoUrl: `${baseUrl}alice${query}`,
+    profileIdentityUpdatedAt: serverTimestamp(),
   }));
   await assertFails(updateDoc(userRef, {
     photoUrl: `${baseUrl}bob${query}`,
@@ -534,5 +537,27 @@ test('solo acepta la foto del bucket y ruta propios del usuario', async () => {
     photoUrl:
       'https://firebasestorage.googleapis.com.evil.example/v0/b/' +
       `musi-link-e7759.firebasestorage.app/o/profile_photos%2Falice${query}`,
+  }));
+});
+
+test('exige reloj de servidor y cooldown para cambios de identidad', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+
+  await assertFails(updateDoc(userRef, { displayName: 'Alice 2' }));
+  await assertFails(updateDoc(userRef, {
+    displayName: 'Alice 2',
+    profileIdentityUpdatedAt: new Date(0),
+  }));
+  await assertSucceeds(updateDoc(userRef, {
+    displayName: 'Alice 2',
+    profileIdentityUpdatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(userRef, {
+    displayName: 'Alice 3',
+    profileIdentityUpdatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(userRef, {
+    profileIdentityUpdatedAt: null,
   }));
 });

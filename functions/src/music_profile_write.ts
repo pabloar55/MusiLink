@@ -1,4 +1,9 @@
-import { DocumentData, FieldValue, Firestore } from 'firebase-admin/firestore';
+import {
+  DocumentData,
+  FieldValue,
+  Firestore,
+  Timestamp,
+} from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
@@ -14,6 +19,8 @@ const maxGenreNameBytes = 200;
 const maxImageUrlBytes = 2048;
 const spotifyArtistIdPattern = /^[A-Za-z0-9]{22}$/;
 const spotifyImageUrlPattern = /^https:\/\/i[.]scdn[.]co\/image\/[A-Za-z0-9]+$/;
+const musicProfileRateWindowMs = 60_000;
+const maxMusicProfileWritesPerWindow = 6;
 
 interface ArtistPayload {
   name: string;
@@ -155,24 +162,77 @@ export function buildMusicProfileFields(
   };
 }
 
+function sameStringArray(left: unknown, right: unknown): boolean {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === right.length
+    && left.every((value, index) => value === right[index]);
+}
+
+function sameRecommendationProfile(current: DocumentData, next: DocumentData): boolean {
+  return sameStringArray(current.topArtistNames, next.topArtistNames)
+    && sameStringArray(current.topArtistKeys, next.topArtistKeys)
+    && sameStringArray(current.topGenreNames, next.topGenreNames);
+}
+
+function sameMusicProfile(current: DocumentData, next: DocumentData): boolean {
+  return sameRecommendationProfile(current, next)
+    && JSON.stringify(current.topArtists ?? null) === JSON.stringify(next.topArtists ?? null)
+    && JSON.stringify(current.topGenres ?? null) === JSON.stringify(next.topGenres ?? null);
+}
+
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
 export async function writeMusicProfile(
   firestore: Firestore,
   uid: string,
   artists: ArtistPayload[],
-): Promise<void> {
+  now = Timestamp.now(),
+): Promise<boolean> {
   const userRef = firestore.doc(`users/${uid}`);
   const deletionRef = firestore.doc(`account_deletions/${uid}`);
-  await firestore.runTransaction(async (transaction) => {
-    const [userSnapshot, deletionSnapshot] = await Promise.all([
+  const limiterRef = firestore.doc(`rate_limits/${uid}`);
+  return firestore.runTransaction(async (transaction) => {
+    const [userSnapshot, deletionSnapshot, limiterSnapshot] = await Promise.all([
       transaction.get(userRef),
       transaction.get(deletionRef),
+      transaction.get(limiterRef),
     ]);
     if (!userSnapshot.exists
         || userSnapshot.get('username') === 'deleted_user'
         || deletionSnapshot.exists) {
       throw new HttpsError('failed-precondition', 'An active user profile is required.');
     }
-    transaction.update(userRef, buildMusicProfileFields(artists));
+    const fields = buildMusicProfileFields(artists, now);
+    const userData = userSnapshot.data() ?? {};
+    if (sameMusicProfile(userData, fields)) return false;
+
+    const limiterData = limiterSnapshot.data() ?? {};
+    const storedWindowStart = limiterData.musicProfileWindowStart;
+    const inCurrentWindow = storedWindowStart instanceof Timestamp
+      && now.toMillis() - storedWindowStart.toMillis() <= musicProfileRateWindowMs;
+    const currentCount = inCurrentWindow
+      ? nonNegativeInteger(limiterData.musicProfileWriteCount)
+      : 0;
+    if (currentCount >= maxMusicProfileWritesPerWindow) {
+      throw new HttpsError('resource-exhausted', 'Music profile rate limit reached.');
+    }
+
+    const recommendationProfileChanged = !sameRecommendationProfile(userData, fields);
+    const userUpdates = { ...fields };
+    if (recommendationProfileChanged) {
+      userUpdates.musicProfileVersion = nonNegativeInteger(userData.musicProfileVersion) + 1;
+    } else {
+      delete userUpdates.recommendationsRefreshRequestedAt;
+    }
+    transaction.update(userRef, userUpdates);
+    transaction.set(limiterRef, {
+      musicProfileWindowStart: inCurrentWindow ? storedWindowStart : now,
+      musicProfileWriteCount: currentCount + 1,
+    }, { merge: true });
+    return true;
   });
 }
 
@@ -184,8 +244,8 @@ export const saveMusicProfile = onCall(
 
     try {
       const artists = parseMusicProfilePayload(request.data);
-      await writeMusicProfile(db, uid, artists);
-      return { updated: true };
+      const updated = await writeMusicProfile(db, uid, artists);
+      return { updated };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
       logger.error('saveMusicProfile: unhandled error', { uid, error });

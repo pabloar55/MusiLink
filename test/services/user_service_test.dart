@@ -330,6 +330,7 @@ void main() {
                 as Map<String, dynamic>;
         expect(captured['displayName'], 'New Name');
         expect(captured.containsKey('displayNameLower'), false);
+        expect(captured['profileIdentityUpdatedAt'], isA<FieldValue>());
       });
 
       test('actualiza solo photoUrl si no se pasa displayName', () async {
@@ -347,6 +348,7 @@ void main() {
                 as Map<String, dynamic>;
         expect(captured.containsKey('displayName'), false);
         expect(captured['photoUrl'], 'https://new.photo');
+        expect(captured['profileIdentityUpdatedAt'], isA<FieldValue>());
       });
 
       test('no hace nada si no se pasan parámetros', () async {
