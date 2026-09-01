@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = void 0;
 exports.readMusicProfile = readMusicProfile;
+exports.recommendationGenerationCovers = recommendationGenerationCovers;
 exports.normalizeArtistIdentityName = normalizeArtistIdentityName;
 exports.similarityScore = similarityScore;
 exports.calculateRecommendation = calculateRecommendation;
@@ -63,14 +64,29 @@ function musicProfileChanged(before, after) {
         !sameStringList(before.topArtistKeys, after.topArtistKeys) ||
         !sameStringList(before.topGenreNames, after.topGenreNames);
 }
-function recommendationRefreshRequested(before, after) {
+function recommendationRefreshRequestedAtMillis(before, after) {
     const beforeMillis = (0, firestore_values_1.timestampMillis)(before?.recommendationsRefreshRequestedAt);
     const afterMillis = (0, firestore_values_1.timestampMillis)(after?.recommendationsRefreshRequestedAt);
-    return afterMillis !== undefined && afterMillis !== beforeMillis;
+    return afterMillis !== undefined && afterMillis !== beforeMillis
+        ? afterMillis
+        : undefined;
 }
 function musicProfileVersion(data) {
     const value = data?.musicProfileVersion;
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+function recommendationGenerationCovers(data, sourceVersion, refreshRequestedAtMillis) {
+    const generatedVersion = data?.recommendationsGeneratedForMusicProfileVersion;
+    if (typeof generatedVersion !== 'number'
+        || !Number.isInteger(generatedVersion)
+        || generatedVersion < sourceVersion) {
+        return false;
+    }
+    if (refreshRequestedAtMillis === undefined)
+        return true;
+    const generatedAtMillis = (0, firestore_values_1.timestampMillis)(data?.recommendationsGeneratedAt);
+    return generatedAtMillis !== undefined
+        && generatedAtMillis >= refreshRequestedAtMillis;
 }
 function compareTimestamps(left, right) {
     if (left.seconds !== right.seconds)
@@ -498,13 +514,22 @@ function writeRecommendationProfile(transaction, uid, profile, sourceVersion) {
 }
 async function rebuildMusicRecommendations(uid, before, after, profileSnapshot, sourceVersion, options = {}) {
     const profileChanged = musicProfileChanged(before, after);
-    const forceSelfRefresh = options.forceSelfRefresh === true;
+    const refreshRequestedAtMillis = options.refreshRequestedAtMillis;
+    const forceSelfRefresh = refreshRequestedAtMillis !== undefined;
     if (!profileChanged && !forceSelfRefresh)
         return;
     const initial = await userDocRef(uid).get();
-    if (musicProfileVersion(initial.data()) !== sourceVersion
-        || musicProfileChanged(readMusicProfile(initial.data()), after)) {
+    const initialData = initial.data();
+    if (musicProfileVersion(initialData) !== sourceVersion
+        || musicProfileChanged(readMusicProfile(initialData), after)) {
         v2_1.logger.info('rebuildMusicRecommendations: coalesced obsolete event', {
+            uid,
+            sourceVersion,
+        });
+        return;
+    }
+    if (recommendationGenerationCovers(initialData, sourceVersion, refreshRequestedAtMillis)) {
+        v2_1.logger.info('rebuildMusicRecommendations: skipped duplicate event', {
             uid,
             sourceVersion,
         });
@@ -525,8 +550,10 @@ async function rebuildMusicRecommendations(uid, before, after, profileSnapshot, 
     }
     const published = await firebase_1.db.runTransaction(async (transaction) => {
         const current = await transaction.get(userDocRef(uid));
-        if (musicProfileVersion(current.data()) !== sourceVersion
-            || musicProfileChanged(readMusicProfile(current.data()), after)) {
+        const currentData = current.data();
+        if (musicProfileVersion(currentData) !== sourceVersion
+            || musicProfileChanged(readMusicProfile(currentData), after)
+            || recommendationGenerationCovers(currentData, sourceVersion, refreshRequestedAtMillis)) {
             return false;
         }
         if (profileChanged)
@@ -595,7 +622,8 @@ exports.onUserMusicProfileChanged = (0, firestore_2.onDocumentUpdated)({ documen
         if (!afterSnapshot) {
             throw new Error('A valid public profile is required to update recommendations.');
         }
-        await rebuildMusicRecommendations(event.params.userId, before, after, afterSnapshot, musicProfileVersion(afterData), { forceSelfRefresh: recommendationRefreshRequested(beforeData, afterData) });
+        const refreshRequestedAtMillis = recommendationRefreshRequestedAtMillis(beforeData, afterData);
+        await rebuildMusicRecommendations(event.params.userId, before, after, afterSnapshot, musicProfileVersion(afterData), { refreshRequestedAtMillis });
         if (afterSnapshot.username !== 'deleted_user'
             && publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {
             await updateStoredProfileSnapshots(event.params.userId, afterSnapshot, event.id, event.data.after.updateTime);

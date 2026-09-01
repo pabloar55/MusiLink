@@ -103,18 +103,38 @@ function musicProfileChanged(
     !sameStringList(before.topGenreNames, after.topGenreNames);
 }
 
-function recommendationRefreshRequested(
+function recommendationRefreshRequestedAtMillis(
   before: DocumentData | undefined,
   after: DocumentData | undefined,
-): boolean {
+): number | undefined {
   const beforeMillis = timestampMillis(before?.recommendationsRefreshRequestedAt);
   const afterMillis = timestampMillis(after?.recommendationsRefreshRequestedAt);
-  return afterMillis !== undefined && afterMillis !== beforeMillis;
+  return afterMillis !== undefined && afterMillis !== beforeMillis
+    ? afterMillis
+    : undefined;
 }
 
 function musicProfileVersion(data: DocumentData | undefined): number {
   const value = data?.musicProfileVersion;
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+export function recommendationGenerationCovers(
+  data: DocumentData | undefined,
+  sourceVersion: number,
+  refreshRequestedAtMillis?: number,
+): boolean {
+  const generatedVersion = data?.recommendationsGeneratedForMusicProfileVersion;
+  if (typeof generatedVersion !== 'number'
+      || !Number.isInteger(generatedVersion)
+      || generatedVersion < sourceVersion) {
+    return false;
+  }
+  if (refreshRequestedAtMillis === undefined) return true;
+
+  const generatedAtMillis = timestampMillis(data?.recommendationsGeneratedAt);
+  return generatedAtMillis !== undefined
+    && generatedAtMillis >= refreshRequestedAtMillis;
 }
 
 function compareTimestamps(left: Timestamp, right: Timestamp): number {
@@ -695,16 +715,29 @@ async function rebuildMusicRecommendations(
   after: UserMusicProfile,
   profileSnapshot: PublicProfileSnapshot,
   sourceVersion: number,
-  options: { forceSelfRefresh?: boolean } = {},
+  options: { refreshRequestedAtMillis?: number } = {},
 ): Promise<void> {
   const profileChanged = musicProfileChanged(before, after);
-  const forceSelfRefresh = options.forceSelfRefresh === true;
+  const refreshRequestedAtMillis = options.refreshRequestedAtMillis;
+  const forceSelfRefresh = refreshRequestedAtMillis !== undefined;
   if (!profileChanged && !forceSelfRefresh) return;
 
   const initial = await userDocRef(uid).get();
-  if (musicProfileVersion(initial.data()) !== sourceVersion
-      || musicProfileChanged(readMusicProfile(initial.data()), after)) {
+  const initialData = initial.data();
+  if (musicProfileVersion(initialData) !== sourceVersion
+      || musicProfileChanged(readMusicProfile(initialData), after)) {
     logger.info('rebuildMusicRecommendations: coalesced obsolete event', {
+      uid,
+      sourceVersion,
+    });
+    return;
+  }
+  if (recommendationGenerationCovers(
+    initialData,
+    sourceVersion,
+    refreshRequestedAtMillis,
+  )) {
+    logger.info('rebuildMusicRecommendations: skipped duplicate event', {
       uid,
       sourceVersion,
     });
@@ -734,8 +767,14 @@ async function rebuildMusicRecommendations(
 
   const published = await db.runTransaction(async (transaction) => {
     const current = await transaction.get(userDocRef(uid));
-    if (musicProfileVersion(current.data()) !== sourceVersion
-        || musicProfileChanged(readMusicProfile(current.data()), after)) {
+    const currentData = current.data();
+    if (musicProfileVersion(currentData) !== sourceVersion
+        || musicProfileChanged(readMusicProfile(currentData), after)
+        || recommendationGenerationCovers(
+          currentData,
+          sourceVersion,
+          refreshRequestedAtMillis,
+        )) {
       return false;
     }
 
@@ -810,13 +849,17 @@ export const onUserMusicProfileChanged = onDocumentUpdated(
       if (!afterSnapshot) {
         throw new Error('A valid public profile is required to update recommendations.');
       }
+      const refreshRequestedAtMillis = recommendationRefreshRequestedAtMillis(
+        beforeData,
+        afterData,
+      );
       await rebuildMusicRecommendations(
         event.params.userId,
         before,
         after,
         afterSnapshot,
         musicProfileVersion(afterData),
-        { forceSelfRefresh: recommendationRefreshRequested(beforeData, afterData) },
+        { refreshRequestedAtMillis },
       );
       if (afterSnapshot.username !== 'deleted_user'
           && publicProfileIdentityChanged(beforeSnapshot, afterSnapshot)) {

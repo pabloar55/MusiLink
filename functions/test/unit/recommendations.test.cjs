@@ -1,10 +1,12 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { Timestamp } = require('firebase-admin/firestore');
 
 const {
   calculateRecommendation,
   normalizeArtistIdentityName,
   readMusicProfile,
+  recommendationGenerationCovers,
   similarityScore,
 } = require('../../lib/recommendations.js');
 
@@ -67,4 +69,24 @@ test('similarityScore caps evidence while preserving coverage', () => {
   assert.equal(similarityScore(0, 10, 10, 7, 70), 0);
   assert.equal(similarityScore(1, 1, 20, 7, 70), 70);
   assert.equal(similarityScore(7, 20, 20, 7, 70), 70);
+});
+
+test('recommendationGenerationCovers deduplicates a generated music version', () => {
+  assert.equal(recommendationGenerationCovers({
+    recommendationsGeneratedForMusicProfileVersion: 4,
+  }, 4), true);
+  assert.equal(recommendationGenerationCovers({
+    recommendationsGeneratedForMusicProfileVersion: 3,
+  }, 4), false);
+});
+
+test('recommendationGenerationCovers preserves a newer forced refresh', () => {
+  assert.equal(recommendationGenerationCovers({
+    recommendationsGeneratedForMusicProfileVersion: 4,
+    recommendationsGeneratedAt: Timestamp.fromMillis(100),
+  }, 4, 101), false);
+  assert.equal(recommendationGenerationCovers({
+    recommendationsGeneratedForMusicProfileVersion: 4,
+    recommendationsGeneratedAt: Timestamp.fromMillis(101),
+  }, 4, 101), true);
 });
