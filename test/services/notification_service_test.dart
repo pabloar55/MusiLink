@@ -1,3 +1,5 @@
+// ignore_for_file: subtype_of_sealed_class
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -18,6 +20,19 @@ class MockLocalNotifications extends Mock
     implements FlutterLocalNotificationsPlugin {}
 
 class MockNotificationSettings extends Mock implements NotificationSettings {}
+
+class MockUser extends Mock implements User {}
+
+class MockCollectionReference extends Mock
+    implements CollectionReference<Map<String, dynamic>> {}
+
+class MockDocumentReference extends Mock
+    implements DocumentReference<Map<String, dynamic>> {}
+
+class MockDocumentSnapshot extends Mock
+    implements DocumentSnapshot<Map<String, dynamic>> {}
+
+class MockWriteBatch extends Mock implements WriteBatch {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -148,4 +163,69 @@ void main() {
     ).called(1);
     verify(() => messaging.getNotificationSettings()).called(2);
   });
+
+  test(
+    'ignores a late token write denied after account deletion starts',
+    () async {
+      const installationId = 'abcdefghijklmnopqrstuvwx';
+      SharedPreferences.setMockInitialValues({
+        'push_installation_id': installationId,
+      });
+
+      final messaging = MockFirebaseMessaging();
+      final firestore = MockFirebaseFirestore();
+      final auth = MockFirebaseAuth();
+      final settings = MockNotificationSettings();
+      final user = MockUser();
+      final privateUsers = MockCollectionReference();
+      final pushTokens = MockCollectionReference();
+      final deletionJobs = MockCollectionReference();
+      final privateUserRef = MockDocumentReference();
+      final tokenRef = MockDocumentReference();
+      final deletionJobRef = MockDocumentReference();
+      final deletionJob = MockDocumentSnapshot();
+      final batch = MockWriteBatch();
+      final prefs = await SharedPreferences.getInstance();
+
+      when(() => auth.currentUser).thenReturn(user);
+      when(() => user.uid).thenReturn('alice');
+      when(() => messaging.getNotificationSettings())
+          .thenAnswer((_) async => settings);
+      when(() => settings.authorizationStatus)
+          .thenReturn(AuthorizationStatus.authorized);
+      when(
+        () => messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
+      ).thenAnswer((_) async => 'fcm-token');
+      when(() => firestore.collection('user_private')).thenReturn(privateUsers);
+      when(() => privateUsers.doc('alice')).thenReturn(privateUserRef);
+      when(() => privateUserRef.collection('push_tokens'))
+          .thenReturn(pushTokens);
+      when(() => pushTokens.doc(installationId)).thenReturn(tokenRef);
+      when(() => firestore.batch()).thenReturn(batch);
+      when(() => batch.commit()).thenThrow(
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),
+      );
+      when(() => firestore.collection('account_deletions'))
+          .thenReturn(deletionJobs);
+      when(() => deletionJobs.doc('alice')).thenReturn(deletionJobRef);
+      when(() => deletionJobRef.get()).thenAnswer((_) async => deletionJob);
+      when(() => deletionJob.exists).thenReturn(true);
+
+      final service = NotificationService(
+        messaging: messaging,
+        firestore: firestore,
+        auth: auth,
+        prefs: prefs,
+        onNotificationTapped: (_) {},
+        getActiveChatId: () => null,
+        tokenRefreshes: const Stream.empty(),
+        foregroundMessages: const Stream.empty(),
+      );
+
+      await expectLater(service.saveTokenIfGranted(), completes);
+
+      verify(() => batch.commit()).called(1);
+      verify(() => deletionJobRef.get()).called(1);
+    },
+  );
 }

@@ -180,11 +180,17 @@ class NotificationService {
   Future<void> saveTokenIfGranted() async => _saveTokenIfGranted();
 
   Future<void> _saveTokenIfGranted() async {
-    final settings = await _messaging.getNotificationSettings();
-    final granted =
-        settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
-    if (granted) await _saveToken();
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      final granted =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+      if (granted) await _saveToken();
+    } catch (error, stack) {
+      // Token registration is best-effort. A transient messaging failure must
+      // not escape from lifecycle callbacks as an uncaught async exception.
+      await reportError(error, stack);
+    }
   }
 
   Future<void> _requestPermissionAndSaveToken() async {
@@ -203,35 +209,58 @@ class NotificationService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    if (_requiresApnsToken && await _waitForApnsToken() == null) return;
-
-    final String? token;
     try {
-      token = await _getToken();
-    } on FirebaseException catch (e, stack) {
-      if (e.code == 'apns-token-not-set') return;
-      await reportError(e, stack);
-      rethrow;
+      if (_requiresApnsToken && await _waitForApnsToken() == null) return;
+
+      final token = await _getToken();
+      if (token == null) return;
+      final installationId = await _installationId();
+      final privateUserRef = _firestore
+          .collection(FirestoreCollections.userPrivate)
+          .doc(uid);
+      final tokenRef = privateUserRef
+          .collection(FirestoreCollections.pushTokens)
+          .doc(installationId);
+      final batch = _firestore.batch();
+      batch.set(privateUserRef, {
+        'preferredLocale': _preferredLocale(),
+      }, SetOptions(merge: true));
+      batch.set(tokenRef, {
+        'token': token,
+        'platform': _pushPlatform(),
+        'preferredLocale': _preferredLocale(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+    } on FirebaseException catch (error, stack) {
+      if (error.code == 'apns-token-not-set') return;
+      if (error.code == 'permission-denied' &&
+          await _tokenWriteIsObsolete(uid)) {
+        return;
+      }
+      await reportError(error, stack);
+    } catch (error, stack) {
+      await reportError(error, stack);
     }
-    if (token == null) return;
-    final installationId = await _installationId();
-    final privateUserRef = _firestore
-        .collection(FirestoreCollections.userPrivate)
-        .doc(uid);
-    final tokenRef = privateUserRef
-        .collection(FirestoreCollections.pushTokens)
-        .doc(installationId);
-    final batch = _firestore.batch();
-    batch.set(privateUserRef, {
-      'preferredLocale': _preferredLocale(),
-    }, SetOptions(merge: true));
-    batch.set(tokenRef, {
-      'token': token,
-      'platform': _pushPlatform(),
-      'preferredLocale': _preferredLocale(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    await batch.commit();
+  }
+
+  Future<bool> _tokenWriteIsObsolete(String uid) async {
+    // The write may have started before sign-out and reached Firestore after
+    // the authenticated session disappeared.
+    if (_auth.currentUser?.uid != uid) return true;
+
+    try {
+      // Account deletion deliberately freezes all client writes. Confirm the
+      // durable job before treating its permission denial as expected, so a
+      // genuine rules regression for an active user is still reported.
+      final deletionJob = await _firestore
+          .collection(FirestoreCollections.accountDeletions)
+          .doc(uid)
+          .get();
+      return deletionJob.exists;
+    } catch (_) {
+      return false;
+    }
   }
 
   String _pushPlatform() {
