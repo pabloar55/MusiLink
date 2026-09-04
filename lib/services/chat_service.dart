@@ -192,10 +192,16 @@ class ChatService with AuthenticatedService {
 
   static const int messagesPageSize = 30;
 
-  /// Stream de los últimos [messagesPageSize] mensajes de un chat, en tiempo real.
+  /// Stream de mensajes de un chat en tiempo real. Sin [from], devuelve los
+  /// últimos [messagesPageSize]; con [from], escucha todo el historial cargado
+  /// desde ese timestamp (incluido), además de los mensajes nuevos.
   /// Los resultados se devuelven ordenados cronológicamente (ascendente).
   /// Si [since] no es null, solo se devuelven mensajes posteriores a ese timestamp.
-  Stream<List<Message>> getMessages(String chatId, {DateTime? since}) {
+  Stream<List<Message>> getMessages(
+    String chatId, {
+    DateTime? since,
+    DateTime? from,
+  }) {
     var query = _chatsRef
         .doc(chatId)
         .collection(FirestoreCollections.messages)
@@ -208,10 +214,16 @@ class ChatService with AuthenticatedService {
       );
     }
 
+    query = from == null
+        ? query.limit(messagesPageSize)
+        : query.endAt([Timestamp.fromDate(from)]);
+
     return query
-        .limit(messagesPageSize)
         .snapshots()
-        .handleError((e, st) => reportError(e, st).ignore())
+        .handleError((Object error, StackTrace stack) {
+          reportError(error, stack).ignore();
+          Error.throwWithStackTrace(error, stack);
+        })
         .map(
           (snapshot) => snapshot.docs.reversed
               .map(Message.fromFirestore)
@@ -220,7 +232,8 @@ class ChatService with AuthenticatedService {
         );
   }
 
-  /// Carga mensajes anteriores a [before] para paginación inversa.
+  /// Localiza la siguiente página anterior a [before]. El llamador debe ampliar
+  /// [getMessages] con su primer timestamp para mantenerla actualizada.
   /// Devuelve hasta [messagesPageSize] mensajes en orden cronológico ascendente.
   /// Si [since] no es null, no carga mensajes anteriores a ese timestamp.
   Future<List<Message>> loadOlderMessages(

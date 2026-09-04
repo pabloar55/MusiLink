@@ -1,4 +1,6 @@
 // ignore_for_file: subtype_of_sealed_class, unnecessary_lambdas, avoid_redundant_argument_values
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -62,6 +64,102 @@ void main() {
   });
 
   group('ChatService', () {
+    group('getMessages', () {
+      for (final expanded in [false, true]) {
+        test(
+          expanded
+              ? 'mantiene todo el historial cargado en tiempo real'
+              : 'limita la ventana inicial a 30 mensajes',
+          () async {
+            final chatRef = MockDocumentReference();
+            final messagesRef = MockMessagesCollectionRef();
+            final ordered = MockQuery();
+            final filtered = MockQuery();
+            final window = MockQuery();
+            final since = DateTime(2026, 7, 18);
+            final from = DateTime(2026, 7, 19);
+            final snapshots =
+                StreamController<QuerySnapshot<Map<String, dynamic>>>();
+            when(() => mockChatsRef.doc('chat_123')).thenReturn(chatRef);
+            when(() => chatRef.collection('messages')).thenReturn(messagesRef);
+            when(() => messagesRef.orderBy('timestamp', descending: true))
+                .thenReturn(ordered);
+            when(
+              () => ordered.where(
+                'timestamp',
+                isGreaterThan: Timestamp.fromDate(since),
+              ),
+            ).thenReturn(filtered);
+            when(() => filtered.limit(30)).thenReturn(window);
+            when(() => filtered.endAt([Timestamp.fromDate(from)]))
+                .thenReturn(window);
+            when(() => window.snapshots()).thenAnswer((_) => snapshots.stream);
+
+            final count = expanded ? 60 : 30;
+            QuerySnapshot<Map<String, dynamic>> snapshot({bool read = false}) {
+              final result = MockQuerySnapshot();
+              final docs = List.generate(count, (i) {
+                final doc = MockQueryDocumentSnapshot();
+                when(() => doc.id).thenReturn('message-$i');
+                when(() => doc.data()).thenReturn({
+                  'senderId': 'current_uid',
+                  'text': 'Message $i',
+                  'timestamp': Timestamp.fromDate(
+                    from.add(Duration(minutes: i)),
+                  ),
+                  'read': read,
+                  'reactions': read
+                      ? {
+                          '👍': ['other_uid'],
+                        }
+                      : <String, dynamic>{},
+                });
+                return doc;
+              }).reversed.toList();
+              when(() => result.docs).thenReturn(docs);
+              return result;
+            }
+
+            final stream = StreamIterator(
+              chatService.getMessages(
+                'chat_123',
+                since: since,
+                from: expanded ? from : null,
+              ),
+            );
+            snapshots.add(snapshot());
+            expect(await stream.moveNext(), isTrue);
+            expect(stream.current, hasLength(count));
+            expect(stream.current.first.id, 'message-0');
+            expect(stream.current.last.id, 'message-${count - 1}');
+            expect(stream.current.first.read, isFalse);
+
+            snapshots.add(snapshot(read: true));
+            expect(await stream.moveNext(), isTrue);
+            expect(stream.current.first.read, isTrue);
+            expect(stream.current.first.reactions, {
+              '👍': ['other_uid'],
+            });
+            if (expanded) {
+              verify(() => filtered.endAt([Timestamp.fromDate(from)]))
+                  .called(1);
+              verifyNever(() => filtered.limit(any()));
+            } else {
+              verify(() => filtered.limit(ChatService.messagesPageSize))
+                  .called(1);
+              verifyNever(() => filtered.endAt(any()));
+            }
+            final failure = StateError('History stream failed');
+            snapshots.addError(failure);
+            await expectLater(stream.moveNext(), throwsA(same(failure)));
+            await stream.cancel();
+            expect(snapshots.hasListener, isFalse);
+            await snapshots.close();
+          },
+        );
+      }
+    });
+
     group('getOrCreateChat', () {
       test('devuelve chat existente si ya hay uno entre ambos', () async {
         // ID determinista: UIDs ordenados lexicográficamente

@@ -32,18 +32,14 @@ void main() {
 
     when(() => auth.currentUser).thenReturn(currentUser);
     when(() => currentUser.uid).thenReturn('current-user');
-    when(
-      () => chatService.getDeletedSince('chat-1'),
-    ).thenAnswer((_) async => null);
-    when(
-      () => chatService.getMessages('chat-1'),
-    ).thenAnswer((_) => messages.stream);
-    when(
-      () => chatService.markMessagesAsRead('chat-1'),
-    ).thenAnswer((_) async {});
-    when(
-      () => notificationService.cancelChatNotifications('chat-1'),
-    ).thenAnswer((_) async {});
+    when(() => chatService.getDeletedSince('chat-1'))
+        .thenAnswer((_) async => null);
+    when(() => chatService.getMessages('chat-1', from: any(named: 'from')))
+        .thenAnswer((_) => messages.stream);
+    when(() => chatService.markMessagesAsRead('chat-1'))
+        .thenAnswer((_) async {});
+    when(() => notificationService.cancelChatNotifications('chat-1'))
+        .thenAnswer((_) async {});
     when(() => userService.getUser('other-user')).thenAnswer((_) async => null);
 
     final router = GoRouter(

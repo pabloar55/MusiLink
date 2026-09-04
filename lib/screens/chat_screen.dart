@@ -44,6 +44,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final _messageController = TextEditingController();
   final _scrollController = ScrollController(keepScrollOffset: false);
   StreamSubscription<List<Message>>? _messagesSubscription;
+  DateTime? _oldestLiveTimestamp;
+  int _messagesGeneration = 0;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
   ModalRoute<void>? _route;
@@ -178,10 +180,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
     if (!mounted) return;
 
+    _listenToMessages();
+  }
+
+  void _listenToMessages({DateTime? from, bool completesPagination = false}) {
+    final generation = ++_messagesGeneration;
+    var awaitingPage = completesPagination;
+    _oldestLiveTimestamp = from;
+    _messagesSubscription?.cancel();
     final stream = ref
         .read(chatServiceProvider)
-        .getMessages(widget.chatId, since: _deletedSince);
-    _messagesSubscription = stream.listen(_onMessagesUpdated);
+        .getMessages(widget.chatId, since: _deletedSince, from: from);
+    _messagesSubscription = stream.listen(
+      (messages) {
+        if (!mounted || generation != _messagesGeneration) return;
+        if (awaitingPage) {
+          awaitingPage = false;
+          _isLoadingMore = false;
+        }
+        _onMessagesUpdated(messages);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!mounted || generation != _messagesGeneration) return;
+        setState(() {
+          if (awaitingPage) _hasMoreMessages = true;
+          awaitingPage = false;
+          _isInitialLoading = false;
+          _isLoadingMore = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
+        );
+      },
+    );
   }
 
   void _onMessagesUpdated(List<Message> streamMessages) {
@@ -195,16 +226,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         (_lastSeenTimestamp == null ||
             latestTimestamp.isAfter(_lastSeenTimestamp!));
     setState(() {
-      if (streamMessages.isNotEmpty) {
-        // Preservar mensajes más antiguos ya cargados por paginación.
-        final oldestStreamTimestamp = streamMessages.first.timestamp;
-        final preserved = _allMessages
-            .where((m) => m.timestamp.isBefore(oldestStreamTimestamp))
-            .toList();
-        _allMessages = [...preserved, ...streamMessages];
-      } else {
-        _allMessages = [];
-      }
+      _allMessages = streamMessages;
       _isInitialLoading = false;
       // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
       if (isFirst) {
@@ -212,6 +234,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             streamMessages.length >= ChatService.messagesPageSize;
       }
     });
+    // Fijar el límite por timestamp evita que los mensajes ya visibles salgan
+    // de la consulta de 30 al llegar mensajes nuevos y dejen de actualizarse.
+    if (_oldestLiveTimestamp == null && streamMessages.isNotEmpty) {
+      _listenToMessages(from: streamMessages.first.timestamp);
+    }
     if (hasNewMessages) {
       _lastSeenTimestamp = latestTimestamp;
       if (_canMarkMessagesRead && _canInteractInChat) {
@@ -304,35 +331,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return;
       }
 
-      // Capturar posición justo antes de modificar la lista para que el
-      // delta refleje exactamente cuánto contenido se añade arriba.
-      final oldOffset = _scrollController.hasClients
-          ? _scrollController.offset
-          : 0.0;
-      final oldExtent = _scrollController.hasClients
-          ? _scrollController.position.maxScrollExtent
-          : 0.0;
-
-      final existingIds = _allMessages.map((m) => m.id).toSet();
-      final newMessages = older
-          .where((m) => !existingIds.contains(m.id))
-          .toList();
-
-      setState(() {
-        _isLoadingMore = false;
-        _allMessages = [...newMessages, ..._allMessages];
-        if (older.length < ChatService.messagesPageSize) {
-          _hasMoreMessages = false;
-        }
-      });
-
-      // Ajustar scroll para que el contenido visible no salte.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          final delta = _scrollController.position.maxScrollExtent - oldExtent;
-          if (delta > 0) _scrollController.jumpTo(oldOffset + delta);
-        }
-      });
+      if (older.length < ChatService.messagesPageSize) {
+        _hasMoreMessages = false;
+      }
+      // La nueva suscripción reemplaza toda la ventana, incluidas reacciones,
+      // lecturas y borrados. Mantener el offset: reverse añade al extremo alto.
+      _listenToMessages(from: older.first.timestamp, completesPagination: true);
     } catch (_) {
       if (mounted) setState(() => _isLoadingMore = false);
     }
