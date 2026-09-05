@@ -61,10 +61,11 @@ async function shouldNotifyFriendRequest(
   });
 }
 
-async function establishAcceptedFriendship(
+export async function establishAcceptedFriendship(
   requestId: string,
   expectedReceiverId?: string,
   expectedSenderId?: string,
+  expectedUpdateTime?: Timestamp,
 ): Promise<AcceptedFriendship> {
   const requestRef = db.collection('friend_requests').doc(requestId);
 
@@ -72,6 +73,15 @@ async function establishAcceptedFriendship(
     const requestSnap = await tx.get(requestRef);
     if (!requestSnap.exists) {
       throw new HttpsError('not-found', 'Friend request not found.');
+    }
+    if (
+      expectedUpdateTime !== undefined
+      && requestSnap.updateTime?.isEqual(expectedUpdateTime) !== true
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Friend request version no longer matches the accepted event.',
+      );
     }
 
     const requestData = requestSnap.data();
@@ -135,6 +145,22 @@ async function establishAcceptedFriendship(
     if (inverse.exists && inverseRef.path !== requestRef.path) tx.delete(inverseRef);
 
     return { senderId, receiverId };
+  });
+}
+
+export async function deleteFriendRequestVersion(
+  requestId: string,
+  expectedUpdateTime: Timestamp,
+): Promise<void> {
+  const requestRef = db.collection('friend_requests').doc(requestId);
+  await db.runTransaction(async (tx) => {
+    const requestSnap = await tx.get(requestRef);
+    if (
+      requestSnap.exists
+      && requestSnap.updateTime?.isEqual(expectedUpdateTime) === true
+    ) {
+      tx.delete(requestRef);
+    }
   });
 }
 
@@ -211,18 +237,27 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       const after = change.after.data();
       if (!before || !after) return;
       if (before.status !== 'pending' || after.status !== 'accepted') return;
+      const acceptedUpdateTime = change.after.updateTime;
 
       const senderId = after.senderId as string;
       const receiverId = after.receiverId as string;
       try {
-        await establishAcceptedFriendship(event.params.requestId, receiverId);
+        await establishAcceptedFriendship(
+          event.params.requestId,
+          receiverId,
+          undefined,
+          acceptedUpdateTime,
+        );
       } catch (error) {
         if (!(error instanceof HttpsError)) throw error;
         logger.warn('onFriendRequestAccepted: friendship rejected', {
           requestId: event.params.requestId,
           error,
         });
-        await change.after.ref.delete();
+        await deleteFriendRequestVersion(
+          event.params.requestId,
+          acceptedUpdateTime,
+        );
         return;
       }
 
@@ -245,7 +280,10 @@ export const onFriendRequestAccepted = onDocumentUpdated(
         );
       }
 
-      await change.after.ref.delete();
+      await deleteFriendRequestVersion(
+        event.params.requestId,
+        acceptedUpdateTime,
+      );
     } catch (error) {
       logger.error('onFriendRequestAccepted: unhandled error', {
         requestId: event.params.requestId,

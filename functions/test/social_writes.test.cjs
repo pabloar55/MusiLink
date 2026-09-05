@@ -7,6 +7,10 @@ const { Timestamp } = require('firebase-admin/firestore');
 
 const { db } = require('../lib/firebase.js');
 const {
+  deleteFriendRequestVersion,
+  establishAcceptedFriendship,
+} = require('../lib/friendships.js');
+const {
   advanceFixedWindow,
   createChatMessage,
   createFriendRequest,
@@ -162,6 +166,57 @@ test('sendFriendRequest es idempotente y reinicia la ventana con tiempo de servi
   const limiter = (await db.doc('rate_limits/alice').get()).data();
   assert.equal(limiter.friendRequestCount, 1);
   assert.equal(limiter.friendRequestWindowStart.toMillis(), 601_001);
+});
+
+test('un evento de aceptación antiguo no afecta a una solicitud recreada', async () => {
+  await Promise.all([seedUser('alice'), seedUser('bob')]);
+  const requestRef = db.doc('friend_requests/alice_bob');
+
+  await createFriendRequest(db, 'alice', 'bob', Timestamp.fromMillis(1_000));
+  await requestRef.update({
+    status: 'accepted',
+    updatedAt: Timestamp.fromMillis(2_000),
+  });
+  const acceptedRequest = await requestRef.get();
+  const acceptedUpdateTime = acceptedRequest.updateTime;
+  assert.ok(acceptedUpdateTime);
+
+  await establishAcceptedFriendship(
+    'alice_bob',
+    'bob',
+    'alice',
+    acceptedUpdateTime,
+  );
+  await requestRef.delete();
+  await Promise.all([
+    db.doc('user_private/alice').update({ friends: [] }),
+    db.doc('user_private/bob').update({ friends: [] }),
+  ]);
+  assert.equal(
+    await createFriendRequest(db, 'alice', 'bob', Timestamp.fromMillis(3_000)),
+    true,
+  );
+
+  await assert.rejects(
+    establishAcceptedFriendship(
+      'alice_bob',
+      'bob',
+      'alice',
+      acceptedUpdateTime,
+    ),
+    (error) => error.code === 'failed-precondition',
+  );
+  await deleteFriendRequestVersion('alice_bob', acceptedUpdateTime);
+
+  assert.deepEqual(
+    (await db.doc('user_private/alice').get()).data().friends,
+    [],
+  );
+  assert.deepEqual(
+    (await db.doc('user_private/bob').get()).data().friends,
+    [],
+  );
+  assert.equal((await requestRef.get()).data().status, 'pending');
 });
 
 test('sendChatMessage aplica el límite, reinicia la ventana y tolera reintentos', async () => {

@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = void 0;
 exports.userHasBlocked = userHasBlocked;
 exports.friendRequestNotificationIsCoolingDown = friendRequestNotificationIsCoolingDown;
+exports.establishAcceptedFriendship = establishAcceptedFriendship;
+exports.deleteFriendRequestVersion = deleteFriendRequestVersion;
 const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
@@ -38,12 +40,16 @@ async function shouldNotifyFriendRequest(senderId, receiverId) {
         return true;
     });
 }
-async function establishAcceptedFriendship(requestId, expectedReceiverId, expectedSenderId) {
+async function establishAcceptedFriendship(requestId, expectedReceiverId, expectedSenderId, expectedUpdateTime) {
     const requestRef = firebase_1.db.collection('friend_requests').doc(requestId);
     return firebase_1.db.runTransaction(async (tx) => {
         const requestSnap = await tx.get(requestRef);
         if (!requestSnap.exists) {
             throw new https_1.HttpsError('not-found', 'Friend request not found.');
+        }
+        if (expectedUpdateTime !== undefined
+            && requestSnap.updateTime?.isEqual(expectedUpdateTime) !== true) {
+            throw new https_1.HttpsError('failed-precondition', 'Friend request version no longer matches the accepted event.');
         }
         const requestData = requestSnap.data();
         const senderId = requestData?.senderId;
@@ -96,6 +102,16 @@ async function establishAcceptedFriendship(requestId, expectedReceiverId, expect
         if (inverse.exists && inverseRef.path !== requestRef.path)
             tx.delete(inverseRef);
         return { senderId, receiverId };
+    });
+}
+async function deleteFriendRequestVersion(requestId, expectedUpdateTime) {
+    const requestRef = firebase_1.db.collection('friend_requests').doc(requestId);
+    await firebase_1.db.runTransaction(async (tx) => {
+        const requestSnap = await tx.get(requestRef);
+        if (requestSnap.exists
+            && requestSnap.updateTime?.isEqual(expectedUpdateTime) === true) {
+            tx.delete(requestRef);
+        }
     });
 }
 exports.acceptFriendRequest = (0, https_1.onCall)({ region: 'europe-southwest1', enforceAppCheck: true }, async (request) => {
@@ -152,10 +168,11 @@ exports.onFriendRequestAccepted = (0, firestore_2.onDocumentUpdated)({ document:
             return;
         if (before.status !== 'pending' || after.status !== 'accepted')
             return;
+        const acceptedUpdateTime = change.after.updateTime;
         const senderId = after.senderId;
         const receiverId = after.receiverId;
         try {
-            await establishAcceptedFriendship(event.params.requestId, receiverId);
+            await establishAcceptedFriendship(event.params.requestId, receiverId, undefined, acceptedUpdateTime);
         }
         catch (error) {
             if (!(error instanceof https_1.HttpsError))
@@ -164,7 +181,7 @@ exports.onFriendRequestAccepted = (0, firestore_2.onDocumentUpdated)({ document:
                 requestId: event.params.requestId,
                 error,
             });
-            await change.after.ref.delete();
+            await deleteFriendRequestVersion(event.params.requestId, acceptedUpdateTime);
             return;
         }
         const [senderSnap, receiverSnap] = await Promise.all([
@@ -180,7 +197,7 @@ exports.onFriendRequestAccepted = (0, firestore_2.onDocumentUpdated)({ document:
                 body: notifications_1.notificationText.friendRequestAccepted[locale](accepterName),
             }, { type: 'friend_request_accepted', accepterId: receiverId });
         }
-        await change.after.ref.delete();
+        await deleteFriendRequestVersion(event.params.requestId, acceptedUpdateTime);
     }
     catch (error) {
         v2_1.logger.error('onFriendRequestAccepted: unhandled error', {
