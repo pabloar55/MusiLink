@@ -8,6 +8,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:musi_link/services/notification_avatar_cache.dart';
+import 'package:musi_link/services/web_foreground_notification.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -363,6 +364,10 @@ class NotificationService {
     final chatId = message.data['chatId'] as String?;
     if (message.data['type'] == 'new_message' && chatId != null) {
       if (chatId == _getActiveChatId()) return;
+      if (kIsWeb) {
+        unawaited(_showWebForegroundNotification(message));
+        return;
+      }
       // Chat pushes are data-only on Android. Updating a local
       // MessagingStyle notification keeps their recent messages together.
       if (defaultTargetPlatform == TargetPlatform.android) {
@@ -381,6 +386,10 @@ class NotificationService {
     if (n == null) return;
     final vibrate = _prefs.getBool(kVibrationKey) ?? true;
     final sound = _prefs.getBool(kSoundKey) ?? true;
+    if (kIsWeb) {
+      unawaited(_showWebForegroundNotification(message, sound: sound));
+      return;
+    }
     final channelId = switch ((sound, vibrate)) {
       (true, true) => _channelId,
       (true, false) => _channelNoVibrationId,
@@ -413,6 +422,20 @@ class NotificationService {
       ),
       payload: jsonEncode(message.data),
     );
+  }
+
+  Future<void> _showWebForegroundNotification(
+    RemoteMessage message, {
+    bool? sound,
+  }) async {
+    try {
+      await showWebForegroundNotification(
+        message,
+        silent: !(sound ?? (_prefs.getBool(kSoundKey) ?? true)),
+      );
+    } catch (error, stack) {
+      await reportError(error, stack);
+    }
   }
 
   /// Handles an Android data-only chat push while the app is in the

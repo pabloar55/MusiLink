@@ -9,7 +9,12 @@ self.addEventListener('notificationclick', (event) => {
   const notificationData = event.notification.data || {};
   const fcmData = notificationData.FCM_MSG?.data || {};
   const path = notificationData.path || fcmData.notificationPath || '/';
-  const targetUrl = new URL(path, self.location.origin).href;
+  const route =
+    typeof path === 'string' && path.startsWith('/') ? path : '/';
+  const targetUrl = new URL('/', self.location.origin);
+  // Flutter's web router uses a hash URL strategy. A regular `/chat?...` URL
+  // is handled as the app shell and loses the intended destination.
+  targetUrl.hash = route.startsWith('/#/') ? route.slice(2) : route;
 
   event.waitUntil(
     self.clients
@@ -26,7 +31,7 @@ self.addEventListener('notificationclick', (event) => {
         if (sameOriginClient) {
           if ('navigate' in sameOriginClient) {
             try {
-              await sameOriginClient.navigate(targetUrl);
+              await sameOriginClient.navigate(targetUrl.href);
             } catch (_) {
               // Focusing the existing window is still better than opening a
               // duplicate when a browser does not implement navigate().
@@ -34,7 +39,7 @@ self.addEventListener('notificationclick', (event) => {
           }
           return sameOriginClient.focus();
         }
-        return self.clients.openWindow(targetUrl);
+        return self.clients.openWindow(targetUrl.href);
       }),
   );
 });
