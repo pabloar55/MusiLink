@@ -126,7 +126,11 @@ async function refreshChatSummaryFromLatestMessage(chatRef, deletedMessageTime) 
     });
     return true;
 }
-exports.onNewMessage = (0, firestore_2.onDocumentCreated)({ document: 'chats/{chatId}/messages/{messageId}', region: 'europe-southwest1' }, async (event) => {
+exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
+    document: 'chats/{chatId}/messages/{messageId}',
+    region: 'europe-southwest1',
+    retry: true,
+}, async (event) => {
     try {
         const messageSnapshot = event.data;
         if (!messageSnapshot)
@@ -145,7 +149,7 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({ document: 'chats/{ch
             ]);
             const chatData = chatSnap.data();
             const currentMessage = currentMessageSnap.data();
-            if (!chatData || !currentMessage || currentMessage.summaryApplied === true) {
+            if (!chatData || !currentMessage) {
                 return undefined;
             }
             const participants = (0, firestore_values_1.chatParticipants)(chatData);
@@ -155,27 +159,35 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({ document: 'chats/{ch
             const messageTime = (0, firestore_values_1.timestampValue)(currentMessage.timestamp);
             if (!recipientId || !messageTime)
                 return undefined;
-            const updates = {};
-            const currentLastMessageTime = (0, firestore_values_1.timestampValue)(chatData.lastMessageTime);
-            const summary = messageSummary(currentMessage);
-            if (!currentLastMessageTime || messageTime.toMillis() >= currentLastMessageTime.toMillis()) {
-                updates.lastMessage = summary;
-                updates.lastMessageTime = messageTime;
+            if (currentMessage.summaryApplied !== true) {
+                const updates = {};
+                const currentLastMessageTime = (0, firestore_values_1.timestampValue)(chatData.lastMessageTime);
+                const summary = messageSummary(currentMessage);
+                if (!currentLastMessageTime ||
+                    messageTime.toMillis() >= currentLastMessageTime.toMillis()) {
+                    updates.lastMessage = summary;
+                    updates.lastMessageTime = messageTime;
+                }
+                // A delayed trigger must not restore unread messages that the recipient
+                // already hid by deleting the conversation.
+                if (currentMessage.read !== true &&
+                    shouldIncrementUnreadCount(chatData, recipientId, messageTime)) {
+                    updates[`unreadCounts.${recipientId}`] = firestore_1.FieldValue.increment(1);
+                }
+                if (Object.keys(updates).length > 0)
+                    tx.update(chatRef, updates);
+                tx.update(messageRef, { summaryApplied: true });
             }
-            // A delayed trigger must not restore unread messages that the recipient
-            // already hid by deleting the conversation.
-            if (currentMessage.read !== true &&
-                shouldIncrementUnreadCount(chatData, recipientId, messageTime)) {
-                updates[`unreadCounts.${recipientId}`] = firestore_1.FieldValue.increment(1);
-            }
-            if (Object.keys(updates).length > 0)
-                tx.update(chatRef, updates);
-            tx.update(messageRef, { summaryApplied: true });
-            return { recipientId };
+            return {
+                recipientId,
+                shouldSendNotification: currentMessage.notificationSent !== true,
+            };
         });
         if (!summaryResult)
             return;
-        const { recipientId } = summaryResult;
+        const { recipientId, shouldSendNotification } = summaryResult;
+        if (!shouldSendNotification)
+            return;
         const [recipientSnap, senderSnap] = await Promise.all([
             firebase_1.db.doc(`${userPrivateCollection}/${recipientId}`).get(),
             firebase_1.db.doc(`users/${senderId}`).get(),
@@ -192,6 +204,7 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({ document: 'chats/{ch
             messageText: message.text ?? '📎',
             ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
         }, chatId);
+        await messageRef.update({ notificationSent: true });
     }
     catch (error) {
         v2_1.logger.error('onNewMessage: unhandled error', {

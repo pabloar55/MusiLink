@@ -9,9 +9,11 @@ const { db } = require('../lib/firebase.js');
 const {
   onChatMessageDeleted,
   onChatSoftDeleted,
+  onNewMessage,
 } = require('../lib/chat.js');
 
 const chatRef = db.doc('chats/alice_bob');
+const aliceRef = db.doc('users/alice');
 
 before(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -20,12 +22,49 @@ before(() => {
 });
 
 beforeEach(async () => {
-  await db.recursiveDelete(chatRef);
+  await Promise.all([
+    db.recursiveDelete(chatRef),
+    aliceRef.delete(),
+  ]);
 });
 
 after(async () => {
-  await db.recursiveDelete(chatRef);
+  await Promise.all([
+    db.recursiveDelete(chatRef),
+    aliceRef.delete(),
+  ]);
   await Promise.all(getApps().map((app) => deleteApp(app)));
+});
+
+test('reanuda una notificación pendiente sin volver a aplicar el resumen', async () => {
+  const messageTime = Timestamp.fromMillis(2_000);
+  await chatRef.set({
+    participants: ['alice', 'bob'],
+    lastMessage: 'mensaje ya resumido',
+    lastMessageTime: messageTime,
+    unreadCounts: { alice: 0, bob: 1 },
+  });
+  await aliceRef.set({ displayName: 'Alice' });
+
+  const messageRef = chatRef.collection('messages').doc('pending-notification');
+  await messageRef.set({
+    senderId: 'alice',
+    text: 'mensaje ya resumido',
+    timestamp: messageTime,
+    summaryApplied: true,
+  });
+
+  await onNewMessage.run({
+    data: await messageRef.get(),
+    params: { chatId: chatRef.id, messageId: messageRef.id },
+  });
+
+  const chat = (await chatRef.get()).data();
+  const message = (await messageRef.get()).data();
+  assert.equal(chat.lastMessage, 'mensaje ya resumido');
+  assert.deepEqual(chat.unreadCounts, { alice: 0, bob: 1 });
+  assert.equal(message.summaryApplied, true);
+  assert.equal(message.notificationSent, true);
 });
 
 test('conserva un mensaje nuevo aunque lastMessageTime siga obsoleto', async () => {

@@ -5,8 +5,13 @@ const { Timestamp } = require('firebase-admin/firestore');
 const {
   allParticipantsDeletedBefore,
   messageSummary,
+  onNewMessage,
   shouldIncrementUnreadCount,
 } = require('../../lib/chat.js');
+
+test('onNewMessage retries failed event deliveries', () => {
+  assert.equal(onNewMessage.__endpoint.eventTrigger.retry, true);
+});
 
 test('messageSummary formats tracks and tolerates malformed messages', () => {
   assert.equal(messageSummary({ type: 'track', trackData: { title: 'Midnight' } }), '🎵 Midnight');

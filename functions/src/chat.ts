@@ -161,7 +161,11 @@ async function refreshChatSummaryFromLatestMessage(
 }
 
 export const onNewMessage = onDocumentCreated(
-  { document: 'chats/{chatId}/messages/{messageId}', region: 'europe-southwest1' },
+  {
+    document: 'chats/{chatId}/messages/{messageId}',
+    region: 'europe-southwest1',
+    retry: true,
+  },
   async (event) => {
     try {
       const messageSnapshot = event.data;
@@ -181,7 +185,7 @@ export const onNewMessage = onDocumentCreated(
         ]);
         const chatData = chatSnap.data();
         const currentMessage = currentMessageSnap.data();
-        if (!chatData || !currentMessage || currentMessage.summaryApplied === true) {
+        if (!chatData || !currentMessage) {
           return undefined;
         }
 
@@ -191,28 +195,38 @@ export const onNewMessage = onDocumentCreated(
         const messageTime = timestampValue(currentMessage.timestamp);
         if (!recipientId || !messageTime) return undefined;
 
-        const updates: UpdateData<DocumentData> = {};
-        const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
-        const summary = messageSummary(currentMessage);
-        if (!currentLastMessageTime || messageTime.toMillis() >= currentLastMessageTime.toMillis()) {
-          updates.lastMessage = summary;
-          updates.lastMessageTime = messageTime;
-        }
-        // A delayed trigger must not restore unread messages that the recipient
-        // already hid by deleting the conversation.
-        if (
-          currentMessage.read !== true &&
-          shouldIncrementUnreadCount(chatData, recipientId, messageTime)
-        ) {
-          updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
+        if (currentMessage.summaryApplied !== true) {
+          const updates: UpdateData<DocumentData> = {};
+          const currentLastMessageTime = timestampValue(chatData.lastMessageTime);
+          const summary = messageSummary(currentMessage);
+          if (
+            !currentLastMessageTime ||
+            messageTime.toMillis() >= currentLastMessageTime.toMillis()
+          ) {
+            updates.lastMessage = summary;
+            updates.lastMessageTime = messageTime;
+          }
+          // A delayed trigger must not restore unread messages that the recipient
+          // already hid by deleting the conversation.
+          if (
+            currentMessage.read !== true &&
+            shouldIncrementUnreadCount(chatData, recipientId, messageTime)
+          ) {
+            updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
+          }
+
+          if (Object.keys(updates).length > 0) tx.update(chatRef, updates);
+          tx.update(messageRef, { summaryApplied: true });
         }
 
-        if (Object.keys(updates).length > 0) tx.update(chatRef, updates);
-        tx.update(messageRef, { summaryApplied: true });
-        return { recipientId };
+        return {
+          recipientId,
+          shouldSendNotification: currentMessage.notificationSent !== true,
+        };
       });
       if (!summaryResult) return;
-      const { recipientId } = summaryResult;
+      const { recipientId, shouldSendNotification } = summaryResult;
+      if (!shouldSendNotification) return;
 
       const [recipientSnap, senderSnap] = await Promise.all([
         db.doc(`${userPrivateCollection}/${recipientId}`).get(),
@@ -236,6 +250,7 @@ export const onNewMessage = onDocumentCreated(
         },
         chatId,
       );
+      await messageRef.update({ notificationSent: true });
     } catch (error) {
       logger.error('onNewMessage: unhandled error', {
         chatId: event.params.chatId,
