@@ -49,6 +49,16 @@ export function allParticipantsDeletedBefore(
   deletedTimes[0]);
 }
 
+export function shouldIncrementUnreadCount(
+  chatData: DocumentData,
+  recipientId: string,
+  messageTime: Timestamp,
+): boolean {
+  const deletedAt = chatData.deletedAt as Record<string, unknown> | undefined;
+  const recipientDeletedAt = timestampValue(deletedAt?.[recipientId]);
+  return !recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis();
+}
+
 async function pruneMessagesDeletedForAllParticipants(
   chatRef: DocumentReference,
   chatData: DocumentData | undefined,
@@ -188,7 +198,12 @@ export const onNewMessage = onDocumentCreated(
           updates.lastMessage = summary;
           updates.lastMessageTime = messageTime;
         }
-        if (currentMessage.read !== true) {
+        // A delayed trigger must not restore unread messages that the recipient
+        // already hid by deleting the conversation.
+        if (
+          currentMessage.read !== true &&
+          shouldIncrementUnreadCount(chatData, recipientId, messageTime)
+        ) {
           updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
         }
 

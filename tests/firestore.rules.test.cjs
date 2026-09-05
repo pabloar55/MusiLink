@@ -1,3 +1,4 @@
+const assert = require('node:assert/strict');
 const { after, afterEach, before } = require('node:test');
 const test = require('node:test');
 const fs = require('node:fs');
@@ -397,6 +398,33 @@ test('un participante no puede manipular el contador del otro', async () => {
   }));
   await assertSucceeds(updateDoc(doc(dbFor('alice'), 'chats/alice_bob'), {
     unreadCounts: { alice: 0, bob: 0 },
+  }));
+});
+
+test('el borrado suave limpia atomicamente solo el contador propio', async () => {
+  await seedChat();
+  const chatRef = doc(dbFor('alice'), 'chats/alice_bob');
+
+  await assertSucceeds(updateDoc(chatRef, {
+    'deletedAt.alice': serverTimestamp(),
+    'unreadCounts.alice': 0,
+  }));
+
+  const deletedChat = (await getDoc(chatRef)).data();
+  assert.equal(deletedChat.unreadCounts.alice, 0);
+  assert.equal(deletedChat.unreadCounts.bob, 0);
+
+  await assertFails(updateDoc(chatRef, {
+    'deletedAt.alice': serverTimestamp(),
+    'unreadCounts.bob': 99,
+  }));
+});
+
+test('el borrado suave con pendientes no puede conservar el contador', async () => {
+  await seedChat();
+
+  await assertFails(updateDoc(doc(dbFor('alice'), 'chats/alice_bob'), {
+    'deletedAt.alice': serverTimestamp(),
   }));
 });
 

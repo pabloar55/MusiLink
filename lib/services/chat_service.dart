@@ -138,8 +138,9 @@ class ChatService with AuthenticatedService {
 
   /// Borrado suave del chat para el usuario actual (estilo WhatsApp).
   ///
-  /// Escribe deletedAt[currentUid] = ahora. El chat desaparece de la lista
-  /// hasta que el otro participante envie un nuevo mensaje.
+  /// Escribe deletedAt[currentUid] = ahora y pone a cero su contador pendiente.
+  /// El chat desaparece de la lista hasta que el otro participante envie un
+  /// nuevo mensaje.
   /// La limpieza fisica del chat, cuando corresponda, la hace Cloud Functions
   /// con Admin SDK. El cliente no intenta borrar mensajes ajenos ni el chat.
   Future<void> softDeleteChat(String chatId) async {
@@ -148,6 +149,7 @@ class ChatService with AuthenticatedService {
 
       await chatRef.update({
         'deletedAt.$currentUid': FieldValue.serverTimestamp(),
+        'unreadCounts.$currentUid': 0,
       });
 
       _chatByOtherUid.removeWhere((_, c) => c.id == chatId);

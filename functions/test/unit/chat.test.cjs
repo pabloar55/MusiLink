@@ -5,6 +5,7 @@ const { Timestamp } = require('firebase-admin/firestore');
 const {
   allParticipantsDeletedBefore,
   messageSummary,
+  shouldIncrementUnreadCount,
 } = require('../../lib/chat.js');
 
 test('messageSummary formats tracks and tolerates malformed messages', () => {
@@ -23,4 +24,26 @@ test('allParticipantsDeletedBefore returns the earliest deletion boundary', () =
   });
   assert.equal(boundary?.toMillis(), 3_000);
   assert.equal(allParticipantsDeletedBefore({ participants: ['a', 'b'] }), undefined);
+});
+
+test('shouldIncrementUnreadCount ignores messages hidden by a deletion', () => {
+  const deletedAt = Timestamp.fromMillis(2_000);
+  const chat = { deletedAt: { alice: deletedAt } };
+
+  assert.equal(
+    shouldIncrementUnreadCount(chat, 'alice', Timestamp.fromMillis(1_999)),
+    false,
+  );
+  assert.equal(
+    shouldIncrementUnreadCount(chat, 'alice', Timestamp.fromMillis(2_000)),
+    false,
+  );
+  assert.equal(
+    shouldIncrementUnreadCount(chat, 'alice', Timestamp.fromMillis(2_001)),
+    true,
+  );
+  assert.equal(
+    shouldIncrementUnreadCount(chat, 'bob', Timestamp.fromMillis(1_000)),
+    true,
+  );
 });

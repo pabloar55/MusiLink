@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = void 0;
 exports.messageSummary = messageSummary;
 exports.allParticipantsDeletedBefore = allParticipantsDeletedBefore;
+exports.shouldIncrementUnreadCount = shouldIncrementUnreadCount;
 const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
@@ -34,6 +35,11 @@ function allParticipantsDeletedBefore(data) {
     if (deletedTimes.length !== participants.length)
         return undefined;
     return deletedTimes.reduce((earliest, value) => value.toMillis() < earliest.toMillis() ? value : earliest, deletedTimes[0]);
+}
+function shouldIncrementUnreadCount(chatData, recipientId, messageTime) {
+    const deletedAt = chatData.deletedAt;
+    const recipientDeletedAt = (0, firestore_values_1.timestampValue)(deletedAt?.[recipientId]);
+    return !recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis();
 }
 async function pruneMessagesDeletedForAllParticipants(chatRef, chatData) {
     const pruneBefore = allParticipantsDeletedBefore(chatData);
@@ -156,7 +162,10 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({ document: 'chats/{ch
                 updates.lastMessage = summary;
                 updates.lastMessageTime = messageTime;
             }
-            if (currentMessage.read !== true) {
+            // A delayed trigger must not restore unread messages that the recipient
+            // already hid by deleting the conversation.
+            if (currentMessage.read !== true &&
+                shouldIncrementUnreadCount(chatData, recipientId, messageTime)) {
                 updates[`unreadCounts.${recipientId}`] = firestore_1.FieldValue.increment(1);
             }
             if (Object.keys(updates).length > 0)

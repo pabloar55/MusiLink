@@ -387,23 +387,30 @@ void main() {
     });
 
     group('softDeleteChat', () {
-      test('solo marca deletedAt del usuario actual', () async {
-        final mockChatDocRef = MockDocumentReference();
+      test(
+        'marca deletedAt y limpia los pendientes del usuario actual',
+        () async {
+          final mockChatDocRef = MockDocumentReference();
 
-        when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
-        when(() => mockChatDocRef.update(any())).thenAnswer((_) async {});
+          when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
+          when(() => mockChatDocRef.update(any())).thenAnswer((_) async {});
 
-        await chatService.softDeleteChat('chat_123');
+          await chatService.softDeleteChat('chat_123');
 
-        final update = Map<String, dynamic>.from(
-          verify(() => mockChatDocRef.update(captureAny())).captured.single
-              as Map,
-        );
-        expect(update.keys.toList(), ['deletedAt.current_uid']);
-        expect(update['deletedAt.current_uid'], isA<FieldValue>());
-        verifyNever(() => mockChatDocRef.get());
-        verifyNever(() => mockChatDocRef.delete());
-      });
+          final update = Map<String, dynamic>.from(
+            verify(() => mockChatDocRef.update(captureAny())).captured.single
+                as Map,
+          );
+          expect(update.keys.toList(), [
+            'deletedAt.current_uid',
+            'unreadCounts.current_uid',
+          ]);
+          expect(update['deletedAt.current_uid'], isA<FieldValue>());
+          expect(update['unreadCounts.current_uid'], 0);
+          verifyNever(() => mockChatDocRef.get());
+          verifyNever(() => mockChatDocRef.delete());
+        },
+      );
     });
 
     group('markMessagesAsRead', () {

@@ -397,14 +397,18 @@ service cloud.firestore {
         && counts[participants[1]] >= 0;
     }
 
-    function validReadCounterReset(before, after, participants) {
+    function validOwnUnreadCounterReset(before, after, participants) {
       let readerId = request.auth.uid;
       let otherId = otherParticipant(participants, readerId);
-      return after.diff(before).affectedKeys().hasOnly(['unreadCounts'])
-        && validUnreadCounts(after.unreadCounts, participants)
+      return validUnreadCounts(after.unreadCounts, participants)
         && after.unreadCounts.diff(before.unreadCounts).affectedKeys().hasOnly([readerId])
         && after.unreadCounts[readerId] == 0
         && after.unreadCounts[otherId] == before.unreadCounts[otherId];
+    }
+
+    function validReadCounterReset(before, after, participants) {
+      return after.diff(before).affectedKeys().hasOnly(['unreadCounts'])
+        && validOwnUnreadCounterReset(before, after, participants);
     }
 
     match /rate_limits/{userId} {
@@ -465,7 +469,7 @@ service cloud.firestore {
 
       // Los resúmenes y los incrementos de contadores los actualiza únicamente
       // onNewMessage con Admin SDK. El cliente solo puede limpiar su contador o
-      // escribir su propia marca de borrado suave.
+      // escribir su propia marca de borrado suave mientras limpia ese contador.
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participants
         && isActiveUser(request.auth.uid)
@@ -481,11 +485,12 @@ service cloud.firestore {
             )
           )
           ||
-          // Caso 2: borrado suave — solo cambia deletedAt[request.auth.uid].
+          // Caso 2: borrado suave — cambia deletedAt[request.auth.uid] y deja
+          // a cero unreadCounts[request.auth.uid] en la misma escritura.
           (
             request.resource.data.diff(resource.data)
               .affectedKeys()
-              .hasOnly(['deletedAt'])
+              .hasOnly(['deletedAt', 'unreadCounts'])
             && request.resource.data.deletedAt is map
             && request.resource.data.deletedAt.keys().hasOnly(resource.data.participants)
             && request.resource.data.deletedAt
@@ -493,6 +498,11 @@ service cloud.firestore {
                  .affectedKeys()
                  .hasOnly([request.auth.uid])
             && request.resource.data.deletedAt[request.auth.uid] == request.time
+            && validOwnUnreadCounterReset(
+              resource.data,
+              request.resource.data,
+              resource.data.participants
+            )
           )
         );
 
