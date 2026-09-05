@@ -92,6 +92,9 @@ jobs:
       - name: Test Firestore security rules
         run: npm --prefix .. run test:rules
 
+      - name: Test PWA viewport recovery
+        run: npm --prefix .. run test:web-shell
+
       - name: Test username claims
         run: npm --prefix .. run test:functions:usernames
 

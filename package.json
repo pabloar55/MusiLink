@@ -2,6 +2,7 @@
   "name": "musilink-firestore-rules",
   "private": true,
   "scripts": {
+    "test:web-shell": "node --test tests/pwa_viewport.test.cjs",
     "test:rules": "firebase emulators:exec --project musilink-rules-test --only firestore \"node --test tests/firestore.rules.test.cjs\"",
     "test:functions:usernames": "npm --prefix functions run build && firebase emulators:exec --project musilink-functions-test --only firestore \"node --test functions/test/username_claim.test.cjs\"",
     "test:functions:social": "npm --prefix functions run test:social",
