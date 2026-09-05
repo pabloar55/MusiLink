@@ -19,6 +19,7 @@ const maxRecommendationInputGenres = 10;
 const maxArtistCandidateProfiles = 300;
 const maxGenreCandidateProfiles = 100;
 const maxStoredRecommendations = 100;
+const maxRecommendationPublicationWrites = 500;
 const maxReciprocalRecommendationUsers = 100;
 const artistScoreWeight = 70;
 const genreScoreWeight = 30;
@@ -415,14 +416,9 @@ function calculateRecommendation(myProfile, candidate) {
     };
 }
 async function planOwnRecommendations(uid, profile, sourceVersion, generatedAt) {
-    const existingPromise = firebase_1.db
-        .collection(`users/${uid}/${recommendationsCollection}`)
-        .get();
     if (profile.topArtistNames.length === 0 && profile.topGenreNames.length === 0) {
-        const existing = await existingPromise;
         return {
             writes: [],
-            staleRefs: existing.docs.map((doc) => doc.ref),
             count: 0,
             candidateDocumentsRead: 0,
             candidateCount: 0,
@@ -432,15 +428,13 @@ async function planOwnRecommendations(uid, profile, sourceVersion, generatedAt) 
     const calculatedRecommendations = [...candidates.values()]
         .map((candidate) => calculateRecommendation(profile, candidate))
         .filter((result) => result !== null)
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score || a.uid.localeCompare(b.uid))
         .slice(0, maxStoredRecommendations);
     const profilesByUid = await loadPublicProfileSnapshots(calculatedRecommendations.map((recommendation) => recommendation.uid));
     const recommendations = calculatedRecommendations.flatMap((recommendation) => {
         const profileSnapshot = profilesByUid.get(recommendation.uid);
         return profileSnapshot ? [{ recommendation, profileSnapshot }] : [];
     });
-    const recommendationIds = new Set(recommendations.map(({ recommendation }) => recommendation.uid));
-    const existing = await existingPromise;
     return {
         writes: recommendations.map(({ recommendation, profileSnapshot }) => ({
             ref: firebase_1.db.doc(`users/${uid}/${recommendationsCollection}/${recommendation.uid}`),
@@ -454,9 +448,6 @@ async function planOwnRecommendations(uid, profile, sourceVersion, generatedAt) 
                 ...recommendationSnapshotData(profileSnapshot, generatedAt),
             },
         })),
-        staleRefs: existing.docs
-            .filter((doc) => !recommendationIds.has(doc.id))
-            .map((doc) => doc.ref),
         count: recommendations.length,
         candidateDocumentsRead: documentsRead,
         candidateCount: candidates.size,
@@ -491,6 +482,23 @@ function planReciprocalRecommendations(uid, profile, profileSnapshot, candidates
             },
         };
     });
+}
+function cappedReciprocalWrites(incoming, existing) {
+    const candidates = existing.docs
+        .filter((doc) => doc.id !== incoming.ref.id)
+        .map((doc) => ({ ref: doc.ref, data: doc.data() }));
+    if (incoming.data)
+        candidates.push({ ref: incoming.ref, data: incoming.data });
+    const score = (data) => typeof data.score === 'number' && Number.isFinite(data.score) ? data.score : 0;
+    candidates.sort((a, b) => score(b.data) - score(a.data)
+        || a.ref.id.localeCompare(b.ref.id));
+    const retainedIds = new Set(candidates.slice(0, maxStoredRecommendations).map((candidate) => candidate.ref.id));
+    const writes = existing.docs
+        .filter((doc) => !retainedIds.has(doc.id))
+        .map((doc) => ({ ref: doc.ref }));
+    if (incoming.data && retainedIds.has(incoming.ref.id))
+        writes.push(incoming);
+    return writes;
 }
 function writeRecommendationProfile(transaction, uid, profile, sourceVersion) {
     const ref = firebase_1.db.collection(recommendationProfilesCollection).doc(uid);
@@ -543,40 +551,59 @@ async function rebuildMusicRecommendations(uid, before, after, profileSnapshot, 
     const reciprocalWrites = profileChanged
         ? planReciprocalRecommendations(uid, after, profileSnapshot, reciprocalCandidates, sourceVersion, generatedAt)
         : [];
-    const writeCount = ownPlan.writes.length + ownPlan.staleRefs.length
-        + reciprocalWrites.length + (profileChanged ? 1 : 0) + 1;
-    if (writeCount > 500) {
-        throw new Error(`Recommendation publication exceeds Firestore's 500-write limit: ${writeCount}.`);
-    }
-    const published = await firebase_1.db.runTransaction(async (transaction) => {
-        const current = await transaction.get(userDocRef(uid));
-        const currentData = current.data();
-        if (musicProfileVersion(currentData) !== sourceVersion
-            || musicProfileChanged(readMusicProfile(currentData), after)
-            || recommendationGenerationCovers(currentData, sourceVersion, refreshRequestedAtMillis)) {
-            return false;
-        }
-        if (profileChanged)
-            writeRecommendationProfile(transaction, uid, after, sourceVersion);
-        ownPlan.writes.forEach((write) => transaction.set(write.ref, write.data));
-        ownPlan.staleRefs.forEach((ref) => transaction.delete(ref));
-        reciprocalWrites.forEach((write) => {
-            if (write.data)
-                transaction.set(write.ref, write.data);
-            else
-                transaction.delete(write.ref);
+    let publication;
+    do {
+        publication = await firebase_1.db.runTransaction(async (transaction) => {
+            const current = await transaction.get(userDocRef(uid));
+            const currentData = current.data();
+            if (musicProfileVersion(currentData) !== sourceVersion
+                || musicProfileChanged(readMusicProfile(currentData), after)
+                || recommendationGenerationCovers(currentData, sourceVersion, refreshRequestedAtMillis)) {
+                return 'obsolete';
+            }
+            // Read every affected list inside the transaction so concurrent reciprocal
+            // updates and rebuilds cannot race past the cap or escape stale cleanup.
+            const [ownExisting, ...reciprocalExisting] = await Promise.all([
+                transaction.get(firebase_1.db.collection(`users/${uid}/${recommendationsCollection}`)),
+                ...reciprocalWrites.map((write) => transaction.get(write.ref.parent)),
+            ]);
+            const ownIds = new Set(ownPlan.writes.map((write) => write.ref.id));
+            const writes = [
+                ...ownPlan.writes,
+                ...ownExisting.docs.filter((doc) => !ownIds.has(doc.id))
+                    .map((doc) => ({ ref: doc.ref })),
+                ...reciprocalWrites.flatMap((write, index) => cappedReciprocalWrites(write, reciprocalExisting[index])),
+            ];
+            const writeCount = writes.length + (profileChanged ? 1 : 0) + 1;
+            if (writeCount > maxRecommendationPublicationWrites) {
+                // Legacy lists may already contain arbitrarily many entries. Remove only
+                // stale entries in bounded, version-checked steps; publish the generation
+                // marker only after the remaining writes fit in one atomic transaction.
+                writes.filter((write) => !write.data)
+                    .slice(0, maxRecommendationPublicationWrites)
+                    .forEach((write) => transaction.delete(write.ref));
+                return 'pruned';
+            }
+            if (profileChanged)
+                writeRecommendationProfile(transaction, uid, after, sourceVersion);
+            writes.forEach((write) => {
+                if (write.data)
+                    transaction.set(write.ref, write.data);
+                else
+                    transaction.delete(write.ref);
+            });
+            transaction.update(userDocRef(uid), {
+                recommendationsGeneratedAt: generatedAt,
+                recommendationsGeneratedForMusicProfileVersion: sourceVersion,
+                recommendationsCount: ownPlan.count,
+            });
+            return 'published';
         });
-        transaction.update(userDocRef(uid), {
-            recommendationsGeneratedAt: generatedAt,
-            recommendationsGeneratedForMusicProfileVersion: sourceVersion,
-            recommendationsCount: ownPlan.count,
-        });
-        return true;
-    });
+    } while (publication === 'pruned');
     v2_1.logger.info('rebuildMusicRecommendations: publication finished', {
         uid,
         sourceVersion,
-        published,
+        published: publication === 'published',
         candidateDocumentsRead: ownPlan.candidateDocumentsRead,
         candidateCount: ownPlan.candidateCount,
         recommendationCount: ownPlan.count,
