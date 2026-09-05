@@ -571,13 +571,62 @@ void main() {
     });
 
     group('signOut', () {
+      setUp(() async {
+        when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
+        await authService.initializeGoogleSignInForWeb();
+        addTearDown(authService.dispose);
+      });
+
+      test('limita la espera de FCM y Google en paralelo', () async {
+        final tokenCleanup = Completer<void>();
+        final googleCleanup = Completer<void>();
+        when(() => mockNotificationService.clearToken())
+            .thenAnswer((_) => tokenCleanup.future);
+        when(() => mockGoogleSignIn.signOut())
+            .thenAnswer((_) => googleCleanup.future);
+        when(() => mockAuth.signOut()).thenAnswer((_) async {});
+
+        final signOut = authService.signOut();
+        await Future<void>.delayed(Duration.zero);
+        verify(() => mockNotificationService.clearToken()).called(1);
+        verify(() => mockGoogleSignIn.signOut()).called(1);
+        await signOut.timeout(const Duration(seconds: 3));
+
+        verify(() => mockAuth.signOut()).called(1);
+        // Errors arriving after the deadline must still be handled.
+        tokenCleanup.completeError(StateError('late Firestore failure'));
+        googleCleanup.completeError(StateError('late Google failure'));
+        await Future<void>.delayed(Duration.zero);
+      });
+
+      test('cierra Firebase aunque fallen las dos limpiezas', () async {
+        when(() => mockNotificationService.clearToken())
+            .thenThrow(StateError('FCM failed'));
+        when(() => mockGoogleSignIn.signOut())
+            .thenThrow(StateError('Google failed'));
+        when(() => mockAuth.signOut()).thenAnswer((_) async {});
+
+        await authService.signOut();
+
+        verify(() => mockAuth.signOut()).called(1);
+      });
+
+      test('propaga un fallo del cierre local de Firebase', () async {
+        when(() => mockNotificationService.clearToken())
+            .thenAnswer((_) async {});
+        when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async {});
+        final failure = StateError('local sign-out failed');
+        when(() => mockAuth.signOut()).thenThrow(failure);
+
+        await expectLater(authService.signOut(), throwsA(same(failure)));
+      });
+
       test('cierra sesión en Google y Firebase, limpia FCM token', () async {
         when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
         when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async {});
         when(() => mockAuth.signOut()).thenAnswer((_) async {});
-        when(
-          () => mockNotificationService.clearToken(),
-        ).thenAnswer((_) async {});
+        when(() => mockNotificationService.clearToken())
+            .thenAnswer((_) async {});
 
         await authService.signOut();
 

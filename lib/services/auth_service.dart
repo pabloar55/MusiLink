@@ -30,6 +30,8 @@ class AuthService {
   static Future<void>? _googleInitialization;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _googleAuthSubscription;
 
+  static const _signOutCleanupTimeout = Duration(seconds: 2);
+
   Future<void> _ensureGoogleInitialized() async {
     _googleInitialization ??= _googleSignIn.initialize();
     await _googleInitialization;
@@ -173,23 +175,33 @@ class AuthService {
   /// Limpia el FCM token por defecto; durante una eliminación lo hace el
   /// backend porque la cuenta ya está congelada para escrituras cliente.
   Future<void> signOut({bool clearNotificationToken = true}) async {
-    if (clearNotificationToken) {
-      try {
-        await _notificationService.clearToken();
-      } catch (e, st) {
-        await reportError(e, st);
-      }
-    }
-    // Firebase must always be signed out locally. A Google SDK failure must
-    // not leave an authenticated session behind, especially for an account
-    // whose backend deletion has already been accepted.
+    // Give remote cleanup a short window while Firestore still has credentials.
+    // Neither a pending network operation nor error reporting may block the
+    // local sign-out, and independent cleanup operations share the same window.
     try {
-      await _ensureGoogleInitialized();
-      await _googleSignIn.signOut();
-    } catch (e, st) {
-      await reportError(e, st);
+      await Future.wait([
+        if (clearNotificationToken)
+          _runSignOutCleanup(_notificationService.clearToken),
+        _runSignOutCleanup(_signOutGoogle),
+      ]);
+    } finally {
+      await _auth.signOut();
     }
-    await _auth.signOut();
+  }
+
+  Future<void> _signOutGoogle() async {
+    await _ensureGoogleInitialized().timeout(_signOutCleanupTimeout);
+    await _googleSignIn.signOut();
+  }
+
+  Future<void> _runSignOutCleanup(Future<void> Function() cleanup) async {
+    try {
+      await cleanup().timeout(_signOutCleanupTimeout);
+    } on TimeoutException {
+      // Cleanup can finish later; the local session must close now.
+    } catch (e, st) {
+      unawaited(reportError(e, st));
+    }
   }
 
   Future<void> dispose() async {

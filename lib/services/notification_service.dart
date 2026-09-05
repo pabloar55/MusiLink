@@ -70,6 +70,8 @@ class NotificationService {
   final Stream<RemoteMessage> _foregroundMessages;
 
   Future<bool>? _platformInitialization;
+  int _tokenGeneration = 0;
+  bool _signingOut = false;
 
   static const _channelId = 'musilink_high';
   static const _channelName = 'MusiLink Notifications';
@@ -82,6 +84,8 @@ class NotificationService {
   static const _channelSilentName = 'MusiLink Notifications (silent)';
   static const _supportedPreferredLocales = {'el', 'en', 'es', 'fr'};
   static const _pendingClearUidKey = 'pending_fcm_clear_uid';
+  static const _pendingClearUidsKey = 'pending_fcm_clear_uids';
+  static const _tokenCleanupTimeout = Duration(seconds: 2);
   static const _installationIdKey = 'push_installation_id';
   static const _webVapidKey =
       'BHWDoNtHqOTGikK1rCJeWntcKQUiv763Z1YtY96MP2DzePOFHFtw8dxy7mGME7EnkajPy3q6DfjdMU34yiq8sEc';
@@ -95,6 +99,7 @@ class NotificationService {
   static final _notificationAvatarCache = NotificationAvatarCache();
 
   Future<void> initialize() async {
+    _signingOut = false;
     final initialization = _platformInitialization ??= _initializePlatform();
     final bool supported;
     try {
@@ -208,7 +213,8 @@ class NotificationService {
 
   Future<void> _saveToken() async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
+    final generation = _tokenGeneration;
+    if (uid == null || _signingOut) return;
 
     try {
       if (_requiresApnsToken && await _waitForApnsToken() == null) return;
@@ -216,6 +222,12 @@ class NotificationService {
       final token = await _getToken();
       if (token == null) return;
       final installationId = await _installationId();
+      // A refresh started before logout must not re-register the removed token.
+      if (_signingOut ||
+          generation != _tokenGeneration ||
+          _auth.currentUser?.uid != uid) {
+        return;
+      }
       final privateUserRef = _firestore
           .collection(FirestoreCollections.userPrivate)
           .doc(uid);
@@ -314,17 +326,54 @@ class NotificationService {
   Future<void> clearToken() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+    _signingOut = true;
+    _tokenGeneration++;
 
-    // Best-effort: revoke token from FCM. Even if this fails the token
-    // will eventually expire; the Firestore cleanup below is what stops
-    // immediate notification delivery to a signed-out user.
+    // Persist recovery before any network work. Multiple accounts can sign out
+    // offline on this installation without overwriting one another's cleanup.
     try {
-      await _messaging.deleteToken();
+      final pending = _pendingClearUids()..add(uid);
+      await _prefs.setStringList(_pendingClearUidsKey, pending.toList());
     } catch (e, stack) {
-      await reportError(e, stack);
+      unawaited(reportError(e, stack));
     }
 
-    await _clearFcmTokenFromFirestore(uid);
+    await Future.wait([
+      _revokeMessagingToken(),
+      _clearFcmTokenFromFirestore(uid),
+    ]);
+  }
+
+  Future<void> _revokeMessagingToken() async {
+    try {
+      await _deleteMessagingToken().timeout(_tokenCleanupTimeout);
+    } on TimeoutException {
+      // FCM availability must not delay the independent Firestore removal.
+    } catch (e, stack) {
+      unawaited(reportError(e, stack));
+    }
+  }
+
+  Future<void> _deleteMessagingToken() async {
+    await _messaging.deleteToken();
+    // A timeout does not cancel the native operation. If another session has
+    // started by the time it finishes, repair that session's token registration.
+    if (!_signingOut && _auth.currentUser != null) {
+      unawaited(_saveTokenIfGranted());
+    }
+  }
+
+  Set<String> _pendingClearUids() => {
+    ...?_prefs.getStringList(_pendingClearUidsKey),
+    if (_prefs.getString(_pendingClearUidKey) case final String uid) uid,
+  };
+
+  Future<void> _forgetPendingClear(String uid) async {
+    final pending = _pendingClearUids()..remove(uid);
+    await _prefs.setStringList(_pendingClearUidsKey, pending.toList());
+    if (_prefs.getString(_pendingClearUidKey) == uid) {
+      await _prefs.remove(_pendingClearUidKey);
+    }
   }
 
   Future<void> _clearFcmTokenFromFirestore(String uid) async {
@@ -333,27 +382,28 @@ class NotificationService {
           .collection(FirestoreCollections.userPrivate)
           .doc(uid);
       final installationId = await _installationId();
+      if (_auth.currentUser?.uid != uid) return;
       await privateUserRef
           .collection(FirestoreCollections.pushTokens)
           .doc(installationId)
-          .delete();
+          .delete()
+          .timeout(_tokenCleanupTimeout);
 
-      await _prefs.remove(_pendingClearUidKey);
+      await _forgetPendingClear(uid);
+    } on TimeoutException {
+      // Firestore may keep the write queued offline. Keep the durable marker
+      // even if that original write eventually finishes after this timeout.
     } catch (e, stack) {
-      await reportError(e, stack);
-      // Queue so initialize() retries on the next app launch.
-      try {
-        await _prefs.setString(_pendingClearUidKey, uid);
-      } catch (_) {
-        // SharedPreferences failure is non-critical; error already reported.
-      }
+      unawaited(reportError(e, stack));
     }
   }
 
   Future<void> _retryPendingTokenClear() async {
     try {
-      final uid = _prefs.getString(_pendingClearUidKey);
-      if (uid == null) return;
+      // Rules only allow deleting the signed-in user's tokens. Retain other
+      // users' markers until they sign in again, then clear before registering.
+      final uid = _auth.currentUser?.uid;
+      if (uid == null || !_pendingClearUids().contains(uid)) return;
       await _clearFcmTokenFromFirestore(uid);
     } catch (_) {
       // Non-critical; will retry on next launch.
