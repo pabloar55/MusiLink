@@ -196,11 +196,24 @@ class AuthService {
     await _googleAuthSubscription?.cancel();
   }
 
-  /// Re-autentica con Google. Devuelve `false` si el usuario cancela
-  /// o selecciona una cuenta diferente a la actualmente registrada.
+  /// Re-autentica con Google. Devuelve `false` si el usuario cancela o no
+  /// hay sesión. Lanza [GoogleAccountMismatchException] para otra cuenta.
   Future<bool> reauthenticateWithGoogle() async {
-    await _ensureGoogleInitialized();
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
     try {
+      if (kIsWeb) {
+        // El SDK de Google en web entrega la cuenta mediante eventos y puede
+        // devolver null inmediatamente. Firebase gestiona aquí el popup y
+        // valida la identidad sin pasar por el listener de inicio de sesión.
+        final provider = GoogleAuthProvider()
+          ..setCustomParameters({'prompt': 'select_account'});
+        await user.reauthenticateWithPopup(provider);
+        return true;
+      }
+
+      await _ensureGoogleInitialized();
       final googleUser = _googleSignIn.supportsAuthenticate()
           ? await _googleSignIn.authenticate()
           : await _googleSignIn.attemptLightweightAuthentication();
@@ -208,7 +221,7 @@ class AuthService {
 
       // Verificar que la cuenta seleccionada coincide con la actual
       // ANTES de llamar a Firebase para evitar registrar una cuenta distinta.
-      if (googleUser.email != _auth.currentUser?.email) {
+      if (googleUser.email != user.email) {
         // Limpiar el estado de Google Sign-In (quedó apuntando a la cuenta
         // incorrecta) sin afectar la sesión de Firebase Auth del usuario real.
         try {
@@ -221,13 +234,20 @@ class AuthService {
       final credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
-      await _auth.currentUser!.reauthenticateWithCredential(credential);
+      await user.reauthenticateWithCredential(credential);
       return true;
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) return false;
       await reportError(e, StackTrace.current);
       rethrow;
     } on FirebaseAuthException catch (e, st) {
+      if (e.code == 'user-mismatch') {
+        throw const GoogleAccountMismatchException();
+      }
+      if (e.code == 'popup-closed-by-user' ||
+          e.code == 'cancelled-popup-request') {
+        return false;
+      }
       await reportError(e, st);
       rethrow;
     }

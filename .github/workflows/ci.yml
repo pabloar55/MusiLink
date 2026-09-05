@@ -31,6 +31,9 @@ jobs:
       - name: Test with coverage
         run: flutter test --coverage
 
+      - name: Test Google reauthentication on web
+        run: flutter test --platform chrome test/services/google_reauthentication_test.dart
+
       - name: Check coverage
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq lcov > /dev/null
