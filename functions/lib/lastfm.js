@@ -40,6 +40,9 @@ exports.getSimilarArtists = (0, https_1.onCall)({
         if (res.status === 429) {
             throw new https_1.HttpsError('resource-exhausted', 'Last.fm rate limit reached');
         }
+        if (res.status === 503) {
+            throw new https_1.HttpsError('unavailable', 'Last.fm is temporarily unavailable');
+        }
         throw new https_1.HttpsError('internal', 'Last.fm request failed');
     }
     const data = await res.json();

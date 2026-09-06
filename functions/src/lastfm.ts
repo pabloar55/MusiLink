@@ -44,6 +44,9 @@ export const getSimilarArtists = onCall(
       if (res.status === 429) {
         throw new HttpsError('resource-exhausted', 'Last.fm rate limit reached');
       }
+      if (res.status === 503) {
+        throw new HttpsError('unavailable', 'Last.fm is temporarily unavailable');
+      }
       throw new HttpsError('internal', 'Last.fm request failed');
     }
 
