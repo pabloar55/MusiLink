@@ -218,113 +218,130 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     _scheduleDailySongExpiryRefresh(user);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.profileTitle),
-        actions: [
-          if (!_isOwnProfile && !isDeletedProfile)
-            Consumer(
-              builder: (ctx, ref, _) {
-                final isBlocked =
-                    ref
-                        .watch(relationshipProvider(widget.user.uid))
-                        .asData
-                        ?.value
-                        .status ==
-                    RelationshipStatus.blocked;
-                return PopupMenuButton<_ProfileMenuAction>(
-                  icon: const Icon(LucideIcons.ellipsisVertical),
-                  onSelected: (action) {
-                    if (action == _ProfileMenuAction.block) _blockUser();
-                    if (action == _ProfileMenuAction.unblock) _unblockUser();
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: ProfileHeader.expandedHeight(context, user),
+            flexibleSpace: ProfileHeader(user: user),
+            actions: [
+              if (!_isOwnProfile && !isDeletedProfile)
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    final isBlocked =
+                        ref
+                            .watch(relationshipProvider(widget.user.uid))
+                            .asData
+                            ?.value
+                            .status ==
+                        RelationshipStatus.blocked;
+                    return PopupMenuButton<_ProfileMenuAction>(
+                      icon: const Icon(LucideIcons.ellipsisVertical),
+                      onSelected: (action) {
+                        if (action == _ProfileMenuAction.block) {
+                          _blockUser();
+                        }
+                        if (action == _ProfileMenuAction.unblock) {
+                          _unblockUser();
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: isBlocked
+                              ? _ProfileMenuAction.unblock
+                              : _ProfileMenuAction.block,
+                          child: Text(
+                            isBlocked
+                                ? l10n.blockUserUnblock
+                                : l10n.blockUserBlock,
+                          ),
+                        ),
+                      ],
+                    );
                   },
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: isBlocked
-                          ? _ProfileMenuAction.unblock
-                          : _ProfileMenuAction.block,
-                      child: Text(
-                        isBlocked ? l10n.blockUserUnblock : l10n.blockUserBlock,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          top: 24,
-          bottom: 24 + MediaQuery.paddingOf(context).bottom,
-        ),
-        child: Column(
-          children: [
-            ProfileHeader(user: user),
-            const SizedBox(height: 20),
-
-            if (user.dailySong != null)
-              ProfileDailySongCard(
-                song: user.dailySong!,
-                onTap: parseSpotifyTrackUri(user.dailySong!.spotifyUrl) != null
-                    ? () => _openSpotifyUrl(user.dailySong!.spotifyUrl)
-                    : null,
+                ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: 24 + MediaQuery.paddingOf(context).bottom,
               ),
+              child: Column(
+                children: [
+                  if (user.dailySong != null)
+                    ProfileDailySongCard(
+                      song: user.dailySong!,
+                      onTap:
+                          parseSpotifyTrackUri(user.dailySong!.spotifyUrl) !=
+                              null
+                          ? () => _openSpotifyUrl(user.dailySong!.spotifyUrl)
+                          : null,
+                    ),
 
-            const SizedBox(height: 4),
+                  const SizedBox(height: 4),
 
-            if (!_isOwnProfile && !isDeletedProfile)
-              Builder(
-                builder: (context) {
-                  final initialCompatibility = widget.initialCompatibility;
-                  final compatibilityValue =
-                      initialCompatibility != null &&
-                          initialCompatibility.user.uid == user.uid
-                      ? AsyncValue<DiscoveryResult>.data(initialCompatibility)
-                      : ref.watch(compatibilityProvider(user));
-                  final relationshipValue = ref.watch(
-                    relationshipProvider(widget.user.uid),
-                  );
+                  if (!_isOwnProfile && !isDeletedProfile)
+                    Builder(
+                      builder: (context) {
+                        final initialCompatibility =
+                            widget.initialCompatibility;
+                        final compatibilityValue =
+                            initialCompatibility != null &&
+                                initialCompatibility.user.uid == user.uid
+                            ? AsyncValue<DiscoveryResult>.data(
+                                initialCompatibility,
+                              )
+                            : ref.watch(compatibilityProvider(user));
+                        final relationshipValue = ref.watch(
+                          relationshipProvider(widget.user.uid),
+                        );
 
-                  return Column(
-                    children: [
-                      CompatibilityCard(value: compatibilityValue),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: FriendshipButtons(
-                          value: relationshipValue,
-                          onStartChat: _startChat,
-                          onSendRequest: _sendRequest,
-                          onAcceptRequest: _acceptRequest,
-                          onRejectRequest: _rejectRequest,
-                          onCancelRequest: _cancelRequest,
-                          onRemoveFriend: _removeFriend,
-                          onUnblock: _unblockUser,
+                        return Column(
+                          children: [
+                            CompatibilityCard(value: compatibilityValue),
+                            const SizedBox(height: 16),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              child: FriendshipButtons(
+                                value: relationshipValue,
+                                onStartChat: _startChat,
+                                onSendRequest: _sendRequest,
+                                onAcceptRequest: _acceptRequest,
+                                onRejectRequest: _rejectRequest,
+                                onCancelRequest: _cancelRequest,
+                                onRemoveFriend: _removeFriend,
+                                onUnblock: _unblockUser,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  if (!hasMusicalData)
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(
+                        l10n.profileNoData,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
-                  );
-                },
+                    ),
+
+                  MusicTasteSection(user: user),
+                ],
               ),
-
-            const SizedBox(height: 24),
-
-            if (!hasMusicalData)
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  l10n.profileNoData,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-
-            MusicTasteSection(user: user),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
