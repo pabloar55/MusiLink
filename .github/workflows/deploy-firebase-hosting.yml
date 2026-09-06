@@ -47,4 +47,5 @@ jobs:
           projectId: musi-link-e7759
 
       - name: Publish deployment URL
-        run: echo "Firebase Hosting deployment: https://musilink.app" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Firebase Hosting deployment: https://musilink.app" >> "$GITHUB_STEP_SUMMARY"
