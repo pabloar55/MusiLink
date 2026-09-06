@@ -62,6 +62,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // Paginación: lista única de mensajes acumulados.
   List<Message> _allMessages = [];
   bool _isInitialLoading = true;
+  bool _hasReceivedMessages = false;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
   bool _isAtBottom = true;
@@ -102,6 +103,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (!mounted) return;
       setState(() => _isOtherUserDeleted = user?.isDeleted ?? false);
     });
+    final cached = ref
+        .read(chatServiceProvider)
+        .getCachedMessages(widget.chatId);
+    if (cached != null) {
+      _allMessages = cached;
+      _isInitialLoading = false;
+    }
     unawaited(_initMessagesStream());
     _scrollController.addListener(_onScroll);
   }
@@ -180,6 +188,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
     if (!mounted) return;
 
+    // La comprobación puede invalidar la caché si se borró desde otro equipo.
+    final cached = ref
+        .read(chatServiceProvider)
+        .getCachedMessages(widget.chatId);
+    if (cached != null || !_isInitialLoading) {
+      setState(() {
+        _allMessages = cached ?? [];
+        if (cached != null) _isInitialLoading = false;
+      });
+    }
     _listenToMessages();
   }
 
@@ -217,7 +235,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   void _onMessagesUpdated(List<Message> streamMessages) {
     if (!mounted) return;
-    final isFirst = _isInitialLoading;
+    final isFirst = !_hasReceivedMessages;
     final latestTimestamp = streamMessages.isEmpty
         ? null
         : streamMessages.last.timestamp;
@@ -228,6 +246,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     setState(() {
       _allMessages = streamMessages;
       _isInitialLoading = false;
+      _hasReceivedMessages = true;
       // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
       if (isFirst) {
         _hasMoreMessages =
@@ -307,7 +326,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Future<void> _loadMoreMessages() async {
-    if (_allMessages.isEmpty) return;
+    if (!_hasReceivedMessages || _allMessages.isEmpty) return;
     final cursor = _allMessages.first.timestamp;
 
     setState(() => _isLoadingMore = true);
@@ -519,7 +538,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             if (_isOtherUserDeleted)
               _buildDeletedAccountBar(colorScheme, l10n)
             else if (relationship.isLoading)
-              _buildRelationshipLoadingBar(colorScheme)
+              _buildInputBar(colorScheme, canSend: false)
             else if (isBlockedByMe)
               _buildBlockedChatBar(colorScheme, l10n)
             else if (!canInteract)
@@ -665,7 +684,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildInputBar(ColorScheme colorScheme) {
+  Widget _buildInputBar(ColorScheme colorScheme, {bool canSend = true}) {
     final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -683,7 +702,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         child: Row(
           children: [
             IconButton(
-              onPressed: _showTrackSearch,
+              onPressed: canSend ? _showTrackSearch : null,
               icon: const Icon(LucideIcons.music),
               tooltip: l10n.chatShareSong,
             ),
@@ -705,12 +724,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     vertical: 10,
                   ),
                 ),
-                onSubmitted: (_) => _sendMessage(),
+                onSubmitted: canSend ? (_) => _sendMessage() : null,
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              onPressed: _sendMessage,
+              onPressed: canSend ? _sendMessage : null,
               icon: const Icon(LucideIcons.sendHorizontal500),
               style: IconButton.styleFrom(
                 backgroundColor: colorScheme.primary,
@@ -766,22 +785,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           l10n.chatNotFriendsCannotSend,
           textAlign: TextAlign.center,
           style: TextStyle(color: colorScheme.onSurfaceVariant),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRelationshipLoadingBar(ColorScheme colorScheme) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox.square(
-          dimension: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: colorScheme.primary,
-          ),
         ),
       ),
     );

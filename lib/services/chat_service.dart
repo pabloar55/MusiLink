@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -30,9 +31,43 @@ class ChatService with AuthenticatedService {
       _firestore.collection(FirestoreCollections.userPrivate);
   // Cache por otherUid: evita re-query al abrir el mismo chat varias veces.
   final Map<String, Chat> _chatByOtherUid = {};
+  // Solo la última página de los 20 chats más recientes, separada por usuario.
+  final Map<(String, String), ({DateTime? since, List<Message> messages})>
+  _recentMessages = {};
+  final Map<(String, String), ({DateTime? since, Future<void> future})>
+  _prefetchingMessages = {};
+  final Map<(String, String), Object> _messageCacheTokens = {};
+
+  Object _messageCacheToken(String uid, String chatId) =>
+      _messageCacheTokens.putIfAbsent((uid, chatId), Object.new);
+
+  /// Lectura síncrona para pintar una conversación antes del primer snapshot.
+  /// null significa que aún no se ha cargado; una lista vacía es un chat vacío.
+  List<Message>? getCachedMessages(String chatId) =>
+      _recentMessages[(_auth.currentUser?.uid, chatId)]?.messages;
+
+  void _invalidateMessages(String uid, String chatId) {
+    _recentMessages.remove((uid, chatId));
+    _prefetchingMessages.remove((uid, chatId));
+    _messageCacheTokens.remove((uid, chatId));
+  }
+
+  void _checkDeletedSince(String uid, String chatId, DateTime? since) {
+    final cached = _recentMessages[(uid, chatId)];
+    final pending = _prefetchingMessages[(uid, chatId)];
+    if ((cached != null && cached.since != since) ||
+        (pending != null && pending.since != since)) {
+      _invalidateMessages(uid, chatId);
+    }
+  }
 
   /// Limpia la caché en memoria. Llamar al hacer logout.
-  void clearCache() => _chatByOtherUid.clear();
+  void clearCache() {
+    _chatByOtherUid.clear();
+    _recentMessages.clear();
+    _prefetchingMessages.clear();
+    _messageCacheTokens.clear();
+  }
 
   // ─── Chats ────────────────────────────────────────────────
 
@@ -106,18 +141,105 @@ class ChatService with AuthenticatedService {
   /// Los chats sin mensajes y los borrados suavemente
   /// (deletedAt[uid] >= lastMessageTime) quedan ocultos.
   Stream<List<Chat>> getChats() {
+    final uid = currentUid;
     return _chatsRef
-        .where('participants', arrayContains: currentUid)
+        .where('participants', arrayContains: uid)
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .handleError((e, st) => reportError(e, st).ignore())
-        .map(
-          (snapshot) => snapshot.docs.map(Chat.fromFirestore).where((chat) {
+        .map((snapshot) {
+          final chats = snapshot.docs.map(Chat.fromFirestore).where((chat) {
+            final dt = chat.deletedAt[uid];
+            _checkDeletedSince(uid, chat.id, dt);
             if (chat.lastMessage.isEmpty) return false;
-            final dt = chat.deletedAt[currentUid];
             return dt == null || chat.lastMessageTime.isAfter(dt);
-          }).toList(),
-        );
+          }).toList();
+          // MainScreen escucha esta lista para el contador de pendientes:
+          // adelantar la carga incluso antes de entrar en la pestaña de chats.
+          if (_auth.currentUser?.uid == uid) {
+            for (final chat in chats.take(6)) {
+              unawaited(prefetchMessages(chat));
+            }
+          }
+          return chats;
+        });
+  }
+
+  /// Precarga una sola página usando el filtro de borrado de la lista de chats.
+  /// No bloquea la navegación ni mantiene listeners adicionales abiertos.
+  Future<void> prefetchMessages(Chat chat) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || !chat.participants.contains(uid)) return;
+    final since = chat.deletedAt[uid];
+    _checkDeletedSince(uid, chat.id, since);
+    if (chat.lastMessage.isEmpty ||
+        (since != null && !chat.lastMessageTime.isAfter(since))) {
+      return;
+    }
+    final key = (uid, chat.id);
+    if (_recentMessages.containsKey(key)) return;
+    final pending = _prefetchingMessages[key];
+    if (pending != null) return pending.future;
+
+    final future = _prefetchMessages(chat.id, uid, since);
+    _prefetchingMessages[key] = (since: since, future: future);
+    try {
+      await future;
+    } finally {
+      if (identical(_prefetchingMessages[key]?.future, future)) {
+        _prefetchingMessages.remove(key);
+      }
+    }
+  }
+
+  Future<void> _prefetchMessages(
+    String chatId,
+    String uid,
+    DateTime? since,
+  ) async {
+    final token = _messageCacheToken(uid, chatId);
+    try {
+      final snapshot = await _messagesQuery(chatId, since: since).get();
+      // Un resultado tardío no debe reemplazar una actualización del chat abierto.
+      if (!identical(token, _messageCacheTokens[(uid, chatId)]) ||
+          _auth.currentUser?.uid != uid ||
+          _recentMessages.containsKey((uid, chatId))) {
+        return;
+      }
+      _cacheMessages(uid, chatId, since, _decodeMessages(snapshot));
+    } catch (error, stack) {
+      // La pantalla conserva su carga normal si falla esta optimización.
+      reportError(error, stack).ignore();
+    }
+  }
+
+  List<Message> _decodeMessages(QuerySnapshot<Map<String, dynamic>> snapshot) =>
+      snapshot.docs.reversed
+          .map(Message.fromFirestore)
+          .whereType<Message>()
+          .toList();
+
+  void _cacheMessages(
+    String uid,
+    String chatId,
+    DateTime? since,
+    List<Message> messages,
+  ) {
+    final key = (uid, chatId);
+    _recentMessages.remove(key);
+    _recentMessages[key] = (
+      since: since,
+      messages: List<Message>.unmodifiable(
+        messages.skip(
+          messages.length > messagesPageSize
+              ? messages.length - messagesPageSize
+              : 0,
+        ),
+      ),
+    );
+    if (_recentMessages.length > 20) {
+      _recentMessages.remove(_recentMessages.keys.first);
+    }
   }
 
   static const int _deleteBatchSize = 499;
@@ -126,10 +248,14 @@ class ChatService with AuthenticatedService {
   /// o null si no ha borrado el chat (incluye chats recién creados).
   /// Lanza si Firestore falla — el llamador debe decidir cómo recuperarse.
   Future<DateTime?> getDeletedSince(String chatId) async {
+    final uid = currentUid;
     try {
       final snap = await _chatsRef.doc(chatId).get();
-      if (!snap.exists) return null;
-      return Chat.fromFirestore(snap).deletedAt[currentUid];
+      final since = snap.exists
+          ? Chat.fromFirestore(snap).deletedAt[uid]
+          : null;
+      _checkDeletedSince(uid, chatId, since);
+      return since;
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
@@ -144,14 +270,17 @@ class ChatService with AuthenticatedService {
   /// La limpieza fisica del chat, cuando corresponda, la hace Cloud Functions
   /// con Admin SDK. El cliente no intenta borrar mensajes ajenos ni el chat.
   Future<void> softDeleteChat(String chatId) async {
+    final uid = currentUid;
+    _invalidateMessages(uid, chatId);
     try {
       final chatRef = _chatsRef.doc(chatId);
 
       await chatRef.update({
-        'deletedAt.$currentUid': FieldValue.serverTimestamp(),
-        'unreadCounts.$currentUid': 0,
+        'deletedAt.$uid': FieldValue.serverTimestamp(),
+        'unreadCounts.$uid': 0,
       });
 
+      _invalidateMessages(uid, chatId);
       _chatByOtherUid.removeWhere((_, c) => c.id == chatId);
     } catch (e, stack) {
       await reportError(e, stack);
@@ -204,6 +333,29 @@ class ChatService with AuthenticatedService {
     DateTime? since,
     DateTime? from,
   }) {
+    final uid = currentUid;
+    final token = _messageCacheToken(uid, chatId);
+    return _messagesQuery(chatId, since: since, from: from)
+        .snapshots()
+        .handleError((Object error, StackTrace stack) {
+          reportError(error, stack).ignore();
+          Error.throwWithStackTrace(error, stack);
+        })
+        .map((snapshot) {
+          final messages = _decodeMessages(snapshot);
+          if (identical(token, _messageCacheTokens[(uid, chatId)]) &&
+              _auth.currentUser?.uid == uid) {
+            _cacheMessages(uid, chatId, since, messages);
+          }
+          return messages;
+        });
+  }
+
+  Query<Map<String, dynamic>> _messagesQuery(
+    String chatId, {
+    DateTime? since,
+    DateTime? from,
+  }) {
     var query = _chatsRef
         .doc(chatId)
         .collection(FirestoreCollections.messages)
@@ -216,22 +368,9 @@ class ChatService with AuthenticatedService {
       );
     }
 
-    query = from == null
+    return from == null
         ? query.limit(messagesPageSize)
         : query.endAt([Timestamp.fromDate(from)]);
-
-    return query
-        .snapshots()
-        .handleError((Object error, StackTrace stack) {
-          reportError(error, stack).ignore();
-          Error.throwWithStackTrace(error, stack);
-        })
-        .map(
-          (snapshot) => snapshot.docs.reversed
-              .map(Message.fromFirestore)
-              .whereType<Message>()
-              .toList(),
-        );
   }
 
   /// Localiza la siguiente página anterior a [before]. El llamador debe ampliar

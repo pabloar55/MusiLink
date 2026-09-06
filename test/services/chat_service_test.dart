@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/services/chat_service.dart';
 
 import '../helpers/mocks.dart';
@@ -64,6 +65,188 @@ void main() {
   });
 
   group('ChatService', () {
+    group('prefetchMessages', () {
+      late MockDocumentReference chatRef;
+      late MockQuery ordered;
+      late MockQuery window;
+      late Completer<QuerySnapshot<Map<String, dynamic>>> request;
+      final since = DateTime(2026, 9, 1);
+      final time = DateTime(2026, 9, 6);
+      late Chat chat;
+
+      QuerySnapshot<Map<String, dynamic>> result(String text) {
+        final snapshot = MockQuerySnapshot();
+        final doc = MockQueryDocumentSnapshot();
+        when(() => doc.id).thenReturn('message-1');
+        when(() => doc.data()).thenReturn({
+          'senderId': 'other_uid',
+          'text': text,
+          'timestamp': Timestamp.fromDate(time),
+        });
+        when(() => snapshot.docs).thenReturn([doc]);
+        return snapshot;
+      }
+
+      setUp(() {
+        chat = Chat(
+          id: 'chat_123',
+          participants: const ['current_uid', 'other_uid'],
+          lastMessage: 'Hello',
+          lastMessageTime: time,
+          createdAt: since,
+          deletedAt: {'current_uid': since},
+        );
+        chatRef = MockDocumentReference();
+        final messagesRef = MockMessagesCollectionRef();
+        ordered = MockQuery();
+        window = MockQuery();
+        request = Completer<QuerySnapshot<Map<String, dynamic>>>();
+        when(() => mockChatsRef.doc(any())).thenReturn(chatRef);
+        when(() => chatRef.collection('messages')).thenReturn(messagesRef);
+        when(() => messagesRef.orderBy('timestamp', descending: true))
+            .thenReturn(ordered);
+        when(
+          () => ordered.where(
+            'timestamp',
+            isGreaterThan: Timestamp.fromDate(since),
+          ),
+        ).thenReturn(ordered);
+        when(() => ordered.limit(ChatService.messagesPageSize))
+            .thenReturn(window);
+        when(() => window.get()).thenAnswer((_) => request.future);
+      });
+
+      test(
+        'preloads before opening, respects deletion and deduplicates reads',
+        () async {
+          final first = chatService.prefetchMessages(chat);
+          final second = chatService.prefetchMessages(chat);
+          expect(chatService.getCachedMessages(chat.id), isNull);
+          verify(() => window.get()).called(1);
+          verify(
+            () => ordered.where(
+              'timestamp',
+              isGreaterThan: Timestamp.fromDate(since),
+            ),
+          ).called(1);
+          verifyNever(() => chatRef.get());
+          request.complete(result('Hello'));
+          await Future.wait([first, second]);
+          expect(chatService.getCachedMessages(chat.id)!.single.text, 'Hello');
+          await chatService.prefetchMessages(chat);
+          verifyNever(() => window.get());
+          verifyNever(() => window.snapshots());
+        },
+      );
+
+      for (final invalidation in ['logout', 'delete', 'remote delete']) {
+        test('discards pending preload after $invalidation', () async {
+          final pending = chatService.prefetchMessages(chat);
+          if (invalidation == 'logout') {
+            chatService.clearCache();
+          } else if (invalidation == 'delete') {
+            when(() => chatRef.update(any())).thenAnswer((_) async {});
+            await chatService.softDeleteChat(chat.id);
+          } else {
+            final doc = MockDocumentSnapshot();
+            when(() => doc.id).thenReturn(chat.id);
+            when(() => doc.exists).thenReturn(true);
+            when(() => doc.data()).thenReturn({
+              'deletedAt': {'current_uid': Timestamp.fromDate(time)},
+            });
+            when(() => chatRef.get()).thenAnswer((_) async => doc);
+            await chatService.getDeletedSince(chat.id);
+          }
+          request.complete(result('Old history'));
+          await pending;
+          expect(chatService.getCachedMessages(chat.id), isNull);
+        });
+      }
+
+      test('late preload does not overwrite live messages', () async {
+        final pending = chatService.prefetchMessages(chat);
+        when(() => window.snapshots())
+            .thenAnswer((_) => Stream.value(result('Live update')));
+        await chatService.getMessages(chat.id, since: since).first;
+        request.complete(result('Old result'));
+        await pending;
+        expect(
+          chatService.getCachedMessages(chat.id)!.single.text,
+          'Live update',
+        );
+      });
+
+      test(
+        'deleting another chat does not discard an ongoing preload',
+        () async {
+          final pending = chatService.prefetchMessages(chat);
+          when(() => chatRef.update(any())).thenAnswer((_) async {});
+          await chatService.softDeleteChat('different-chat');
+          request.complete(result('Preloaded'));
+          await pending;
+          expect(
+            chatService.getCachedMessages(chat.id)!.single.text,
+            'Preloaded',
+          );
+        },
+      );
+
+      test('failed preload can retry without blocking navigation', () async {
+        final pending = chatService.prefetchMessages(chat);
+        request.completeError(StateError('Offline'), StackTrace.empty);
+        await pending;
+        expect(chatService.getCachedMessages(chat.id), isNull);
+        when(() => window.get()).thenAnswer((_) async => result('Recovered'));
+        await chatService.prefetchMessages(chat);
+        expect(
+          chatService.getCachedMessages(chat.id)!.single.text,
+          'Recovered',
+        );
+      });
+
+      test(
+        'chat list preloads only six visible recent chats without waiting',
+        () async {
+          final chatsQuery = MockQuery();
+          final snapshot = MockQuerySnapshot();
+          when(
+            () => mockChatsRef.where(
+              'participants',
+              arrayContains: 'current_uid',
+            ),
+          ).thenReturn(chatsQuery);
+          when(() => chatsQuery.orderBy('lastMessageTime', descending: true))
+              .thenReturn(chatsQuery);
+          when(() => chatsQuery.snapshots())
+              .thenAnswer((_) => Stream.value(snapshot));
+          final docs = List.generate(10, (i) {
+            final doc = MockQueryDocumentSnapshot();
+            when(() => doc.id).thenReturn('chat-$i');
+            when(() => doc.data()).thenReturn({
+              ...chat.toFirestore(),
+              if (i == 0) 'lastMessage': '',
+              if (i == 1)
+                'deletedAt': {'current_uid': Timestamp.fromDate(time)},
+            });
+            return doc;
+          });
+          when(() => snapshot.docs).thenReturn(docs);
+          final chats = await chatService.getChats().first;
+          expect(chats, hasLength(8));
+          expect(request.isCompleted, isFalse);
+          verify(() => window.get()).called(6);
+          request.complete(result('Preloaded'));
+          await Future<void>.delayed(Duration.zero);
+          expect(
+            chatService.getCachedMessages('chat-2')!.single.text,
+            'Preloaded',
+          );
+          expect(chatService.getCachedMessages('chat-7'), isNotNull);
+          expect(chatService.getCachedMessages('chat-8'), isNull);
+        },
+      );
+    });
+
     group('getMessages', () {
       for (final expanded in [false, true]) {
         test(
@@ -127,16 +310,32 @@ void main() {
                 from: expanded ? from : null,
               ),
             );
+            expect(chatService.getCachedMessages('chat_123'), isNull);
             snapshots.add(snapshot());
             expect(await stream.moveNext(), isTrue);
             expect(stream.current, hasLength(count));
             expect(stream.current.first.id, 'message-0');
             expect(stream.current.last.id, 'message-${count - 1}');
             expect(stream.current.first.read, isFalse);
+            expect(chatService.getCachedMessages('chat_123'), hasLength(30));
+            expect(
+              chatService.getCachedMessages('chat_123')!.first.id,
+              'message-${count - 30}',
+            );
 
             snapshots.add(snapshot(read: true));
             expect(await stream.moveNext(), isTrue);
             expect(stream.current.first.read, isTrue);
+            expect(
+              chatService.getCachedMessages('chat_123')!.first.read,
+              isTrue,
+            );
+            when(() => mockCurrentUser.uid).thenReturn('different-user');
+            expect(chatService.getCachedMessages('chat_123'), isNull);
+            when(() => mockCurrentUser.uid).thenReturn('current_uid');
+            when(() => mockAuth.currentUser).thenReturn(null);
+            expect(chatService.getCachedMessages('chat_123'), isNull);
+            when(() => mockAuth.currentUser).thenReturn(mockCurrentUser);
             expect(stream.current.first.reactions, {
               '👍': ['other_uid'],
             });
@@ -149,6 +348,24 @@ void main() {
                   .called(1);
               verifyNever(() => filtered.endAt(any()));
             }
+            // History deletion and logout invalidate the preview and prevent
+            // snapshots from the old query from putting it back.
+            final chatSnapshot = MockDocumentSnapshot();
+            when(() => chatRef.get()).thenAnswer((_) async => chatSnapshot);
+            when(() => chatSnapshot.exists).thenReturn(true);
+            when(() => chatSnapshot.id).thenReturn('chat_123');
+            when(() => chatSnapshot.data()).thenReturn({
+              'deletedAt': {'current_uid': Timestamp.fromDate(from)},
+            });
+            if (expanded) {
+              chatService.clearCache();
+            } else {
+              await chatService.getDeletedSince('chat_123');
+            }
+            expect(chatService.getCachedMessages('chat_123'), isNull);
+            snapshots.add(snapshot());
+            expect(await stream.moveNext(), isTrue);
+            expect(chatService.getCachedMessages('chat_123'), isNull);
             final failure = StateError('History stream failed');
             snapshots.addError(failure);
             await expectLater(stream.moveNext(), throwsA(same(failure)));
@@ -262,6 +479,21 @@ void main() {
           'createdAt': now,
           'unreadCounts': {'current_uid': 0, 'other_uid': 0},
         });
+
+        final chatRef = MockDocumentReference();
+        final messagesRef = MockMessagesCollectionRef();
+        final messagesQuery = MockQuery();
+        final messagesSnapshot = MockQuerySnapshot();
+        when(() => mockChatsRef.doc('current_uid_other_uid'))
+            .thenReturn(chatRef);
+        when(() => chatRef.collection('messages')).thenReturn(messagesRef);
+        when(() => messagesRef.orderBy('timestamp', descending: true))
+            .thenReturn(messagesQuery);
+        when(() => messagesQuery.limit(ChatService.messagesPageSize))
+            .thenReturn(messagesQuery);
+        when(() => messagesQuery.get())
+            .thenAnswer((_) async => messagesSnapshot);
+        when(() => messagesSnapshot.docs).thenReturn([]);
 
         final chats = await chatService.getChats().first;
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -130,9 +132,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       await ref.read(chatServiceProvider).softDeleteChat(chatId);
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.genericError)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.genericError)));
       }
     }
   }
@@ -215,6 +216,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     ),
                     itemBuilder: (context, index) {
                       final chat = chats[index];
+                      unawaited(
+                        ref.read(chatServiceProvider).prefetchMessages(chat),
+                      );
                       final otherUid = _otherUid(chat);
 
                       return FutureBuilder<AppUser?>(
@@ -382,9 +386,8 @@ class _WebPushCard extends StatelessWidget {
                 children: [
                   Text(
                     l10n.pushNotificationsTitle,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
                   Text(body, style: Theme.of(context).textTheme.bodySmall),
