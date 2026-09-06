@@ -59,7 +59,6 @@ class AuthService {
   Future<User?> registerWithEmail({
     required String email,
     required String password,
-    required String displayName,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -67,10 +66,8 @@ class AuthService {
         password: password,
       );
       final user = credential.user;
-      if (user != null) {
-        await user.updateDisplayName(displayName);
-        // El perfil en Firestore se crea en UsernameSetupScreen junto con el username.
-      }
+      // El perfil se crea en UsernameSetupScreen, donde se solicitan juntos
+      // el nombre visible y el username.
       return user;
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);

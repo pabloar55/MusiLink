@@ -13,7 +13,7 @@ import 'package:musi_link/widgets/google_sign_in_web_button.dart';
 
 /// Pantalla de autenticación con Firebase.
 /// Permite login/registro con email+contraseña y Google Sign-In.
-/// El username se elige siempre en UsernameSetupScreen tras el registro.
+/// El nombre y el username se eligen en UsernameSetupScreen tras el registro.
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key, this.accountDeletionNotice});
 
@@ -29,7 +29,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
 
   bool _isLogin = true;
   bool _isEmailLoading = false;
@@ -61,7 +60,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 
@@ -84,7 +82,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             .registerWithEmail(
               email: _emailController.text.trim(),
               password: _passwordController.text,
-              displayName: _nameController.text.trim(),
             );
       }
 
@@ -217,25 +214,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         _formKey, // Asociamos el formulario a la clave para hacer referencia desde fuera de la clase
                     child: Column(
                       children: [
-                        // Nombre (solo en registro)
-                        if (!_isLogin)
-                          TextFormField(
-                            controller: _nameController,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: InputDecoration(
-                              labelText: l10n.authName,
-                              prefixIcon: const Icon(LucideIcons.circleUser),
-                            ),
-                            validator: (value) {
-                              if (!_isLogin &&
-                                  (value == null || value.trim().isEmpty)) {
-                                return l10n.authEnterName;
-                              }
-                              return null;
-                            },
-                          ),
-                        if (!_isLogin) const SizedBox(height: 16),
-
                         // Email
                         TextFormField(
                           controller: _emailController,

@@ -56,15 +56,12 @@ void main() {
 
     group('registerWithEmail', () {
       test(
-        'registra usuario y actualiza displayName en Firebase Auth',
+        'registra usuario sin crear todavía el perfil',
         () async {
           final mockUser = MockUser();
           final mockCredential = MockUserCredential();
 
           when(() => mockUser.uid).thenReturn('uid123');
-          when(
-            () => mockUser.updateDisplayName(any()),
-          ).thenAnswer((_) async {});
           when(() => mockCredential.user).thenReturn(mockUser);
           when(
             () => mockAuth.createUserWithEmailAndPassword(
@@ -76,12 +73,9 @@ void main() {
           final result = await authService.registerWithEmail(
             email: 'test@test.com',
             password: 'password123',
-            displayName: 'Test User',
           );
 
           expect(result, mockUser);
-          verify(() => mockUser.updateDisplayName('Test User')).called(1);
-          // El perfil Firestore lo crea UsernameSetupScreen, no aquí.
           verifyNever(
             () => mockUserService.createUserProfile(
               displayName: any(named: 'displayName'),
@@ -104,7 +98,6 @@ void main() {
         final result = await authService.registerWithEmail(
           email: 'test@test.com',
           password: 'pass',
-          displayName: 'Test',
         );
 
         expect(result, isNull);
@@ -127,7 +120,6 @@ void main() {
           authService.registerWithEmail(
             email: 'test@test.com',
             password: 'pass',
-            displayName: 'Test',
           ),
           throwsA(isA<FirebaseAuthException>()),
         );
