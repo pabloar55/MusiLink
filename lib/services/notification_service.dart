@@ -54,6 +54,8 @@ class NotificationService {
     FlutterLocalNotificationsPlugin? localNotifications,
     Stream<String>? tokenRefreshes,
     Stream<RemoteMessage>? foregroundMessages,
+    this._prepareChat,
+    this._skipLaunchNotification = false,
   }) : _localNotifications =
            localNotifications ?? FlutterLocalNotificationsPlugin(),
        _tokenRefreshes = tokenRefreshes ?? _messaging.onTokenRefresh,
@@ -68,6 +70,27 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications;
   final Stream<String> _tokenRefreshes;
   final Stream<RemoteMessage> _foregroundMessages;
+  final Future<void> Function(Map<String, dynamic>)? _prepareChat;
+  final bool _skipLaunchNotification;
+
+  /// Se puede consultar antes de runApp para evitar pasar por MainScreen.
+  static Future<Map<String, dynamic>?> getLocalLaunchData({
+    FlutterLocalNotificationsPlugin? localNotifications,
+  }) async {
+    if (kIsWeb) return null;
+    try {
+      final details =
+          await (localNotifications ?? FlutterLocalNotificationsPlugin())
+              .getNotificationAppLaunchDetails();
+      final payload = details?.notificationResponse?.payload;
+      if (details?.didNotificationLaunchApp != true || payload == null) {
+        return null;
+      }
+      return jsonDecode(payload) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<bool>? _platformInitialization;
   int _tokenGeneration = 0;
@@ -146,11 +169,13 @@ class NotificationService {
       ),
       onDidReceiveNotificationResponse: _onLocalNotificationTapped,
     );
-    final launchDetails = await _localNotifications
-        .getNotificationAppLaunchDetails();
-    if (launchDetails?.didNotificationLaunchApp ?? false) {
-      final response = launchDetails?.notificationResponse;
-      if (response != null) await _onLocalNotificationTapped(response);
+    if (!_skipLaunchNotification) {
+      final launchDetails = await _localNotifications
+          .getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp ?? false) {
+        final response = launchDetails?.notificationResponse;
+        if (response != null) await _onLocalNotificationTapped(response);
+      }
     }
 
     // 4. Auto-refresh token
@@ -414,6 +439,7 @@ class NotificationService {
     final chatId = message.data['chatId'] as String?;
     if (message.data['type'] == 'new_message' && chatId != null) {
       if (chatId == _getActiveChatId()) return;
+      _prepareChat?.call(message.data).ignore();
       if (kIsWeb) {
         unawaited(_showWebForegroundNotification(message));
         return;

@@ -198,6 +198,7 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
             return;
         await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), { title: senderName, body: message.text ?? '📎' }, {
             type: 'new_message',
+            recipientId,
             chatId,
             otherUserId: senderId,
             otherUserName: senderName,

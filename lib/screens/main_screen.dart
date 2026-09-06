@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/widgets/user_avatar_button.dart';
 import 'package:musi_link/screens/discover_screen.dart';
 import 'package:musi_link/screens/messages_screen.dart';
@@ -49,7 +46,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
     with WidgetsBindingObserver {
   late int currentPageIndex;
   late final PageController _pageController;
-  StreamSubscription<RemoteMessage>? _messageOpenedSubscription;
   final List<Widget> screens = [
     const DiscoverScreen(),
     const StatsScreen(),
@@ -63,28 +59,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
     currentPageIndex = widget.initialPageIndex.clamp(0, screens.length - 1);
     _pageController = PageController(initialPage: currentPageIndex);
     WidgetsBinding.instance.addObserver(this);
-    // Initialize FCM: permisos, token, canal Android, listeners
-    ref.read(notificationServiceProvider).initialize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(musicProfileSyncCoordinatorProvider).resume();
     });
-    // FCM: app abierta desde notificación en background
-    _messageOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((
-      message,
-    ) {
-      if (!mounted) return;
-      handleNotificationNavigation(message.data, context);
-    });
-    // Local notification taps can arrive while MainScreen is being mounted.
-    // Listen from the lifecycle instead of registering a callback in build().
-    ref.listenManual<Map<String, dynamic>?>(pendingNotificationProvider, (
-      _,
-      data,
-    ) {
-      if (data == null || !mounted) return;
-      ref.read(pendingNotificationProvider.notifier).setValue(null);
-      handleNotificationNavigation(data, context);
-    }, fireImmediately: true);
   }
 
   @override
@@ -140,7 +117,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _messageOpenedSubscription?.cancel();
     _pageController.dispose();
     super.dispose();
   }

@@ -7,6 +7,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/chat_message_cache.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/mocks.dart';
 
@@ -26,8 +28,11 @@ void main() {
   late MockDocumentSnapshot mockPrivateUserSnap;
   late MockUser mockCurrentUser;
   late ChatService chatService;
+  late SharedPreferences prefs;
 
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
     mockFirestore = MockFirebaseFirestore();
     mockAuth = MockFirebaseAuth();
     mockFunctions = MockFirebaseFunctions();
@@ -60,6 +65,7 @@ void main() {
       firestore: mockFirestore,
       auth: mockAuth,
       functions: mockFunctions,
+      messageCache: ChatMessageCache(prefs),
     );
     registerFallbackValues();
   });
@@ -205,6 +211,129 @@ void main() {
       });
 
       test(
+        'a restarted service exposes the persisted page synchronously',
+        () async {
+          final pending = chatService.prefetchMessages(chat);
+          request.complete(result('Persisted'));
+          await pending;
+          final restarted = ChatService(
+            firestore: mockFirestore,
+            auth: mockAuth,
+            functions: mockFunctions,
+            messageCache: ChatMessageCache(prefs),
+          );
+          expect(restarted.getCachedHistory(chat.id)!.since, since);
+          expect(
+            restarted.getCachedMessages(chat.id)!.single.text,
+            'Persisted',
+          );
+          restarted.clearCache();
+          expect(ChatMessageCache(prefs).read('current_uid', chat.id), isNull);
+        },
+      );
+
+      test(
+        'notification refreshes a cached chat from authoritative documents',
+        () async {
+          final initial = chatService.prefetchMessages(chat);
+          request.complete(result('Old'));
+          await initial;
+          final doc = MockDocumentSnapshot();
+          when(() => doc.id).thenReturn(chat.id);
+          when(() => doc.exists).thenReturn(true);
+          when(() => doc.data()).thenReturn(chat.toFirestore());
+          when(() => chatRef.get()).thenAnswer((_) async => doc);
+          final updated = result('New notification');
+          when(() => window.get()).thenAnswer((_) async => updated);
+          await chatService.prepareNotificationChat({
+            'type': 'new_message',
+            'chatId': chat.id,
+            'recipientId': 'current_uid',
+          });
+          expect(
+            chatService.getCachedMessages(chat.id)!.single.text,
+            'New notification',
+          );
+        },
+      );
+
+      test(
+        'notification for another account does not fetch messages',
+        () async {
+          await chatService.prepareNotificationChat({
+            'type': 'new_message',
+            'chatId': chat.id,
+            'recipientId': 'another-user',
+          });
+          verifyNever(() => chatRef.get());
+          verifyNever(() => window.get());
+        },
+      );
+
+      test(
+        'notification document arriving after logout does not start a preload',
+        () async {
+          final response = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+          when(() => chatRef.get()).thenAnswer((_) => response.future);
+          final pending = chatService.prepareNotificationChat({
+            'type': 'new_message',
+            'chatId': chat.id,
+          });
+          chatService.clearCache();
+          final doc = MockDocumentSnapshot();
+          when(() => doc.exists).thenReturn(true);
+          response.complete(doc);
+          await pending;
+          verifyNever(() => window.get());
+          expect(ChatMessageCache(prefs).read('current_uid', chat.id), isNull);
+        },
+      );
+
+      test(
+        'restores background downloads using only Firestore cache',
+        () async {
+          final doc = MockDocumentSnapshot();
+          when(() => doc.id).thenReturn(chat.id);
+          when(() => doc.exists).thenReturn(true);
+          when(() => doc.data()).thenReturn(chat.toFirestore());
+          when(() => chatRef.get(const GetOptions(source: Source.cache)))
+              .thenAnswer((_) async => doc);
+          final cached = result('Background download');
+          when(() => window.get(const GetOptions(source: Source.cache)))
+              .thenAnswer((_) async => cached);
+          await chatService.restoreLocalHistory(chat.id);
+          expect(
+            chatService.getCachedMessages(chat.id)!.single.text,
+            'Background download',
+          );
+          verifyNever(() => chatRef.get());
+          verifyNever(() => window.get());
+          expect(
+            ChatMessageCache(prefs).read('current_uid', chat.id)!.since,
+            since,
+          );
+        },
+      );
+
+      test(
+        'cached chat without the current participant cannot be restored',
+        () async {
+          final doc = MockDocumentSnapshot();
+          when(() => doc.id).thenReturn(chat.id);
+          when(() => doc.exists).thenReturn(true);
+          when(() => doc.data()).thenReturn({
+            ...chat.toFirestore(),
+            'participants': ['other_uid', 'stranger'],
+          });
+          when(() => chatRef.get(const GetOptions(source: Source.cache)))
+              .thenAnswer((_) async => doc);
+          await chatService.restoreLocalHistory(chat.id);
+          verifyNever(() => ordered.limit(any()));
+          expect(chatService.getCachedMessages(chat.id), isNull);
+        },
+      );
+
+      test(
         'chat list preloads only six visible recent chats without waiting',
         () async {
           final chatsQuery = MockQuery();
@@ -311,6 +440,10 @@ void main() {
               ),
             );
             expect(chatService.getCachedMessages('chat_123'), isNull);
+            expect(
+              ChatMessageCache(prefs).read('current_uid', 'chat_123'),
+              isNull,
+            );
             snapshots.add(snapshot());
             expect(await stream.moveNext(), isTrue);
             expect(stream.current, hasLength(count));
@@ -363,6 +496,10 @@ void main() {
               await chatService.getDeletedSince('chat_123');
             }
             expect(chatService.getCachedMessages('chat_123'), isNull);
+            expect(
+              ChatMessageCache(prefs).read('current_uid', 'chat_123'),
+              isNull,
+            );
             snapshots.add(snapshot());
             expect(await stream.moveNext(), isTrue);
             expect(chatService.getCachedMessages('chat_123'), isNull);

@@ -242,6 +242,7 @@ export const onNewMessage = onDocumentCreated(
         { title: senderName, body: (message.text as string | undefined) ?? '📎' },
         {
           type: 'new_message',
+          recipientId,
           chatId,
           otherUserId: senderId,
           otherUserName: senderName,

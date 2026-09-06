@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -13,6 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
+import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/theme_provider.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
@@ -22,6 +25,8 @@ import 'package:musi_link/screens/photo_setup_screen.dart';
 import 'package:musi_link/screens/pwa_install_screen.dart';
 import 'package:musi_link/services/app_update_service.dart';
 import 'package:musi_link/services/notification_service.dart';
+import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
@@ -72,6 +77,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (message.data['type'] == 'new_message') {
     await NotificationService.showBackgroundChatNotification(message.data);
+    // Firestore mantiene su caché en disco entre isolates y reinicios nativos.
+    // Mostrar la notificación primero; no retrasarla por una consulta de red.
+    try {
+      await _activateAppCheck().timeout(const Duration(seconds: 3));
+      await ChatService(
+        firestore: FirebaseFirestore.instance,
+        auth: FirebaseAuth.instance,
+        functions: FirebaseFunctions.instanceFor(region: 'europe-southwest1'),
+      ).prepareNotificationChat(message.data);
+    } catch (_) {
+      // El sistema puede limitar el trabajo en segundo plano.
+    }
   }
   if (kDebugMode) debugPrint('FCM background: ${message.messageId}');
 }
@@ -171,11 +188,44 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final initialMessageFuture = FirebaseMessaging.instance.getInitialMessage();
+  final localLaunchFuture = NotificationService.getLocalLaunchData();
   final routerBootstrapState = await _loadRouterBootstrapState(prefs);
   final initialMessage = await initialMessageFuture;
-  final notificationLocation = initialMessage == null
+  final localLaunch = await localLaunchFuture;
+  final launchData = localLaunch ?? initialMessage?.data;
+  final notificationLocation = launchData == null
       ? null
-      : notificationLocationFromData(initialMessage.data);
+      : notificationLocationFromData(launchData);
+  final chatService = ChatService(
+    firestore: FirebaseFirestore.instance,
+    auth: FirebaseAuth.instance,
+    functions: FirebaseFunctions.instanceFor(region: 'europe-southwest1'),
+    messageCache: ChatMessageCache(prefs),
+  );
+  // El hash contiene la ruta de notificación al arrancar la PWA.
+  final initialLocation =
+      notificationLocation ??
+      (kIsWeb && Uri.base.fragment.startsWith('/') ? Uri.base.fragment : null);
+  final route = initialLocation == null ? null : Uri.tryParse(initialLocation);
+  final chatId = route?.path == '/chat'
+      ? route?.queryParameters['chatId']
+      : null;
+  if (chatId != null) {
+    final cached = chatService.getCachedHistory(chatId);
+    // Solo lectura local: nunca trasladar una espera de red al splash.
+    final restore = chatService.restoreLocalHistory(chatId);
+    if (cached == null) {
+      await restore.timeout(
+        const Duration(milliseconds: 150),
+        onTimeout: () {},
+      );
+    } else {
+      unawaited(restore);
+    }
+    if (launchData != null) {
+      unawaited(chatService.prepareNotificationChat(launchData));
+    }
+  }
   await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
   unawaited(FirebaseAnalytics.instance.logEvent(name: 'app_open'));
 
@@ -183,6 +233,10 @@ void main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        chatServiceProvider.overrideWithValue(chatService),
+        localNotificationLaunchHandledProvider.overrideWithValue(
+          localLaunch != null,
+        ),
         routerBootstrapStateProvider.overrideWithValue(routerBootstrapState),
         initialRouterLocationProvider.overrideWithValue(
           notificationLocation ?? '/',
@@ -390,11 +444,75 @@ class _BootstrapMaterialApp extends StatelessWidget {
   }
 }
 
-class MainApp extends ConsumerWidget {
+class MainApp extends ConsumerStatefulWidget {
   const MainApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends ConsumerState<MainApp> {
+  StreamSubscription<RemoteMessage>? _openedNotifications;
+  int _notificationNavigationGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(pendingNotificationProvider, (_, data) {
+      if (data == null) return;
+      ref.read(pendingNotificationProvider.notifier).setValue(null);
+      final location = notificationLocationFromData(data);
+      if (location == null) return;
+      final generation = ++_notificationNavigationGeneration;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || generation != _notificationNavigationGeneration) return;
+        final router = ref.read(goRouterProvider);
+        final current = router.state.uri;
+        final target = Uri.parse(location);
+        if (current.path == '/chat' &&
+            target.path == '/chat' &&
+            current.queryParameters['chatId'] ==
+                target.queryParameters['chatId']) {
+          return;
+        }
+        if (target.path == '/chat') {
+          unawaited(router.push(location));
+        } else {
+          router.go(location);
+        }
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }, fireImmediately: true);
+    _openedNotifications = FirebaseMessaging.onMessageOpenedApp.listen((
+      message,
+    ) {
+      if (!mounted) return;
+      unawaited(
+        ref.read(chatServiceProvider).prepareNotificationChat(message.data),
+      );
+      ref.read(pendingNotificationProvider.notifier).setValue(message.data);
+    });
+    ref.listenManual(authStateProvider, (previous, next) {
+      final previousUid = previous?.asData?.value?.uid;
+      if (next.asData != null &&
+          previousUid != null &&
+          previousUid != next.asData?.value?.uid) {
+        ref.read(chatServiceProvider).clearCache();
+      }
+      if (next.asData?.value != null) {
+        ref.read(notificationServiceProvider).initialize().ignore();
+      }
+    }, fireImmediately: true);
+  }
+
+  @override
+  void dispose() {
+    _openedNotifications?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(goRouterProvider);
 

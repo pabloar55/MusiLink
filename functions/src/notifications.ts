@@ -108,7 +108,7 @@ export async function sendNotification(
           ...(tag ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } } : {}),
           payload: {
             aps: {
-              ...(isChatMessage ? { alert: notification } : {}),
+              ...(isChatMessage ? { alert: notification, contentAvailable: true } : {}),
               ...(sound ? { sound: 'default' } : {}),
             },
           },

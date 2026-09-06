@@ -333,75 +333,150 @@ void main() {
     expect(foregroundNotificationId(first), foregroundNotificationId(repeated));
   });
 
-  test('processes launch notification only once across logins', () async {
-    final messaging = MockFirebaseMessaging();
-    final firestore = MockFirebaseFirestore();
-    final auth = MockFirebaseAuth();
-    final localNotifications = MockLocalNotifications();
-    final settings = MockNotificationSettings();
-    final prefs = await SharedPreferences.getInstance();
-    final handledNotifications = <Map<String, dynamic>>[];
-
-    when(
-      () => messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      ),
-    ).thenAnswer((_) async {});
-    when(() => messaging.getNotificationSettings())
-        .thenAnswer((_) async => settings);
-    when(() => settings.authorizationStatus)
-        .thenReturn(AuthorizationStatus.denied);
-    when(() => auth.currentUser).thenReturn(null);
-    when(
-      () => localNotifications.initialize(
-        settings: any(named: 'settings'),
-        onDidReceiveNotificationResponse: any(
-          named: 'onDidReceiveNotificationResponse',
+  test(
+    'reads Android launch payload before initializing notification listeners',
+    () async {
+      final local = MockLocalNotifications();
+      when(() => local.getNotificationAppLaunchDetails()).thenAnswer(
+        (_) async => const NotificationAppLaunchDetails(
+          true,
+          notificationResponse: NotificationResponse(
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+            payload:
+                '{"type":"new_message","chatId":"chat","otherUserId":"sender"}',
+          ),
         ),
-      ),
-    ).thenAnswer((_) async => true);
-    when(() => localNotifications.getNotificationAppLaunchDetails()).thenAnswer(
-      (_) async => const NotificationAppLaunchDetails(
-        true,
-        notificationResponse: NotificationResponse(
-          notificationResponseType:
-              NotificationResponseType.selectedNotification,
-          payload: '{"type":"friend_request"}',
+      );
+      expect(
+        await NotificationService.getLocalLaunchData(localNotifications: local),
+        {'type': 'new_message', 'chatId': 'chat', 'otherUserId': 'sender'},
+      );
+      when(() => local.getNotificationAppLaunchDetails()).thenAnswer(
+        (_) async => const NotificationAppLaunchDetails(
+          true,
+          notificationResponse: NotificationResponse(
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+            payload: '{bad',
+          ),
         ),
-      ),
+      );
+      expect(
+        await NotificationService.getLocalLaunchData(localNotifications: local),
+        isNull,
+      );
+    },
+  );
+
+  for (final alreadyHandled in [false, true]) {
+    test(
+      'processes launch notification once; handled at startup: $alreadyHandled',
+      () async {
+        final messaging = MockFirebaseMessaging();
+        final firestore = MockFirebaseFirestore();
+        final auth = MockFirebaseAuth();
+        final localNotifications = MockLocalNotifications();
+        final settings = MockNotificationSettings();
+        final prefs = await SharedPreferences.getInstance();
+        final handledNotifications = <Map<String, dynamic>>[];
+        final preparedChats = <Map<String, dynamic>>[];
+        String? activeChat = 'chat';
+        final foreground = StreamController<RemoteMessage>();
+        addTearDown(foreground.close);
+
+        when(
+          () => messaging.setForegroundNotificationPresentationOptions(
+            alert: true,
+            badge: true,
+            sound: true,
+          ),
+        ).thenAnswer((_) async {});
+        when(() => messaging.getNotificationSettings())
+            .thenAnswer((_) async => settings);
+        when(() => settings.authorizationStatus)
+            .thenReturn(AuthorizationStatus.denied);
+        when(() => auth.currentUser).thenReturn(null);
+        when(
+          () => localNotifications.initialize(
+            settings: any(named: 'settings'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
+          ),
+        ).thenAnswer((_) async => true);
+        when(() => localNotifications.getNotificationAppLaunchDetails())
+            .thenAnswer(
+              (_) async => const NotificationAppLaunchDetails(
+                true,
+                notificationResponse: NotificationResponse(
+                  notificationResponseType:
+                      NotificationResponseType.selectedNotification,
+                  payload: '{"type":"friend_request"}',
+                ),
+              ),
+            );
+
+        final service = NotificationService(
+          messaging: messaging,
+          firestore: firestore,
+          auth: auth,
+          prefs: prefs,
+          onNotificationTapped: handledNotifications.add,
+          getActiveChatId: () => activeChat,
+          skipLaunchNotification: alreadyHandled,
+          prepareChat: (data) async {
+            preparedChats.add(data);
+          },
+          localNotifications: localNotifications,
+          tokenRefreshes: const Stream.empty(),
+          foregroundMessages: foreground.stream,
+        );
+
+        await service.initialize();
+        await service.initialize();
+
+        expect(
+          handledNotifications,
+          alreadyHandled
+              ? isEmpty
+              : [
+                  {'type': 'friend_request'},
+                ],
+        );
+        if (alreadyHandled) {
+          verifyNever(
+            () => localNotifications.getNotificationAppLaunchDetails(),
+          );
+        } else {
+          verify(() => localNotifications.getNotificationAppLaunchDetails())
+              .called(1);
+        }
+        foreground.add(
+          const RemoteMessage(data: {'type': 'new_message', 'chatId': 'chat'}),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(preparedChats, isEmpty);
+        activeChat = null;
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        foreground.add(
+          const RemoteMessage(data: {'type': 'new_message', 'chatId': 'chat'}),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(preparedChats, [
+          {'type': 'new_message', 'chatId': 'chat'},
+        ]);
+        verify(
+          () => messaging.setForegroundNotificationPresentationOptions(
+            alert: true,
+            badge: true,
+            sound: true,
+          ),
+        ).called(1);
+        verify(() => messaging.getNotificationSettings()).called(2);
+      },
     );
-
-    final service = NotificationService(
-      messaging: messaging,
-      firestore: firestore,
-      auth: auth,
-      prefs: prefs,
-      onNotificationTapped: handledNotifications.add,
-      getActiveChatId: () => null,
-      localNotifications: localNotifications,
-      tokenRefreshes: const Stream.empty(),
-      foregroundMessages: const Stream.empty(),
-    );
-
-    await service.initialize();
-    await service.initialize();
-
-    expect(handledNotifications, [
-      {'type': 'friend_request'},
-    ]);
-    verify(() => localNotifications.getNotificationAppLaunchDetails())
-        .called(1);
-    verify(
-      () => messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      ),
-    ).called(1);
-    verify(() => messaging.getNotificationSettings()).called(2);
-  });
+  }
 
   test(
     'ignores a late token write denied after account deletion starts',

@@ -8,6 +8,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/account_deletion_service.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/services/notification_service.dart';
@@ -80,6 +81,7 @@ final chatServiceProvider = Provider<ChatService>((ref) {
     firestore: ref.watch(firebaseFirestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
     functions: ref.watch(firebaseFunctionsProvider),
+    messageCache: ChatMessageCache(ref.watch(sharedPreferencesProvider)),
   );
 });
 
@@ -93,14 +95,21 @@ final friendServiceProvider = Provider<FriendService>((ref) {
 
 // ── Servicios con dependencias ──────────────────────────────────
 
+final localNotificationLaunchHandledProvider = Provider<bool>((ref) => false);
+
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService(
     messaging: ref.read(firebaseMessagingProvider),
     firestore: ref.read(firebaseFirestoreProvider),
     auth: ref.read(firebaseAuthProvider),
     prefs: ref.read(sharedPreferencesProvider),
-    onNotificationTapped: (data) =>
-        ref.read(pendingNotificationProvider.notifier).setValue(data),
+    onNotificationTapped: (data) {
+      unawaited(ref.read(chatServiceProvider).prepareNotificationChat(data));
+      ref.read(pendingNotificationProvider.notifier).setValue(data);
+    },
+    prepareChat: (data) =>
+        ref.read(chatServiceProvider).prepareNotificationChat(data),
+    skipLaunchNotification: ref.read(localNotificationLaunchHandledProvider),
     getActiveChatId: () => ref.read(activeChatIdProvider),
   );
 });

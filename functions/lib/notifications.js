@@ -103,7 +103,7 @@ async function sendNotification(recipientUid, recipientPrivateData, notification
                     ...(tag ? { headers: { 'apns-collapse-id': tag.slice(0, 64) } } : {}),
                     payload: {
                         aps: {
-                            ...(isChatMessage ? { alert: notification } : {}),
+                            ...(isChatMessage ? { alert: notification, contentAvailable: true } : {}),
                             ...(sound ? { sound: 'default' } : {}),
                         },
                     },

@@ -54,7 +54,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _isAppResumed = true;
 
   /// Timestamp de borrado suave derivado del documento del chat en Firestore.
-  /// Se resuelve de forma asíncrona en _initMessagesStream antes de suscribirse.
+  /// Se restaura junto al historial y se comprueba en _initMessagesStream.
   DateTime? _deletedSince;
 
   bool _isOtherUserDeleted = false;
@@ -165,20 +165,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  /// Lee el chat de Firestore para obtener deletedAt[currentUid] y luego
-  /// arranca la suscripción de mensajes. Al hacerlo aquí (en lugar de tomar
-  /// el valor de la URL), todas las rutas de entrada al chat son correctas:
-  /// lista de mensajes, perfil de usuario y notificaciones.
-  ///
-  /// Si Firestore falla, no arranca el stream sin filtro (lo que mostraría
-  /// mensajes borrados). En cambio muestra genericError y sale del chat.
+  /// El historial persistido incluye el filtro de borrado: permite escuchar
+  /// inmediatamente y comprobar el documento actualizado en segundo plano.
   Future<void> _initMessagesStream() async {
+    final service = ref.read(chatServiceProvider);
+    final history = service.getCachedHistory(widget.chatId);
+    final startedFromCache = history != null;
+    if (history != null) {
+      _deletedSince = history.since;
+      _listenToMessages();
+    }
+
+    final DateTime? verifiedSince;
     try {
-      _deletedSince = await ref
-          .read(chatServiceProvider)
-          .getDeletedSince(widget.chatId);
+      verifiedSince = await service.getDeletedSince(widget.chatId);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || startedFromCache) return;
       setState(() => _isInitialLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
@@ -187,17 +189,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     if (!mounted) return;
+    if (startedFromCache && verifiedSince == _deletedSince) return;
 
-    // La comprobación puede invalidar la caché si se borró desde otro equipo.
-    final cached = ref
-        .read(chatServiceProvider)
-        .getCachedMessages(widget.chatId);
-    if (cached != null || !_isInitialLoading) {
-      setState(() {
-        _allMessages = cached ?? [];
-        if (cached != null) _isInitialLoading = false;
-      });
-    }
+    final cached = service.getCachedMessages(widget.chatId);
+    setState(() {
+      _deletedSince = verifiedSince;
+      _hasReceivedMessages = false;
+      _isLoadingMore = false;
+      _hasMoreMessages = true;
+      _allMessages = cached ?? [];
+      if (cached != null || startedFromCache) _isInitialLoading = false;
+    });
     _listenToMessages();
   }
 
@@ -328,6 +330,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _loadMoreMessages() async {
     if (!_hasReceivedMessages || _allMessages.isEmpty) return;
     final cursor = _allMessages.first.timestamp;
+    final generation = _messagesGeneration;
 
     setState(() => _isLoadingMore = true);
 
@@ -340,7 +343,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             since: _deletedSince,
           );
 
-      if (!mounted) return;
+      if (!mounted || generation != _messagesGeneration) return;
 
       if (older.isEmpty) {
         setState(() {

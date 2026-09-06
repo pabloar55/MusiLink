@@ -22,10 +22,9 @@ import '../helpers/mocks.dart';
 class _MockChatService extends Mock implements ChatService {}
 
 void main() {
-  for (final hasCache in [false, true]) {
-    testWidgets('keeps history live with initial cache: $hasCache', (
-      tester,
-    ) async {
+  for (final mode in ['cold', 'cached', 'offline']) {
+    final hasCache = mode != 'cold';
+    testWidgets('keeps history live when opening $mode', (tester) async {
       final initial = StreamController<List<Message>>.broadcast();
       final recent = StreamController<List<Message>>.broadcast();
       final history = StreamController<List<Message>>.broadcast();
@@ -50,6 +49,9 @@ void main() {
       final deletionCheck = Completer<DateTime?>();
       when(() => chatService.getDeletedSince('chat-1'))
           .thenAnswer((_) => deletionCheck.future);
+      when(
+        () => chatService.getCachedHistory('chat-1'),
+      ).thenReturn(hasCache ? (since: null, messages: all.sublist(30)) : null);
       when(() => chatService.getCachedMessages('chat-1'))
           .thenReturn(hasCache ? all.sublist(30) : null);
       when(() => chatService.getMessages('chat-1'))
@@ -113,7 +115,12 @@ void main() {
         hasCache ? findsNothing : findsOneWidget,
       );
       expect(find.text('Message 59'), hasCache ? findsOneWidget : findsNothing);
-      verifyNever(() => chatService.getMessages('chat-1'));
+      if (hasCache) {
+        verify(() => chatService.getMessages('chat-1')).called(1);
+        expect(initial.hasListener, isTrue);
+      } else {
+        verifyNever(() => chatService.getMessages('chat-1'));
+      }
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(TextField), findsOneWidget);
       final composerPosition = tester.getTopLeft(find.byType(TextField));
@@ -131,7 +138,11 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text =
           'Draft';
       relationship.add(const RelationshipResult(RelationshipStatus.friends));
-      deletionCheck.complete(null);
+      if (mode == 'offline') {
+        deletionCheck.completeError(StateError('Offline'), StackTrace.empty);
+      } else {
+        deletionCheck.complete(null);
+      }
       await tester.pump();
       initial.add(all.sublist(30));
       await tester.pumpAndSettle();
