@@ -173,6 +173,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                   return RequestTile(
                     uid: request.senderId,
                     getUserFuture: getUserFuture,
+                    onTap: (user) {
+                      invalidateUserFuture(user.uid);
+                      context.push(userProfileLocation(user.uid), extra: user);
+                    },
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
