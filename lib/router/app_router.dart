@@ -311,8 +311,11 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
     return location == '/deleting-account' ? null : '/deleting-account';
   }
   if (!notifier.setupStateKnown) {
-    if (location == '/auth' ||
-        location == '/onboarding' ||
+    // Tras autenticar una cuenta sin caché, el perfil tarda un instante en
+    // resolverse. Mantener /auth durante esa espera evita montar MainScreen
+    // (Discovery) antes de saber si hay que iniciar el onboarding.
+    if (location == '/auth') return null;
+    if (location == '/onboarding' ||
         location == '/username-setup' ||
         location == '/photo-setup' ||
         location == '/artist-select') {

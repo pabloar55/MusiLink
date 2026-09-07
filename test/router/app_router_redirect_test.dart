@@ -256,10 +256,35 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(n.setupStateKnown, isFalse);
-      expect(appRedirect(n, '/auth'), '/');
+      expect(appRedirect(n, '/auth'), isNull);
       expect(appRedirect(n, '/'), isNull);
       n.dispose();
     });
+
+    test(
+      'el alta espera en auth y no muestra discovery antes del onboarding',
+      () {
+        final n = buildNotifier()
+          ..setInitialized(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+            setupStateKnown: false,
+          );
+
+        expect(appRedirect(n, '/auth'), isNull);
+
+        n.setInitialized(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
+        expect(appRedirect(n, '/auth'), '/onboarding');
+        n.dispose();
+      },
+    );
   });
 
   // ── Estado 4: onboarding completado, sin username ─────────────
