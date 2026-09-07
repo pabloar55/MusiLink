@@ -46,7 +46,24 @@ class CachedUserSetupState {
 class UserSetupCache {
   const UserSetupCache._();
 
-  static const _keyPrefix = 'user_setup_state_v1_';
+  static const _keyPrefix = 'user_setup_state_v2_';
+
+  // v1 podía contener flags globales heredados de otra cuenta.
+  // Solo un perfil musical ya guardado permite reconstruir esos pasos.
+  static CachedUserSetupState resolve(
+    SharedPreferences prefs,
+    String uid, {
+    required bool usernameSet,
+    required bool artistsSelected,
+  }) {
+    final cached = read(prefs, uid);
+    return CachedUserSetupState(
+      usernameSet: usernameSet,
+      artistsSelected: artistsSelected,
+      onboardingDone: cached?.onboardingDone ?? artistsSelected,
+      photoSetupDone: cached?.photoSetupDone ?? artistsSelected,
+    );
+  }
 
   static CachedUserSetupState? read(SharedPreferences prefs, String uid) {
     final raw = prefs.getString('$_keyPrefix$uid');

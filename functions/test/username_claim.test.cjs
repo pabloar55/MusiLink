@@ -21,7 +21,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const collectionName of ['usernames', 'users', 'user_private']) {
+  for (const collectionName of ['usernames', 'users', 'user_private', 'account_deletions']) {
     const snapshot = await db.collection(collectionName).get();
     if (snapshot.empty) continue;
     const batch = db.batch();
@@ -56,9 +56,10 @@ test('dos claims simultáneos del mismo username producen un solo ganador', asyn
   const profiles = await db.collection('users').get();
   const privateProfiles = await db.collection('user_private').get();
   assert.equal(reservation.exists, true);
-  assert.equal(profiles.size, 1);
+  assert.equal(profiles.size, 0);
   assert.equal(privateProfiles.size, 1);
-  assert.equal(profiles.docs[0].id, reservation.data().uid);
+  assert.equal(privateProfiles.docs[0].id, reservation.data().uid);
+  assert.equal(privateProfiles.docs[0].data().setupProfile.username, 'same_name');
 });
 
 test('repetir el mismo claim es idempotente', async () => {
@@ -67,7 +68,7 @@ test('repetir el mismo claim es idempotente', async () => {
   await claimUsernameAndCreateProfile(db, 'alice', 'alice@example.com', payload);
 
   assert.equal((await db.collection('usernames').get()).size, 1);
-  assert.equal((await db.collection('users').get()).size, 1);
+  assert.equal((await db.collection('users').get()).size, 0);
   assert.equal((await db.collection('user_private').get()).size, 1);
 });
 
@@ -88,4 +89,29 @@ test('normaliza el ID y rechaza usernames reservados', async () => {
     }),
     (error) => error.code === 'invalid-argument',
   );
+});
+
+
+test('un borrador conserva foto e identidad al reintentar y no aparece en búsqueda', async () => {
+  const payload = { displayName: 'Alice', username: 'alice_name' };
+  await claimUsernameAndCreateProfile(db, 'alice', 'alice@example.com', payload);
+  await db.doc('user_private/alice').update({ 'setupProfile.photoUrl': 'saved-photo' });
+  await claimUsernameAndCreateProfile(db, 'alice', 'alice@example.com', payload);
+  const draft = (await db.doc('user_private/alice').get()).data().setupProfile;
+  assert.equal(draft.photoUrl, 'saved-photo');
+  assert.equal((await db.collection('users').where('username', '==', 'alice_name').get()).empty, true);
+  await assert.rejects(
+    claimUsernameAndCreateProfile(db, 'alice', '', { ...payload, username: 'different_name' }),
+    (error) => error.code === 'failed-precondition',
+  );
+  assert.equal((await db.doc('usernames/different_name').get()).exists, false);
+});
+
+test('no permite reservar durante la eliminación de cuenta', async () => {
+  await db.doc('account_deletions/alice').set({ status: 'pending' });
+  await assert.rejects(
+    claimUsernameAndCreateProfile(db, 'alice', '', { displayName: 'Alice', username: 'alice_name' }),
+    (error) => error.code === 'failed-precondition',
+  );
+  assert.equal((await db.doc('user_private/alice').get()).exists, false);
 });

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
@@ -14,8 +13,6 @@ import 'package:musi_link/widgets/image_source_picker.dart';
 
 class PhotoSetupScreen extends ConsumerStatefulWidget {
   const PhotoSetupScreen({super.key});
-
-  static const String photoSetupDoneKey = 'photo_setup_done';
 
   @override
   ConsumerState<PhotoSetupScreen> createState() => _PhotoSetupScreenState();
@@ -48,9 +45,6 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
   }
 
   Future<void> _completeSetup() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(PhotoSetupScreen.photoSetupDoneKey, true);
-    if (!mounted) return;
     ref.read(appRouterNotifierProvider).setPhotoSetupDone();
   }
 
@@ -60,17 +54,20 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
       return;
     }
 
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
     setState(() => _isUploading = true);
 
     try {
-      final uid = ref.read(firebaseAuthProvider).currentUser!.uid;
       final url = await ref
           .read(storageServiceProvider)
           .uploadProfilePhoto(uid, _selectedImage!);
       if (url != null) {
-        await ref.read(userServiceProvider).updateProfile(uid, photoUrl: url);
+        await ref.read(userServiceProvider).updateSetupPhoto(uid, url);
       }
-      if (!mounted) return;
+      if (!mounted || ref.read(firebaseAuthProvider).currentUser?.uid != uid) {
+        return;
+      }
       await _completeSetup();
     } catch (e, st) {
       reportError(e, st).ignore();
@@ -155,9 +152,8 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
               // Title
               Text(
                 l10n.photoSetupTitle,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
 
@@ -166,9 +162,8 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
               // Subtitle
               Text(
                 l10n.photoSetupSubtitle,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
 

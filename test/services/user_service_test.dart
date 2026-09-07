@@ -29,12 +29,10 @@ void main() {
     mockPrivateUsersRef = MockCollectionReference();
     mockBatch = MockWriteBatch();
     when(() => mockFirestore.collection('users')).thenReturn(mockUsersRef);
-    when(
-      () => mockFirestore.collection('usernames'),
-    ).thenReturn(mockUsernamesRef);
-    when(
-      () => mockFirestore.collection('user_private'),
-    ).thenReturn(mockPrivateUsersRef);
+    when(() => mockFirestore.collection('usernames'))
+        .thenReturn(mockUsernamesRef);
+    when(() => mockFirestore.collection('user_private'))
+        .thenReturn(mockPrivateUsersRef);
     when(() => mockFirestore.batch()).thenReturn(mockBatch);
     when(() => mockBatch.commit()).thenAnswer((_) async {});
     userService = UserService(
@@ -47,12 +45,10 @@ void main() {
   group('UserService', () {
     group('createUserProfile', () {
       test('delega el alta atómica en la callable', () async {
-        when(
-          () => mockFunctions.httpsCallable('createUserProfile'),
-        ).thenReturn(mockCallable);
-        when(
-          () => mockCallable.call<void>(any()),
-        ).thenAnswer((_) async => MockHttpsCallableResult<void>());
+        when(() => mockFunctions.httpsCallable('createUserProfile'))
+            .thenReturn(mockCallable);
+        when(() => mockCallable.call<void>(any()))
+            .thenAnswer((_) async => MockHttpsCallableResult<void>());
 
         await userService.createUserProfile(
           displayName: ' Test User ',
@@ -70,9 +66,8 @@ void main() {
         () async {
           final exception = MockFirebaseFunctionsException();
           when(() => exception.code).thenReturn('already-exists');
-          when(
-            () => mockFunctions.httpsCallable('createUserProfile'),
-          ).thenReturn(mockCallable);
+          when(() => mockFunctions.httpsCallable('createUserProfile'))
+              .thenReturn(mockCallable);
           when(() => mockCallable.call<void>(any())).thenThrow(exception);
 
           expect(
@@ -84,6 +79,54 @@ void main() {
           );
         },
       );
+    });
+
+    group('getSetupUser', () {
+      test('recupera borrador del propietario sin publicarlo ni cachearlo como perfil', () async {
+        final publicRef = MockDocumentReference();
+        final privateRef = MockDocumentReference();
+        final missing = MockDocumentSnapshot();
+        final privateDoc = MockDocumentSnapshot();
+        const options = GetOptions(source: Source.server);
+        when(() => mockUsersRef.doc('alice')).thenReturn(publicRef);
+        when(() => mockPrivateUsersRef.doc('alice')).thenReturn(privateRef);
+        when(() => publicRef.get(options)).thenAnswer((_) async => missing);
+        when(() => publicRef.get()).thenAnswer((_) async => missing);
+        when(() => missing.exists).thenReturn(false);
+        when(() => privateRef.get(options)).thenAnswer((_) async => privateDoc);
+        when(() => privateDoc.data()).thenReturn({
+          'setupProfile': {
+            'displayName': 'Alice',
+            'username': 'alice_name',
+            'photoUrl': 'saved-photo',
+          },
+        });
+        final resumed = await userService.getSetupUser(
+          'alice',
+          serverOnly: true,
+        );
+        expect(resumed?.username, 'alice_name');
+        expect(resumed?.photoUrl, 'saved-photo');
+        expect(resumed?.topArtistNames, isEmpty);
+        expect(await userService.getUser('alice'), isNull);
+      });
+
+      test('prioriza el perfil publicado sin leer el borrador', () async {
+        final publicRef = MockDocumentReference();
+        final publicDoc = MockDocumentSnapshot();
+        when(() => mockUsersRef.doc('alice')).thenReturn(publicRef);
+        when(() => publicRef.get()).thenAnswer((_) async => publicDoc);
+        when(() => publicDoc.exists).thenReturn(true);
+        when(() => publicDoc.id).thenReturn('alice');
+        when(() => publicDoc.data()).thenReturn({
+          'displayName': 'Alice',
+          'username': 'alice_name',
+          'topArtistNames': ['Muse'],
+        });
+        final resumed = await userService.getSetupUser('alice');
+        expect(resumed?.topArtistNames, ['Muse']);
+        verifyNever(() => mockPrivateUsersRef.doc(any()));
+      });
     });
 
     group('usernameExists', () {
@@ -152,28 +195,24 @@ void main() {
         final serverSnapshot = MockDocumentSnapshot();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
         when(() => mockDocRef.get()).thenAnswer((_) async => cachedSnapshot);
-        when(
-          () => mockDocRef.get(const GetOptions(source: Source.server)),
-        ).thenAnswer((_) async => serverSnapshot);
+        when(() => mockDocRef.get(const GetOptions(source: Source.server)))
+            .thenAnswer((_) async => serverSnapshot);
         for (final snapshot in [cachedSnapshot, serverSnapshot]) {
           when(() => snapshot.exists).thenReturn(true);
           when(() => snapshot.id).thenReturn('uid123');
         }
-        when(
-          () => cachedSnapshot.data(),
-        ).thenReturn({'displayName': 'Cached name', 'username': 'cached'});
-        when(
-          () => serverSnapshot.data(),
-        ).thenReturn({'displayName': 'Server name', 'username': 'server'});
+        when(() => cachedSnapshot.data())
+            .thenReturn({'displayName': 'Cached name', 'username': 'cached'});
+        when(() => serverSnapshot.data())
+            .thenReturn({'displayName': 'Server name', 'username': 'server'});
 
         final cached = await userService.getUser('uid123');
         final fresh = await userService.getUser('uid123', serverOnly: true);
 
         expect(cached?.displayName, 'Cached name');
         expect(fresh?.displayName, 'Server name');
-        verify(
-          () => mockDocRef.get(const GetOptions(source: Source.server)),
-        ).called(1);
+        verify(() => mockDocRef.get(const GetOptions(source: Source.server)))
+            .called(1);
       });
 
       test('cacheOnly consulta exclusivamente la caché persistente', () async {
@@ -198,9 +237,8 @@ void main() {
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
-        when(
-          () => mockDocRef.get(),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+        when(() => mockDocRef.get())
+            .thenThrow(FirebaseException(plugin: 'firestore'));
 
         expect(
           () => userService.getUser('uid123'),
@@ -216,9 +254,8 @@ void main() {
         when(() => mockDocRef.get()).thenAnswer((_) => completer.future);
         when(() => mockDocSnap.exists).thenReturn(true);
         when(() => mockDocSnap.id).thenReturn('uid123');
-        when(
-          () => mockDocSnap.data(),
-        ).thenReturn({'displayName': 'Test User', 'photoUrl': ''});
+        when(() => mockDocSnap.data())
+            .thenReturn({'displayName': 'Test User', 'photoUrl': ''});
 
         final first = userService.getUser('uid123');
         final second = userService.getUser('uid123');
@@ -290,9 +327,8 @@ void main() {
       test('propaga error si Firestore falla', () async {
         final mockDocRef = MockDocumentReference();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockDocRef);
-        when(
-          () => mockDocRef.get(),
-        ).thenThrow(FirebaseException(plugin: 'firestore'));
+        when(() => mockDocRef.get())
+            .thenThrow(FirebaseException(plugin: 'firestore'));
 
         expect(
           () => userService.userExists('uid123'),
@@ -384,6 +420,7 @@ void main() {
           'email': 'other@test.com',
           'displayName': 'Test User',
           'username': 'testuser',
+          'topArtistNames': ['Radiohead'],
           'photoUrl': '',
           'createdAt': Timestamp.fromDate(DateTime(2025, 1, 1)),
           'lastLogin': Timestamp.fromDate(DateTime(2025, 1, 1)),
@@ -400,7 +437,13 @@ void main() {
         ).thenReturn(mockQuery2);
         when(() => mockQuery2.limit(20)).thenReturn(mockQuery3);
         when(() => mockQuery3.get()).thenAnswer((_) async => mockQuerySnapshot);
-        when(() => mockQuerySnapshot.docs).thenReturn([mockDoc]);
+        final incomplete = MockQueryDocumentSnapshot();
+        when(() => incomplete.id).thenReturn('unfinished_uid');
+        when(() => incomplete.data()).thenReturn({
+          'displayName': 'Unfinished',
+          'username': 'testunfinished',
+        });
+        when(() => mockQuerySnapshot.docs).thenReturn([incomplete, mockDoc]);
 
         final result = await userService.searchUsers(
           'test',
@@ -517,33 +560,24 @@ void main() {
         final mockPushTokensRef = MockCollectionReference();
         final mockPushTokensSnapshot = MockQuerySnapshot();
         when(() => mockUsersRef.doc('uid123')).thenReturn(mockUserDocRef);
-        when(
-          () => mockUserDocRef.get(),
-        ).thenAnswer((_) async => mockUserSnapshot);
-        when(
-          () => mockUserSnapshot.data(),
-        ).thenReturn({'username': 'testuser'});
-        when(
-          () => mockUsernamesRef.doc('testuser'),
-        ).thenReturn(mockReservationRef);
-        when(
-          () => mockReservationRef.get(),
-        ).thenAnswer((_) async => mockReservationSnapshot);
-        when(
-          () => mockReservationSnapshot.data(),
-        ).thenReturn({'uid': 'uid123'});
-        when(
-          () => mockReservationSnapshot.reference,
-        ).thenReturn(mockReservationRef);
-        when(
-          () => mockPrivateUsersRef.doc('uid123'),
-        ).thenReturn(mockPrivateDocRef);
-        when(
-          () => mockPrivateDocRef.collection('push_tokens'),
-        ).thenReturn(mockPushTokensRef);
-        when(
-          () => mockPushTokensRef.get(),
-        ).thenAnswer((_) async => mockPushTokensSnapshot);
+        when(() => mockUserDocRef.get())
+            .thenAnswer((_) async => mockUserSnapshot);
+        when(() => mockUserSnapshot.data())
+            .thenReturn({'username': 'testuser'});
+        when(() => mockUsernamesRef.doc('testuser'))
+            .thenReturn(mockReservationRef);
+        when(() => mockReservationRef.get())
+            .thenAnswer((_) async => mockReservationSnapshot);
+        when(() => mockReservationSnapshot.data())
+            .thenReturn({'uid': 'uid123'});
+        when(() => mockReservationSnapshot.reference)
+            .thenReturn(mockReservationRef);
+        when(() => mockPrivateUsersRef.doc('uid123'))
+            .thenReturn(mockPrivateDocRef);
+        when(() => mockPrivateDocRef.collection('push_tokens'))
+            .thenReturn(mockPushTokensRef);
+        when(() => mockPushTokensRef.get())
+            .thenAnswer((_) async => mockPushTokensSnapshot);
         when(() => mockPushTokensSnapshot.docs).thenReturn([]);
         when(() => mockBatch.update(mockUserDocRef, any())).thenReturn(null);
         when(() => mockBatch.delete(mockReservationRef)).thenReturn(null);
@@ -582,9 +616,8 @@ void main() {
           final mockQuery = MockQuery();
           final mockSnapshot = MockQuerySnapshot();
 
-          when(
-            () => mockUsersRef.where(FieldPath.documentId, whereIn: uids),
-          ).thenReturn(mockQuery);
+          when(() => mockUsersRef.where(FieldPath.documentId, whereIn: uids))
+              .thenReturn(mockQuery);
           when(() => mockQuery.get()).thenAnswer((_) async => mockSnapshot);
 
           final mockDoc = MockQueryDocumentSnapshot();
@@ -676,13 +709,11 @@ void main() {
         when(() => initialQuery.get()).thenAnswer((_) async => initialSnapshot);
         when(() => initialSnapshot.docs).thenReturn([user1Doc, user2Doc]);
         when(() => user1Doc.id).thenReturn('u1');
-        when(
-          () => user1Doc.data(),
-        ).thenReturn({'displayName': 'User 1', 'photoUrl': ''});
+        when(() => user1Doc.data())
+            .thenReturn({'displayName': 'User 1', 'photoUrl': ''});
         when(() => user2Doc.id).thenReturn('u2');
-        when(
-          () => user2Doc.data(),
-        ).thenReturn({'displayName': 'User 2', 'photoUrl': ''});
+        when(() => user2Doc.data())
+            .thenReturn({'displayName': 'User 2', 'photoUrl': ''});
 
         final first = await userService.getUsersByIds(initialUids);
         final second = await userService.getUsersByIds(['u1', 'u2']);
@@ -704,17 +735,15 @@ void main() {
         final secondDoc = MockQueryDocumentSnapshot();
         const friendIds = ['friend'];
 
-        when(
-          () => mockUsersRef.where(FieldPath.documentId, whereIn: friendIds),
-        ).thenReturn(query);
+        when(() => mockUsersRef.where(FieldPath.documentId, whereIn: friendIds))
+            .thenReturn(query);
         when(() => query.snapshots()).thenAnswer((_) => snapshots.stream);
         when(() => firstSnapshot.docs).thenReturn([firstDoc]);
         when(() => secondSnapshot.docs).thenReturn([secondDoc]);
         when(() => firstDoc.id).thenReturn('friend');
         when(() => secondDoc.id).thenReturn('friend');
-        when(
-          () => firstDoc.data(),
-        ).thenReturn({'displayName': 'Friend', 'username': 'friend'});
+        when(() => firstDoc.data())
+            .thenReturn({'displayName': 'Friend', 'username': 'friend'});
         when(() => secondDoc.data()).thenReturn({
           'displayName': 'Friend',
           'username': 'friend',

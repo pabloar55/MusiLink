@@ -35,7 +35,7 @@ class UserService {
 
   void clearCache() => _userCache.clear();
 
-  /// Reserva el username y crea el perfil mediante una callable transaccional.
+  /// Reserva el username y guarda un borrador privado hasta elegir artistas.
   Future<void> createUserProfile({
     required String displayName,
     required String username,
@@ -63,6 +63,49 @@ class UserService {
       await reportError(e, stack);
       rethrow;
     }
+  }
+
+  /// Lee el progreso del propietario sin exponer borradores en getUser/search.
+  Future<AppUser?> getSetupUser(
+    String uid, {
+    bool serverOnly = false,
+    bool cacheOnly = false,
+  }) async {
+    final publicUser = await getUser(
+      uid,
+      reportErrors: false,
+      serverOnly: serverOnly,
+      cacheOnly: cacheOnly,
+    );
+    if (publicUser != null) return publicUser;
+    final options = serverOnly
+        ? const GetOptions(source: Source.server)
+        : cacheOnly
+        ? const GetOptions(source: Source.cache)
+        : const GetOptions();
+    final privateDoc = await _privateUsersRef.doc(uid).get(options);
+    final draft = privateDoc.data()?['setupProfile'];
+    if (draft is! Map<String, dynamic>) return null;
+    return AppUser.fromMap(uid: uid, data: draft);
+  }
+
+  /// La foto previa a la selección musical permanece en el borrador privado.
+  Future<void> updateSetupPhoto(String uid, String photoUrl) async {
+    final publicRef = _usersRef.doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final publicDoc = await transaction.get(publicRef);
+      if (publicDoc.exists) {
+        transaction.update(publicRef, {
+          'photoUrl': photoUrl,
+          'profileIdentityUpdatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        transaction.update(_privateUsersRef.doc(uid), {
+          'setupProfile.photoUrl': photoUrl,
+        });
+      }
+    });
+    _userCache.remove(uid);
   }
 
   /// Stream en tiempo real del perfil de un usuario.
@@ -254,7 +297,12 @@ class UserService {
       return snapshot.docs
           .map(AppUser.fromFirestore)
           .whereType<AppUser>()
-          .where((u) => u.uid != excludeUid)
+          .where(
+            (u) =>
+                u.uid != excludeUid &&
+                u.topArtistNames.isNotEmpty &&
+                !u.isDeleted,
+          )
           .toList();
     } catch (e, stack) {
       await reportError(e, stack);

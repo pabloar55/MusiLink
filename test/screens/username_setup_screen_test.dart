@@ -46,17 +46,16 @@ void main() {
     userService = MockUserService();
     when(() => auth.currentUser).thenReturn(authUser);
     when(() => authUser.displayName).thenReturn('Alice');
+    when(() => authUser.uid).thenReturn('alice');
   });
 
   testWidgets('ignora respuestas antiguas del debounce', (tester) async {
     final aliceResult = Completer<bool>();
     final bobResult = Completer<bool>();
-    when(
-      () => userService.usernameExists('alice_name'),
-    ).thenAnswer((_) => aliceResult.future);
-    when(
-      () => userService.usernameExists('bob_name'),
-    ).thenAnswer((_) => bobResult.future);
+    when(() => userService.usernameExists('alice_name'))
+        .thenAnswer((_) => aliceResult.future);
+    when(() => userService.usernameExists('bob_name'))
+        .thenAnswer((_) => bobResult.future);
 
     await tester.pumpWidget(_app(auth: auth, userService: userService));
     final usernameField = find.byType(TextFormField).at(1);
@@ -84,9 +83,8 @@ void main() {
   testWidgets('muestra conflicto autoritativo devuelto por la callable', (
     tester,
   ) async {
-    when(
-      () => userService.usernameExists('alice_name'),
-    ).thenAnswer((_) async => false);
+    when(() => userService.usernameExists('alice_name'))
+        .thenAnswer((_) async => false);
     when(
       () => userService.createUserProfile(
         displayName: any(named: 'displayName'),

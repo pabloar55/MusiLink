@@ -63,24 +63,21 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
         }
       })();
       final profile = await userService
-          .getUser(loginUid, reportErrors: false, serverOnly: true)
+          .getSetupUser(loginUid, serverOnly: true)
           .timeout(const Duration(seconds: 5));
       final hasUsername = profile != null && profile.username.isNotEmpty;
       final hasArtists = profile != null && profile.topArtistNames.isNotEmpty;
-      final cachedSetup = UserSetupCache.read(prefs, loginUid);
-      final onboardingDone =
-          hasArtists ||
-          (cachedSetup?.onboardingDone ?? false) ||
-          (prefs.getBool(OnboardingScreen.onboardingCompletedKey) ?? false);
-      final photoSetupDone =
-          onboardingDone ||
-          (cachedSetup?.photoSetupDone ?? false) ||
-          (prefs.getBool(PhotoSetupScreen.photoSetupDoneKey) ?? false);
+      final setup = UserSetupCache.resolve(
+        prefs,
+        loginUid,
+        usernameSet: hasUsername,
+        artistsSelected: hasArtists,
+      );
       return (
         usernameSet: hasUsername,
         artistsSelected: hasArtists,
-        onboardingDone: onboardingDone,
-        photoSetupDone: photoSetupDone,
+        onboardingDone: setup.onboardingDone,
+        photoSetupDone: setup.photoSetupDone,
         deletionPending: await deletionPendingFuture,
       );
     },

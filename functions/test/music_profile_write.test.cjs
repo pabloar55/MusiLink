@@ -76,3 +76,37 @@ test('rejects writes while account deletion is pending', async () => {
   const data = (await db.doc('users/alice').get()).data();
   assert.equal('topArtists' in data, false);
 });
+
+
+const { claimUsernameAndCreateProfile } = require('../lib/username_claim.js');
+
+test('publishes a private draft only after saving artists and preserves its photo', async () => {
+  await claimUsernameAndCreateProfile(db, 'alice', 'alice@example.com', {
+    displayName: 'Alice', username: 'alice_name',
+  });
+  await db.doc('user_private/alice').update({ 'setupProfile.photoUrl': 'saved-photo' });
+  assert.equal((await db.doc('users/alice').get()).exists, false);
+  await assert.rejects(writeMusicProfile(db, 'alice', []),
+    (error) => error.code === 'failed-precondition');
+  assert.equal((await db.doc('users/alice').get()).exists, false);
+  const artists = parseMusicProfilePayload({ artists: ['Radiohead', 'Muse', 'Queen', 'Blur']
+    .map((name) => ({ name, imageUrl: '', genres: ['Rock'] })) });
+  await writeMusicProfile(db, 'alice', artists);
+  const user = (await db.doc('users/alice').get()).data();
+  assert.equal(user.username, 'alice_name');
+  assert.equal(user.photoUrl, 'saved-photo');
+  assert.equal(user.topArtistNames.length, 4);
+  assert.equal((await db.doc('user_private/alice').get()).data().setupProfile, undefined);
+  assert.equal(await writeMusicProfile(db, 'alice', artists), false);
+});
+
+test('does not publish a draft whose reservation was lost', async () => {
+  await claimUsernameAndCreateProfile(db, 'alice', '', { displayName: 'Alice', username: 'alice_name' });
+  await db.doc('usernames/alice_name').update({ uid: 'bob' });
+  const artists = parseMusicProfilePayload({ artists: ['A', 'B', 'C', 'D']
+    .map((name) => ({ name, imageUrl: '', genres: [] })) });
+  await assert.rejects(writeMusicProfile(db, 'alice', artists),
+    (error) => error.code === 'failed-precondition');
+  assert.equal((await db.doc('users/alice').get()).exists, false);
+  assert.ok((await db.doc('user_private/alice').get()).data().setupProfile);
+});

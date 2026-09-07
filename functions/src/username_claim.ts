@@ -50,7 +50,7 @@ function validatedClaim(data: unknown): {
 }
 
 /**
- * Atomically reserves a normalized username and creates both profile documents.
+ * Atomically reserves a username and saves a private setup draft.
  * Exported separately from the callable wrapper so the contention behavior can
  * be exercised against the Firestore emulator.
  */
@@ -64,13 +64,18 @@ export async function claimUsernameAndCreateProfile(
   const reservationRef = db.doc(`usernames/${username}`);
   const publicProfileRef = db.doc(`users/${uid}`);
   const privateProfileRef = db.doc(`user_private/${uid}`);
+  const deletionRef = db.doc(`account_deletions/${uid}`);
 
   await db.runTransaction(async (transaction) => {
-    const [reservation, publicProfile, privateProfile] = await transaction.getAll(
+    const [reservation, publicProfile, privateProfile, deletion] = await transaction.getAll(
       reservationRef,
       publicProfileRef,
       privateProfileRef,
+      deletionRef,
     );
+    if (deletion.exists) {
+      throw new HttpsError('failed-precondition', 'Account deletion is pending.');
+    }
 
     const reservationOwner = reservation.data()?.uid;
     if (reservation.exists && reservationOwner !== uid) {
@@ -87,7 +92,8 @@ export async function claimUsernameAndCreateProfile(
       }
     }
 
-    if (privateProfile.exists && !publicProfile.exists) {
+    const draft = privateProfile.data()?.setupProfile;
+    if (privateProfile.exists && !publicProfile.exists && draft?.username !== username) {
       throw new HttpsError(
         'failed-precondition',
         'A private profile already exists without a public profile.',
@@ -100,16 +106,11 @@ export async function claimUsernameAndCreateProfile(
         createdAt: FieldValue.serverTimestamp(),
       });
     }
-    if (!publicProfile.exists) {
-      transaction.create(publicProfileRef, {
-        displayName,
-        username,
-        photoUrl: '',
-        musicProfileVersion: 0,
-      });
-    }
     if (!privateProfile.exists) {
       transaction.create(privateProfileRef, {
+        ...(!publicProfile.exists ? {
+          setupProfile: { displayName, username, photoUrl: '', musicProfileVersion: 0 },
+        } : {}),
         email,
         createdAt: FieldValue.serverTimestamp(),
         lastLogin: FieldValue.serverTimestamp(),

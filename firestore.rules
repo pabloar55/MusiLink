@@ -1,4 +1,4 @@
-rules_version = '2';
+rules_version = '3';
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -272,7 +272,7 @@ service cloud.firestore {
 
     match /user_private/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      // Se crea junto al perfil público desde la callable transaccional.
+      // La callable crea el perfil privado y el borrador antes de publicarlo.
       allow create: if false;
       allow update: if request.auth != null
         && !exists(/databases/$(database)/documents/account_deletions/$(request.auth.uid))
@@ -288,7 +288,17 @@ service cloud.firestore {
             'deletedAt',
             'notifSound',
             'notifVibration',
+            'setupProfile',
           ])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['setupProfile'])
+            || (
+              !exists(/databases/$(database)/documents/users/$(userId))
+              && request.resource.data.setupProfile.diff(resource.data.setupProfile)
+                .affectedKeys().hasOnly(['photoUrl'])
+              && validProfilePhotoUrl(userId, request.resource.data.setupProfile.photoUrl)
+            )
+          )
           && validPrivateProfile(userId, request.resource.data)
           && ownerOnlyRemovesAtMostOneFriend(userId)
         )

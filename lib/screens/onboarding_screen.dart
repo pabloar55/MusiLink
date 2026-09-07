@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/widgets/onboarding/onboarding_page.dart';
 
 /// Pantalla de bienvenida con slider de 5 páginas explicativas.
 /// Se muestra solo la primera vez que el usuario inicia sesión.
-/// Guarda un flag en SharedPreferences para no volver a mostrarse.
+/// El router guarda el progreso de forma independiente por cuenta.
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
-
-  /// Clave de SharedPreferences para indicar si el onboarding ya se completó.
-  static const String onboardingCompletedKey = 'onboarding_completed';
 
   @override
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -30,13 +26,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
-  /// Marca el onboarding como completado y navega a MainScreen.
-  Future<void> _completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(OnboardingScreen.onboardingCompletedKey, true);
-
-    if (!mounted) return;
-
+  void _completeOnboarding() {
     ref.read(appRouterNotifierProvider).setOnboardingDone();
   }
 

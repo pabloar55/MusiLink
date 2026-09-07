@@ -69,6 +69,7 @@ class AppRouterNotifier extends ChangeNotifier {
   StreamSubscription<User?>? _sub;
   Timer? _retryTimer;
   int _authGeneration = 0;
+  int _setupRevision = 0;
   int _retryAttempt = 0;
   String? _setupStateUid;
   bool _initialized = false;
@@ -167,10 +168,22 @@ class AppRouterNotifier extends ChangeNotifier {
   }
 
   Future<void> _refreshUserState(User user, int generation) async {
+    final revision = _setupRevision;
     try {
       final state = await _fetchUserState!(user.uid);
       if (!_isCurrentAuthUser(user, generation)) return;
-      _applySetupState(state);
+      // Un refresco iniciado antes de completar un paso no debe deshacerlo.
+      if (_setupStateUid == user.uid && revision != _setupRevision) {
+        _applySetupState((
+          usernameSet: state.usernameSet || _usernameSet,
+          artistsSelected: state.artistsSelected || _artistsSelected,
+          onboardingDone: state.onboardingDone || _onboardingDone,
+          photoSetupDone: state.photoSetupDone || _photoSetupDone,
+          deletionPending: state.deletionPending,
+        ));
+      } else {
+        _applySetupState(state);
+      }
       _setupStateKnown = true;
       _setupStateUid = user.uid;
       _retryAttempt = 0;
@@ -219,6 +232,8 @@ class AppRouterNotifier extends ChangeNotifier {
 
   /// Llamar desde UsernameSetupScreen tras guardar el username.
   void setUsernameSet() {
+    if (_auth.currentUser == null) return;
+    _setupRevision++;
     _usernameSet = true;
     _setupStateKnown = true;
     _setupStateUid = _auth.currentUser?.uid;
@@ -229,6 +244,8 @@ class AppRouterNotifier extends ChangeNotifier {
   /// Llamar después de seleccionar artistas para que el router re-evalúe
   /// y navegue automáticamente al siguiente paso.
   void setArtistsSelected() {
+    if (_auth.currentUser == null) return;
+    _setupRevision++;
     _artistsSelected = true;
     _setupStateKnown = true;
     _setupStateUid = _auth.currentUser?.uid;
@@ -239,6 +256,8 @@ class AppRouterNotifier extends ChangeNotifier {
   /// Llamar al completar el onboarding para que el router re-evalúe
   /// y navegue automáticamente a la pantalla de foto de perfil.
   void setOnboardingDone() {
+    if (_auth.currentUser == null) return;
+    _setupRevision++;
     _onboardingDone = true;
     _setupStateKnown = true;
     _setupStateUid = _auth.currentUser?.uid;
@@ -248,6 +267,8 @@ class AppRouterNotifier extends ChangeNotifier {
 
   /// Llamar al completar (o saltar) la configuración de foto de perfil.
   void setPhotoSetupDone() {
+    if (_auth.currentUser == null) return;
+    _setupRevision++;
     _photoSetupDone = true;
     _setupStateKnown = true;
     _setupStateUid = _auth.currentUser?.uid;

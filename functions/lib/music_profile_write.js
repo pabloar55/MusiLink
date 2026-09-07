@@ -165,6 +165,7 @@ function availableMusicProfileTokens(limiterData, now) {
 }
 async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Timestamp.now()) {
     const userRef = firestore.doc(`users/${uid}`);
+    const privateRef = firestore.doc(`user_private/${uid}`);
     const deletionRef = firestore.doc(`account_deletions/${uid}`);
     const limiterRef = firestore.doc(`rate_limits/${uid}`);
     return firestore.runTransaction(async (transaction) => {
@@ -173,13 +174,24 @@ async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Time
             transaction.get(deletionRef),
             transaction.get(limiterRef),
         ]);
-        if (!userSnapshot.exists
+        const privateSnapshot = !userSnapshot.exists ? await transaction.get(privateRef) : null;
+        const draft = privateSnapshot?.data()?.setupProfile;
+        if ((!userSnapshot.exists && !draft)
             || userSnapshot.get('username') === 'deleted_user'
             || deletionSnapshot.exists) {
             throw new https_1.HttpsError('failed-precondition', 'An active user profile is required.');
         }
+        if (!userSnapshot.exists && artists.length < 4) {
+            throw new https_1.HttpsError('failed-precondition', 'Select at least four artists before publishing the profile.');
+        }
+        if (!userSnapshot.exists) {
+            const reservation = await transaction.get(firestore.doc(`usernames/${draft.username}`));
+            if (reservation.data()?.uid !== uid) {
+                throw new https_1.HttpsError('failed-precondition', 'A username reservation is required.');
+            }
+        }
         const fields = buildMusicProfileFields(artists, now);
-        const userData = userSnapshot.data() ?? {};
+        const userData = userSnapshot.data() ?? draft ?? {};
         if (sameMusicProfile(userData, fields))
             return false;
         const limiterData = limiterSnapshot.data() ?? {};
@@ -195,7 +207,13 @@ async function writeMusicProfile(firestore, uid, artists, now = firestore_1.Time
         else {
             delete userUpdates.recommendationsRefreshRequestedAt;
         }
-        transaction.update(userRef, userUpdates);
+        if (userSnapshot.exists) {
+            transaction.update(userRef, userUpdates);
+        }
+        else {
+            transaction.create(userRef, { ...draft, ...userUpdates });
+            transaction.update(privateRef, { setupProfile: firestore_1.FieldValue.delete() });
+        }
         transaction.set(limiterRef, {
             musicProfileTokens: availableTokens - 1,
             musicProfileTokensUpdatedAt: now,

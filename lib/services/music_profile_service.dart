@@ -82,10 +82,13 @@ class MusicProfileService with AuthenticatedService {
   Future<void> saveManualArtists(List<app.Artist> selectedArtists) async {
     try {
       // Fail before catalog hydration when the session has already expired.
-      currentUid;
+      final uid = currentUid;
       final artists = await _hydrateMissingArtistDetails(
         selectedArtists.take(MusicProfileLimits.maxArtists).toList(),
       );
+      if (currentUid != uid) {
+        throw StateError('Account changed while preparing artists.');
+      }
       final callable = _functions.httpsCallable('saveMusicProfile');
       await callable.call<void>({
         'artists': artists.map((artist) => artist.toMap()).toList(),

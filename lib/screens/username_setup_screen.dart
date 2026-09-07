@@ -87,6 +87,8 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
     final username = _usernameController.text.trim();
     if (_isAvailable != true || _lastChecked != username) return;
 
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
     setState(() => _isLoading = true);
     try {
       final displayName = _displayNameController.text.trim();
@@ -97,7 +99,7 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
         username: username,
       );
 
-      if (mounted) {
+      if (mounted && ref.read(firebaseAuthProvider).currentUser?.uid == uid) {
         ref.read(appRouterNotifierProvider).setUsernameSet();
       }
     } on UsernameAlreadyTakenException {
@@ -172,9 +174,8 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
                 Center(
                   child: Text(
                     l10n.usernameSetupTitle,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                 ),

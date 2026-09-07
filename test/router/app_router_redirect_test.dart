@@ -501,4 +501,86 @@ void main() {
       n.dispose();
     });
   });
+  test(
+    'un refresco antiguo no deshace onboarding ni completa la foto',
+    () async {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      final response = Completer<UserSetupState>();
+      final saved = <UserSetupState>[];
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+          setupStateUid: 'uid123',
+          fetchUserState: (_) => response.future,
+          persistUserState: (uid, state) async {
+            saved.add(state);
+          },
+        );
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+      n.setOnboardingDone();
+      response.complete((
+        usernameSet: true,
+        artistsSelected: false,
+        onboardingDone: false,
+        photoSetupDone: false,
+        deletionPending: false,
+      ));
+      await Future<void>.delayed(Duration.zero);
+      expect(n.onboardingDone, isTrue);
+      expect(n.photoSetupDone, isFalse);
+      expect(appRedirect(n, '/'), '/photo-setup');
+      expect(saved.last.onboardingDone, isTrue);
+      expect(saved.last.photoSetupDone, isFalse);
+      n.dispose();
+    },
+  );
+
+  test(
+    'cambiar de cuenta descarta el refresco y progreso de la anterior',
+    () async {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      final oldResponse = Completer<UserSetupState>();
+      final other = MockUser();
+      when(() => other.uid).thenReturn('other');
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: false,
+          onboardingDone: true,
+          photoSetupDone: true,
+          setupStateUid: 'uid123',
+          fetchUserState: (uid) => uid == 'uid123'
+              ? oldResponse.future
+              : Future.value((
+                  usernameSet: false,
+                  artistsSelected: false,
+                  onboardingDone: false,
+                  photoSetupDone: false,
+                  deletionPending: false,
+                )),
+        );
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+      when(() => mockAuth.currentUser).thenReturn(other);
+      authStream.add(other);
+      await Future<void>.delayed(Duration.zero);
+      oldResponse.complete((
+        usernameSet: true,
+        artistsSelected: true,
+        onboardingDone: true,
+        photoSetupDone: true,
+        deletionPending: false,
+      ));
+      await Future<void>.delayed(Duration.zero);
+      expect(n.onboardingDone, isFalse);
+      expect(n.photoSetupDone, isFalse);
+      expect(n.usernameSet, isFalse);
+      expect(appRedirect(n, '/'), '/onboarding');
+      n.dispose();
+    },
+  );
 }

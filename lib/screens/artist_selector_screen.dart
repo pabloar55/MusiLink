@@ -574,6 +574,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       if (uid == null) return;
 
       await ref.read(musicProfileServiceProvider).saveManualArtists(_selected);
+      if (!mounted || ref.read(firebaseAuthProvider).currentUser?.uid != uid) {
+        return;
+      }
       ref.read(userServiceProvider).clearCache();
       ref.invalidate(currentUserProvider);
 

@@ -599,3 +599,20 @@ test('exige reloj de servidor y cooldown para cambios de identidad', async () =>
     profileIdentityUpdatedAt: null,
   }));
 });
+
+
+test('el borrador solo es legible por su propietario y solo permite cambiar la foto', async () => {
+  const setupProfile = { displayName: 'Alice', username: 'alice_name', photoUrl: '', musicProfileVersion: 0 };
+  await seed('user_private/alice', { email: '', friends: [], setupProfile });
+  await assertSucceeds(getDoc(doc(dbFor('alice'), 'user_private/alice')));
+  await assertFails(getDoc(doc(dbFor('bob'), 'user_private/alice')));
+  const own = doc(dbFor('alice'), 'user_private/alice');
+  const photo = 'https://firebasestorage.googleapis.com/v0/b/musi-link-e7759.firebasestorage.app/o/profile_photos%2Falice?alt=media&token=abc';
+  await assertSucceeds(updateDoc(own, { 'setupProfile.photoUrl': photo }));
+  await assertFails(updateDoc(own, { 'setupProfile.username': 'stolen_name' }));
+  await assertFails(updateDoc(own, { 'setupProfile.topArtistNames': ['fake'] }));
+  await assertFails(updateDoc(own, { 'setupProfile.photoUrl': 'https://example.com/photo' }));
+  await assertFails(updateDoc(doc(dbFor('bob'), 'user_private/alice'), { 'setupProfile.photoUrl': '' }));
+  await seed('account_deletions/alice', { status: 'pending' });
+  await assertFails(updateDoc(own, { 'setupProfile.photoUrl': '' }));
+});
