@@ -150,6 +150,9 @@ service cloud.firestore {
         ) || (
           before != 'deleted_user'
           && after == 'deleted_user'
+          // Storage uses this backend-created document as proof of signup.
+          // Legacy client anonymization must revoke it atomically.
+          && !existsAfter(/databases/$(database)/documents/user_private/$(userId))
           && (
             !existsAfter(/databases/$(database)/documents/usernames/$(before))
             || getAfter(/databases/$(database)/documents/usernames/$(before)).data.uid != userId

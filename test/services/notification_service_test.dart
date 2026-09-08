@@ -36,6 +36,19 @@ class MockDocumentSnapshot extends Mock
 
 class MockWriteBatch extends Mock implements WriteBatch {}
 
+MockDocumentSnapshot mockPublishedProfile(MockFirebaseFirestore firestore) {
+  final users = MockCollectionReference();
+  final profileRef = MockDocumentReference();
+  final profile = MockDocumentSnapshot();
+  when(() => firestore.collection('users')).thenReturn(users);
+  when(() => users.doc(any())).thenReturn(profileRef);
+  when(() => profileRef.get(const GetOptions(source: Source.server)))
+      .thenAnswer((_) async => profile);
+  when(() => profile.exists).thenReturn(true);
+  when(() => profile.data()).thenReturn({'username': 'alice_name'});
+  return profile;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -65,6 +78,7 @@ void main() {
     late MockDocumentReference tokenRef;
     late MockNotificationSettings settings;
     late MockWriteBatch batch;
+    late MockDocumentSnapshot profile;
     late SharedPreferences prefs;
     late NotificationService service;
 
@@ -75,6 +89,7 @@ void main() {
       });
       messaging = MockFirebaseMessaging();
       firestore = MockFirebaseFirestore();
+      profile = mockPublishedProfile(firestore);
       auth = MockFirebaseAuth();
       user = MockUser();
       tokenRef = MockDocumentReference();
@@ -132,6 +147,37 @@ void main() {
         tokenRefreshes: const Stream.empty(),
         foregroundMessages: const Stream.empty(),
       );
+    });
+
+    test(
+      'defers tokens during onboarding and retries after publication',
+      () async {
+        when(() => profile.exists).thenReturn(false);
+        when(() => profile.data()).thenReturn(null);
+
+        await service.initialize();
+        await service.saveTokenIfGranted();
+
+        verifyNever(() => batch.commit());
+        verifyNever(
+          () =>
+              messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
+        );
+
+        when(() => profile.exists).thenReturn(true);
+        when(() => profile.data()).thenReturn({'username': 'alice_name'});
+        await service.saveTokenIfGranted();
+
+        verify(() => batch.commit()).called(1);
+      },
+    );
+
+    test('does not register tokens for an anonymized profile', () async {
+      when(() => profile.data()).thenReturn({'username': 'deleted_user'});
+
+      await service.saveTokenIfGranted();
+
+      verifyNever(() => batch.commit());
     });
 
     testWidgets('persists recovery before parallel, bounded network cleanup', (
@@ -501,6 +547,7 @@ void main() {
       final batch = MockWriteBatch();
       final prefs = await SharedPreferences.getInstance();
 
+      mockPublishedProfile(firestore);
       when(() => auth.currentUser).thenReturn(user);
       when(() => user.uid).thenReturn('alice');
       when(() => messaging.getNotificationSettings())

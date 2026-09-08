@@ -60,7 +60,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
     _pageController = PageController(initialPage: currentPageIndex);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(musicProfileSyncCoordinatorProvider).resume();
+      if (!mounted) return;
+      ref.read(musicProfileSyncCoordinatorProvider).resume();
+      ref.read(notificationServiceProvider).saveTokenIfGranted();
     });
   }
 

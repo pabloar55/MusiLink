@@ -242,6 +242,17 @@ class NotificationService {
     if (uid == null || _signingOut) return;
 
     try {
+      // Authentication precedes profile creation. Push rules require a
+      // published profile; MainScreen retries when onboarding completes.
+      final profile = await _firestore
+          .collection(FirestoreCollections.users)
+          .doc(uid)
+          .get(const GetOptions(source: Source.server));
+      if (!profile.exists ||
+          profile.data()?['username'] == null ||
+          profile.data()?['username'] == 'deleted_user') {
+        return;
+      }
       if (_requiresApnsToken && await _waitForApnsToken() == null) return;
 
       final token = await _getToken();

@@ -104,7 +104,7 @@ test('un usuario no puede cambiar su username activo', async () => {
   }));
 });
 
-test('la anonimización libera la reserva en el mismo batch', async () => {
+test('la anonimización libera la reserva y revoca el perfil privado en el mismo batch', async () => {
   await seedActiveUser('alice');
   const db = dbFor('alice');
   const batch = writeBatch(db);
@@ -116,7 +116,18 @@ test('la anonimización libera la reserva en el mismo batch', async () => {
   });
   batch.delete(doc(db, 'usernames/alice_name'));
 
-  await assertSucceeds(batch.commit());
+  await assertFails(batch.commit());
+
+  const completeBatch = writeBatch(db);
+  completeBatch.update(doc(db, 'users/alice'), {
+    displayName: 'Deleted user',
+    username: 'deleted_user',
+    photoUrl: '',
+    profileIdentityUpdatedAt: serverTimestamp(),
+  });
+  completeBatch.delete(doc(db, 'usernames/alice_name'));
+  completeBatch.delete(doc(db, 'user_private/alice'));
+  await assertSucceeds(completeBatch.commit());
 });
 
 test('una reserva no se puede liberar sin anonimizar el perfil', async () => {
