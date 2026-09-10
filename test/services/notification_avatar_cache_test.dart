@@ -33,18 +33,27 @@ void main() {
   });
 
   group('createNotificationThumbnail', () {
-    test('creates a centered 128px square JPEG', () async {
+    test('creates a 128px circular PNG from an opaque JPEG', () async {
       final source = image_lib.Image(width: 320, height: 180);
       image_lib.fill(source, color: image_lib.ColorRgb8(80, 120, 200));
 
       final thumbnail = await createNotificationThumbnail(
         image_lib.encodeJpg(source),
       );
-      final decoded = thumbnail == null ? null : image_lib.decodeJpg(thumbnail);
+      final decoded = thumbnail == null ? null : image_lib.decodePng(thumbnail);
 
       expect(thumbnail, isNotNull);
       expect(decoded?.width, NotificationAvatarCache.thumbnailSize);
       expect(decoded?.height, NotificationAvatarCache.thumbnailSize);
+      expect(decoded!.numChannels, 4);
+      for (final (x, y) in [(0, 0), (127, 0), (0, 127), (127, 127)]) {
+        expect(decoded.getPixel(x, y).a, 0);
+      }
+      final center = decoded.getPixel(64, 64);
+      expect(center.a, 255);
+      expect(center.r, closeTo(80, 3));
+      expect(center.g, closeTo(120, 3));
+      expect(center.b, closeTo(200, 3));
       expect(
         thumbnail!.length,
         lessThan(NotificationAvatarCache.maxThumbnailBytes),
@@ -100,11 +109,20 @@ void main() {
       );
     });
 
-    test('generates and stores a thumbnail after a cache miss', () async {
+    test('replaces the old square cache with a circular PNG', () async {
       final source = Uint8List.fromList([4, 5, 6]);
       final thumbnail = Uint8List.fromList([7, 8, 9]);
       Uint8List? storedThumbnail;
-      when(() => cacheManager.getFileFromCache(any())).thenAnswer((_) async {
+      when(() => cacheManager.getFileFromCache(any())).thenAnswer((call) async {
+        if (call.positionalArguments.first ==
+            'notification-avatar-v1:$_avatarUrl') {
+          return FileInfo(
+            _fileWithBytes(Uint8List.fromList([1, 2, 3])),
+            FileSource.Cache,
+            now.add(const Duration(hours: 1)),
+            _avatarUrl,
+          );
+        }
         if (storedThumbnail == null) return null;
         return FileInfo(
           _fileWithBytes(storedThumbnail!),
@@ -121,7 +139,7 @@ void main() {
           any(),
           key: any(named: 'key'),
           maxAge: any(named: 'maxAge'),
-          fileExtension: 'jpg',
+          fileExtension: 'png',
         ),
       ).thenAnswer((invocation) async {
         storedThumbnail = invocation.positionalArguments[1] as Uint8List;
@@ -184,7 +202,7 @@ void main() {
           any(),
           key: any(named: 'key'),
           maxAge: any(named: 'maxAge'),
-          fileExtension: 'jpg',
+          fileExtension: 'png',
         ),
       ).thenThrow(Exception('disk full'));
       final cache = NotificationAvatarCache(
@@ -209,7 +227,7 @@ void main() {
           any(),
           key: any(named: 'key'),
           maxAge: any(named: 'maxAge'),
-          fileExtension: 'jpg',
+          fileExtension: 'png',
         ),
       ).thenAnswer((_) async => _fileWithBytes(thumbnail));
       final cache = NotificationAvatarCache(

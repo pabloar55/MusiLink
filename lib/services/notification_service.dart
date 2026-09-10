@@ -611,9 +611,13 @@ class NotificationService {
           icon: '@drawable/ic_notification',
           category: AndroidNotificationCategory.message,
           groupKey: chatId,
+          // One-to-one MessagingStyle layouts can hide the sender beside the
+          // message. Keep their name in the notification header as well.
+          subText: senderName,
           styleInformation: MessagingStyleInformation(
             const Person(name: 'Tú'),
-            conversationTitle: senderName,
+            // Android reserves conversation titles for group chats; direct
+            // chats derive their title from the sender Person instead.
             groupConversation: false,
             messages: styleMessages,
           ),

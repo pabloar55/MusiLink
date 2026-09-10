@@ -1,6 +1,7 @@
 // ignore_for_file: subtype_of_sealed_class
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -53,6 +54,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() {
+    registerFallbackValue(const NotificationDetails());
     registerFallbackValue(
       const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_notification'),
@@ -339,6 +341,99 @@ void main() {
       },
     );
   });
+
+  test(
+    'chat notifications keep the sender in the header and recent messages',
+    () async {
+      final messaging = MockFirebaseMessaging();
+      final auth = MockFirebaseAuth();
+      final settings = MockNotificationSettings();
+      final localNotifications = MockLocalNotifications();
+      final foreground = StreamController<RemoteMessage>();
+      addTearDown(foreground.close);
+      final prefs = await SharedPreferences.getInstance();
+      final shown = StreamController<Invocation>();
+      addTearDown(shown.close);
+      final notifications = StreamIterator(shown.stream);
+      addTearDown(notifications.cancel);
+
+      when(
+        () => messaging.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        ),
+      ).thenAnswer((_) async {});
+      when(() => messaging.getNotificationSettings())
+          .thenAnswer((_) async => settings);
+      when(() => settings.authorizationStatus)
+          .thenReturn(AuthorizationStatus.denied);
+      when(() => auth.currentUser).thenReturn(null);
+      when(
+        () => localNotifications.initialize(
+          settings: any(named: 'settings'),
+          onDidReceiveNotificationResponse: any(
+            named: 'onDidReceiveNotificationResponse',
+          ),
+        ),
+      ).thenAnswer((_) async => true);
+      when(
+        () => localNotifications.show(
+          id: any(named: 'id'),
+          title: any(named: 'title'),
+          body: any(named: 'body'),
+          notificationDetails: any(named: 'notificationDetails'),
+          payload: any(named: 'payload'),
+        ),
+      ).thenAnswer((invocation) async => shown.add(invocation));
+
+      final service = NotificationService(
+        messaging: messaging,
+        firestore: MockFirebaseFirestore(),
+        auth: auth,
+        prefs: prefs,
+        onNotificationTapped: (_) {},
+        getActiveChatId: () => null,
+        skipLaunchNotification: true,
+        localNotifications: localNotifications,
+        tokenRefreshes: const Stream.empty(),
+        foregroundMessages: foreground.stream,
+      );
+      await service.initialize();
+
+      for (var i = 0; i < 6; i++) {
+        final data = {
+          'type': 'new_message',
+          'chatId': 'chat',
+          'otherUserId': 'alice',
+          'otherUserName': 'Alice',
+          'messageText': 'Message $i',
+        };
+        foreground.add(RemoteMessage(data: data));
+        expect(await notifications.moveNext(), isTrue);
+        final args = notifications.current.namedArguments;
+        final android =
+            (args[#notificationDetails] as NotificationDetails).android!;
+        final style = android.styleInformation! as MessagingStyleInformation;
+
+        expect(args[#id], 'chat'.hashCode);
+        expect(args[#title], 'Alice');
+        expect(args[#body], 'Message $i');
+        expect(jsonDecode(args[#payload] as String), data);
+        expect(android.subText, 'Alice');
+        expect(style.groupConversation, isFalse);
+        expect(style.conversationTitle, isNull);
+        expect(style.messages!.map((message) => message.text), [
+          for (var j = i < 5 ? 0 : i - 4; j <= i; j++) 'Message $j',
+        ]);
+        for (final message in style.messages!) {
+          expect(message.person!.name, 'Alice');
+          expect(message.person!.key, 'alice');
+          expect(message.person!.icon, isNull);
+        }
+      }
+    },
+  );
 
   test('friend request notifications reuse an ID per sender', () {
     const first = RemoteMessage(

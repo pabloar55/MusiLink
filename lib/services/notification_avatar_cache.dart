@@ -10,13 +10,13 @@ typedef NotificationThumbnailGenerator = Future<Uint8List?> Function(
   Uint8List bytes,
 );
 
-const _notificationThumbnailCacheVersion = 1;
+const _notificationThumbnailCacheVersion = 2;
 
 @visibleForTesting
 String notificationThumbnailCacheKey(String url) =>
     'notification-avatar-v$_notificationThumbnailCacheVersion:$url';
 
-/// Creates a small, square JPEG for Android messaging-style notifications.
+/// Creates a circular PNG with transparent corners for Android notifications.
 ///
 /// The work runs in a helper isolate so decoding and resizing do not block the
 /// notification isolate's event loop.
@@ -44,7 +44,11 @@ Uint8List? _createNotificationThumbnailSync(Uint8List bytes) {
     size: NotificationAvatarCache.thumbnailSize,
     interpolation: image_lib.Interpolation.average,
   );
-  return image_lib.encodeJpg(thumbnail, quality: 85);
+  // Person icons are not consistently masked by Android notification layouts.
+  // Preserve alpha so the avatar stays circular in both collapsed and expanded
+  // views, including when the source image is an opaque JPEG.
+  final avatar = image_lib.copyCropCircle(thumbnail.convert(numChannels: 4));
+  return image_lib.encodePng(avatar);
 }
 
 /// Loads and caches the reduced avatar used by Android chat notifications.
@@ -59,7 +63,7 @@ class NotificationAvatarCache {
     DateTime Function()? now,
     this.downloadTimeout = const Duration(seconds: 3),
     this.thumbnailMaxAge = const Duration(days: 1),
-  }) : _cacheManager = cacheManager ?? DefaultCacheManager(),
+  }) : _providedCacheManager = cacheManager,
        _thumbnailGenerator = thumbnailGenerator ?? createNotificationThumbnail,
        _now = now ?? DateTime.now;
 
@@ -69,7 +73,10 @@ class NotificationAvatarCache {
   static const maxSourceDimension = 2048;
   static const maxSourcePixels = 2048 * 2048;
 
-  final BaseCacheManager _cacheManager;
+  final BaseCacheManager? _providedCacheManager;
+  // Notifications without a trusted avatar URL do not need disk storage.
+  late final BaseCacheManager _cacheManager =
+      _providedCacheManager ?? DefaultCacheManager();
   final NotificationThumbnailGenerator _thumbnailGenerator;
   final DateTime Function() _now;
   final Duration downloadTimeout;
@@ -146,7 +153,7 @@ class NotificationAvatarCache {
           thumbnail,
           key: thumbnailKey,
           maxAge: thumbnailMaxAge,
-          fileExtension: 'jpg',
+          fileExtension: 'png',
         );
       } catch (_) {
         // The notification can still use the generated thumbnail this time.
