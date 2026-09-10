@@ -19,6 +19,8 @@ void main() {
         expect(message.senderId, 'user1');
         expect(message.text, 'Hola!');
         expect(message.read, false);
+        expect(message.delivered, false);
+        expect(message.isPending, false);
         expect(message.type, MessageType.text);
         expect(message.trackData, isNull);
         expect(message.reactions, isEmpty);
@@ -160,9 +162,10 @@ void main() {
           read: false,
         );
 
-        final updated = original.copyWith(read: true);
+        final updated = original.copyWith(read: true, delivered: true);
 
         expect(updated.read, true);
+        expect(updated.delivered, true);
         expect(updated.id, original.id);
         expect(updated.senderId, original.senderId);
         expect(updated.text, original.text);

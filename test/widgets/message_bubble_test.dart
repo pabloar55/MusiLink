@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 
 class _MockChatService extends Mock implements ChatService {}
@@ -90,6 +91,32 @@ void main() {
 
       expect(find.byIcon(LucideIcons.checkCheck), findsOneWidget);
     });
+
+    for (final read in [false, true]) {
+      testWidgets('double check delivery, read=$read', (tester) async {
+        await tester.pumpWidget(
+          buildBubble(
+            message: Message(
+              id: 'delivered',
+              senderId: 'user1',
+              text: 'Test',
+              timestamp: timestamp,
+              delivered: true,
+              read: read,
+            ),
+            isMe: true,
+          ),
+        );
+        final icon = tester.widget<Icon>(find.byIcon(LucideIcons.checkCheck));
+        expect(
+          icon.color,
+          read
+              ? AppTokens.readReceiptColor
+              : colorScheme.onPrimary.withAlpha(AppTokens.alphaMedium),
+        );
+        expect(find.byIcon(LucideIcons.check), findsNothing);
+      });
+    }
 
     testWidgets('no muestra iconos de check cuando no es mío', (tester) async {
       final message = Message(

@@ -50,6 +50,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   late final Future<AppUser?> _otherUserFuture;
   ModalRoute<void>? _route;
   DateTime? _lastSeenTimestamp;
+  String? _lastVisibleMessageId;
   bool _isRouteVisible = true;
   bool _isAppResumed = true;
 
@@ -238,9 +239,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _onMessagesUpdated(List<Message> streamMessages) {
     if (!mounted) return;
     final isFirst = !_hasReceivedMessages;
-    final latestTimestamp = streamMessages.isEmpty
-        ? null
-        : streamMessages.last.timestamp;
+    final confirmed = streamMessages.where((message) => !message.isPending);
+    final latestTimestamp = confirmed.isEmpty ? null : confirmed.last.timestamp;
+    final lastVisibleId = streamMessages.lastOrNull?.id;
+    final shouldScroll =
+        lastVisibleId != null && lastVisibleId != _lastVisibleMessageId;
+    _lastVisibleMessageId = lastVisibleId;
     final hasNewMessages =
         latestTimestamp != null &&
         (_lastSeenTimestamp == null ||
@@ -248,27 +252,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     setState(() {
       _allMessages = streamMessages;
       _isInitialLoading = false;
-      _hasReceivedMessages = true;
+      _hasReceivedMessages =
+          streamMessages.isEmpty ||
+          streamMessages.any((message) => !message.isPending);
       // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
       if (isFirst) {
-        _hasMoreMessages =
-            streamMessages.length >= ChatService.messagesPageSize;
+        _hasMoreMessages = confirmed.length >= ChatService.messagesPageSize;
       }
     });
     // Fijar el límite por timestamp evita que los mensajes ya visibles salgan
     // de la consulta de 30 al llegar mensajes nuevos y dejen de actualizarse.
-    if (_oldestLiveTimestamp == null && streamMessages.isNotEmpty) {
-      _listenToMessages(from: streamMessages.first.timestamp);
+    if (_oldestLiveTimestamp == null && confirmed.isNotEmpty) {
+      _listenToMessages(from: confirmed.first.timestamp);
     }
     if (hasNewMessages) {
       _lastSeenTimestamp = latestTimestamp;
       if (_canMarkMessagesRead && _canInteractInChat) {
         _markMessagesAsRead();
       }
-      if (_isRouteVisible) {
-        // Primera carga: saltar sin animación para no ver el scroll desde arriba.
-        _scrollToBottom(animate: !isFirst);
-      }
+    }
+    if (shouldScroll && _isRouteVisible) {
+      // Los envíos locales también desplazan la lista inmediatamente.
+      _scrollToBottom(animate: !isFirst);
     }
   }
 
@@ -608,7 +613,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       currentUid: _currentUid,
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
-                      reactionsEnabled: canInteract,
+                      reactionsEnabled: canInteract && !msg.isPending,
                     )
                   : MessageBubble(
                       message: msg,
@@ -617,7 +622,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       currentUid: _currentUid,
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
-                      reactionsEnabled: canInteract,
+                      reactionsEnabled: canInteract && !msg.isPending,
                     );
 
               return Column(

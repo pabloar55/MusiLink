@@ -22,3 +22,5 @@ export {
 } from './chat';
 export { sendChatMessage, sendFriendRequest } from './social_writes';
 export { expireDailySongs } from './daily_song';
+
+export { acknowledgeChatDelivery } from './chat_delivery';

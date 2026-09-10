@@ -45,6 +45,7 @@ class ChatMessageCache {
                   item['timestamp'] as int,
                 ),
                 read: item['read'] as bool,
+                delivered: item['delivered'] as bool? ?? false,
                 type: MessageType.values.byName(item['type'] as String),
                 trackData: item['trackData'] == null
                     ? null
@@ -125,6 +126,7 @@ class ChatMessageCache {
               'text': message.text,
               'timestamp': message.timestamp.microsecondsSinceEpoch,
               'read': message.read,
+              'delivered': message.delivered,
               'type': message.type.name,
               'trackData': message.trackData?.toMap(),
               'reactions': message.reactions,

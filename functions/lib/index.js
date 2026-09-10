@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.acknowledgeChatDelivery = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -32,4 +32,6 @@ Object.defineProperty(exports, "sendChatMessage", { enumerable: true, get: funct
 Object.defineProperty(exports, "sendFriendRequest", { enumerable: true, get: function () { return social_writes_1.sendFriendRequest; } });
 var daily_song_1 = require("./daily_song");
 Object.defineProperty(exports, "expireDailySongs", { enumerable: true, get: function () { return daily_song_1.expireDailySongs; } });
+var chat_delivery_1 = require("./chat_delivery");
+Object.defineProperty(exports, "acknowledgeChatDelivery", { enumerable: true, get: function () { return chat_delivery_1.acknowledgeChatDelivery; } });
 //# sourceMappingURL=index.js.map

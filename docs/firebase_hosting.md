@@ -59,3 +59,27 @@ La segunda URL debe responder con una redirección a `https://musilink.app`.
 Antes de dar por terminado un despliegue se deben comprobar el inicio de sesión,
 Firestore, Functions, Storage, App Check, FCM y la navegación directa a rutas
 internas.
+
+## Confirmaciones de entrega del chat
+
+Los mensajes aparecen localmente al enviar y se reconcilian por ID con
+Firestore. `delivered: true` indica recepción; `read: true` indica apertura
+visible del chat. La sincronización autenticada confirma mensajes pendientes
+sin modificar el contador de no leídos. Los mensajes antiguos sin `delivered`
+se interpretan como pendientes de entrega, salvo que ya estén leídos.
+
+En la PWA cerrada, `firebase-messaging-sw.js` confirma la recepción de cada push
+mediante `POST /api/chat-delivery`. Hosting dirige esta ruta a
+`acknowledgeChatDelivery` en `europe-southwest1`. El push incluye un token
+aleatorio de 256 bits limitado al mensaje; Firestore solo guarda su hash.
+El endpoint únicamente permite poner `delivered: true`, de forma idempotente,
+y no necesita reCAPTCHA ni una ventana abierta. Los tokens nunca se registran
+en logs. No se interpreta la aceptación del envío por FCM como recepción.
+
+Para activar esta funcionalidad hay que desplegar las reglas de Firestore,
+las Functions (`onNewMessage`, `sendChatMessage`, `acknowledgeChatDelivery`) y
+la nueva compilación web con su configuración de Hosting. Verificar con dos
+cuentas: envío inmediato, receptor desconectado (un check), recepción en la
+app o por push (dos checks sin azul), apertura del chat (dos azules). Si el
+sistema no ejecuta el worker o interrumpe su red, la entrega se confirma en la
+siguiente sincronización de la app.

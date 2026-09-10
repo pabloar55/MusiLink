@@ -381,6 +381,7 @@ export async function createChatMessage(
       text: payload.text,
       timestamp: now,
       read: false,
+      delivered: false,
       type: payload.type,
       ...(payload.trackData ? { trackData: payload.trackData } : {}),
     });

@@ -552,6 +552,12 @@ service cloud.firestore {
             )
             ||
             (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivered'])
+              && request.auth.uid != resource.data.senderId
+              && request.resource.data.delivered == true
+            )
+            ||
+            (
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
               && request.resource.data.diff(resource.data).affectedKeys().hasAll(['reactions'])
               && areMutualFriends(

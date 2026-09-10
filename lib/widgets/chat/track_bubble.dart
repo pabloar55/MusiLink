@@ -213,7 +213,8 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
                                 if (widget.isMe) ...[
                                   const SizedBox(width: AppTokens.spaceXS),
                                   Icon(
-                                    widget.message.read
+                                    (widget.message.read ||
+                                            widget.message.delivered)
                                         ? LucideIcons.checkCheck
                                         : LucideIcons.check,
                                     size: 14,

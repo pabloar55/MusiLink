@@ -11,6 +11,10 @@ class Message {
   final String text;
   final DateTime timestamp;
   final bool read;
+  final bool delivered;
+
+  /// Mensaje local pendiente de aparecer en Firestore.
+  final bool isPending;
   final MessageType type;
   final Track? trackData;
   final Map<String, List<String>> reactions; // emoji -> lista de uids
@@ -21,6 +25,8 @@ class Message {
     required this.text,
     required this.timestamp,
     this.read = false,
+    this.delivered = false,
+    this.isPending = false,
     this.type = MessageType.text,
     this.trackData,
     this.reactions = const {},
@@ -49,9 +55,9 @@ class Message {
       id: doc.id,
       senderId: (data['senderId'] ?? '').toString(),
       text: (data['text'] ?? '').toString(),
-      timestamp:
-          (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       read: (data['read'] as bool?) ?? false,
+      delivered: (data['delivered'] as bool?) ?? false,
       type: type,
       trackData: trackData,
       reactions: reactions,
@@ -64,6 +70,7 @@ class Message {
       'text': text,
       'timestamp': Timestamp.fromDate(timestamp),
       'read': read,
+      'delivered': delivered,
       'type': type == MessageType.track ? 'track' : 'text',
     };
 
@@ -78,13 +85,15 @@ class Message {
     return map;
   }
 
-  Message copyWith({bool? read}) {
+  Message copyWith({bool? read, bool? delivered}) {
     return Message(
       id: id,
       senderId: senderId,
       text: text,
       timestamp: timestamp,
       read: read ?? this.read,
+      delivered: delivered ?? this.delivered,
+      isPending: isPending,
       type: type,
       trackData: trackData,
       reactions: reactions,

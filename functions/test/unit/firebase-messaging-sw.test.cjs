@@ -24,7 +24,7 @@ function loadNotificationClickHandler({ clients }) {
     importScripts() {},
     firebase: {
       initializeApp() {},
-      messaging() {},
+      messaging() { return { onBackgroundMessage() {} }; },
     },
   });
   return notificationClick;

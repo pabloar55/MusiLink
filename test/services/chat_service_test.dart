@@ -86,6 +86,7 @@ void main() {
         when(() => doc.id).thenReturn('message-1');
         when(() => doc.data()).thenReturn({
           'senderId': 'other_uid',
+          'delivered': true,
           'text': text,
           'timestamp': Timestamp.fromDate(time),
         });
@@ -120,6 +121,16 @@ void main() {
         when(() => ordered.limit(ChatService.messagesPageSize))
             .thenReturn(window);
         when(() => window.get()).thenAnswer((_) => request.future);
+        final deliveryQuery = MockQuery();
+        final deliveredSnapshot = MockQuerySnapshot();
+        when(() => deliveredSnapshot.docs).thenReturn([]);
+        when(() => messagesRef.where('read', isEqualTo: false))
+            .thenReturn(deliveryQuery);
+        when(() => deliveryQuery.where('senderId', isNotEqualTo: 'current_uid'))
+            .thenReturn(deliveryQuery);
+        when(() => deliveryQuery.limit(499)).thenReturn(deliveryQuery);
+        when(() => deliveryQuery.get())
+            .thenAnswer((_) async => deliveredSnapshot);
       });
 
       test(

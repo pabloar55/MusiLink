@@ -234,6 +234,9 @@ test('sendChatMessage aplica el límite, reinicia la ventana y tolera reintentos
     text: 'veinte',
   };
   await createChatMessage(db, 'alice', firstPayload, Timestamp.fromMillis(2_000));
+  const sent = (await db.doc('chats/alice_bob/messages/aaaaaaaaaaaaaaaaaaaa').get()).data();
+  assert.equal(sent.delivered, false);
+  assert.equal(sent.read, false);
   await assert.rejects(
     createChatMessage(db, 'alice', {
       ...firstPayload,

@@ -22,6 +22,111 @@ import '../helpers/mocks.dart';
 class _MockChatService extends Mock implements ChatService {}
 
 void main() {
+  testWidgets(
+    'shows pending sends immediately without using the local clock as a history cursor',
+    (tester) async {
+      final events = StreamController<List<Message>>.broadcast();
+      final service = _MockChatService();
+      final auth = MockFirebaseAuth();
+      final user = MockUser();
+      final notifications = MockNotificationService();
+      final users = MockUserService();
+      final request = Completer<void>();
+      when(() => auth.currentUser).thenReturn(user);
+      when(() => user.uid).thenReturn('current-user');
+      when(() => service.getDeletedSince('chat-1'))
+          .thenAnswer((_) async => null);
+      when(() => service.getMessages('chat-1'))
+          .thenAnswer((_) => events.stream);
+      when(() => service.markMessagesAsRead('chat-1')).thenAnswer((_) async {});
+      when(() => notifications.cancelChatNotifications('chat-1'))
+          .thenAnswer((_) async {});
+      when(() => users.getUser('other-user')).thenAnswer((_) async => null);
+      final pending = Message(
+        id: 'pending',
+        senderId: 'current-user',
+        text: 'Instant',
+        timestamp: DateTime(2099),
+        isPending: true,
+      );
+      when(() => service.sendMessage('chat-1', 'Instant')).thenAnswer((_) {
+        events.add([pending]);
+        return request.future;
+      });
+      final router = GoRouter(
+        initialLocation: '/chat',
+        routes: [
+          GoRoute(
+            path: '/chat',
+            builder: (_, _) => const ChatScreen(
+              chatId: 'chat-1',
+              otherUserName: 'Other',
+              otherUserId: 'other-user',
+            ),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            firebaseAuthProvider.overrideWithValue(auth),
+            chatServiceProvider.overrideWithValue(service),
+            notificationServiceProvider.overrideWithValue(notifications),
+            userServiceProvider.overrideWithValue(users),
+            relationshipProvider('other-user').overrideWith(
+              (_) => Stream.value(
+                const RelationshipResult(RelationshipStatus.friends),
+              ),
+            ),
+          ],
+          child: MaterialApp.router(
+            routerConfig: router,
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+          ),
+        ),
+      );
+      await tester.pump();
+      events.add([]);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Instant');
+      await tester.tap(
+        find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+      );
+      await tester.pumpAndSettle();
+      expect(request.isCompleted, isFalse);
+      expect(find.text('Instant'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.check), findsOneWidget);
+      verifyNever(() => service.getMessages('chat-1', from: pending.timestamp));
+      expect(
+        tester
+            .widget<MessageBubble>(find.byType(MessageBubble))
+            .reactionsEnabled,
+        isFalse,
+      );
+      final serverTime = DateTime(2026);
+      when(() => service.getMessages('chat-1', from: serverTime))
+          .thenAnswer((_) => events.stream);
+      events.add([
+        Message(
+          id: 'incoming',
+          senderId: 'other-user',
+          text: 'Received',
+          timestamp: serverTime,
+        ),
+        pending,
+      ]);
+      await tester.pumpAndSettle();
+      verify(() => service.markMessagesAsRead('chat-1')).called(1);
+      request.complete();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+      await events.close();
+    },
+  );
+
   for (final mode in ['cold', 'cached', 'offline']) {
     final hasCache = mode != 'cold';
     testWidgets('keeps history live when opening $mode', (tester) async {

@@ -627,3 +627,19 @@ test('el borrador solo es legible por su propietario y solo permite cambiar la f
   await seed('account_deletions/alice', { status: 'pending' });
   await assertFails(updateDoc(own, { 'setupProfile.photoUrl': '' }));
 });
+
+for (const delivered of [undefined, false, true]) {
+  test(`solo el receptor confirma entrega (estado previo ${delivered})`, async () => {
+    await seedChat(delivered === undefined ? {} : { delivered });
+    const path = 'chats/alice_bob/messages/message-1';
+    await assertFails(updateDoc(doc(dbFor('bob'), path), { delivered: true }));
+    await assertFails(updateDoc(doc(dbFor('mallory'), path), { delivered: true }));
+    await assertSucceeds(updateDoc(doc(dbFor('alice'), path), { delivered: true }));
+    await assertFails(updateDoc(doc(dbFor('alice'), path), { delivered: false }));
+    await assertFails(updateDoc(doc(dbFor('alice'), path), { delivered: 'yes' }));
+    await assertFails(updateDoc(doc(dbFor('alice'), path), { delivered: true, text: 'changed' }));
+    const message = (await getDoc(doc(dbFor('alice'), path))).data();
+    assert.equal(message.read, false);
+    await assertSucceeds(updateDoc(doc(dbFor('alice'), path), { read: true }));
+  });
+}

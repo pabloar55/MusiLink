@@ -40,6 +40,25 @@ class ChatService with AuthenticatedService {
   _prefetchingMessages = {};
   final Map<(String, String), Object> _messageCacheTokens = {};
 
+  final Map<(String, String), Map<String, Message>> _outgoing = {};
+  final _outgoingChanges = StreamController<(String, String)>.broadcast();
+  final Map<(String, String), Future<void>> _deliveryRequests = {};
+  final Set<(String, String)> _deliveryRefreshes = {};
+
+  List<Message> _withOutgoing(
+    String uid,
+    String chatId,
+    List<Message> messages,
+  ) {
+    final ids = messages.map((message) => message.id).toSet();
+    return [
+      ...messages,
+      ...?_outgoing[(uid, chatId)]?.values.where(
+        (message) => !ids.contains(message.id),
+      ),
+    ];
+  }
+
   Object _messageCacheToken(String uid, String chatId) =>
       _messageCacheTokens.putIfAbsent((uid, chatId), Object.new);
 
@@ -76,6 +95,10 @@ class ChatService with AuthenticatedService {
 
   /// Limpia las vistas de arranque en memoria y disco al hacer logout.
   void clearCache() {
+    for (final key in _outgoing.keys.toList()) {
+      _outgoing.remove(key);
+      _outgoingChanges.add(key);
+    }
     _chatByOtherUid.clear();
     _recentMessages.clear();
     _prefetchingMessages.clear();
@@ -171,6 +194,11 @@ class ChatService with AuthenticatedService {
           // MainScreen escucha esta lista para el contador de pendientes:
           // adelantar la carga incluso antes de entrar en la pestaña de chats.
           if (_auth.currentUser?.uid == uid) {
+            for (final chat in chats) {
+              if ((chat.unreadCounts[uid] ?? 0) > 0) {
+                unawaited(markMessagesAsDelivered(chat.id));
+              }
+            }
             for (final chat in chats.take(6)) {
               unawaited(prefetchMessages(chat));
             }
@@ -286,6 +314,7 @@ class ChatService with AuthenticatedService {
       }
       final chat = Chat.fromFirestore(doc);
       if (!chat.participants.contains(uid)) return;
+      await markMessagesAsDelivered(chatId);
       await prefetchMessages(
         chat,
         refresh: true,
@@ -385,20 +414,42 @@ class ChatService with AuthenticatedService {
       throw ArgumentError('Invalid message');
     }
 
+    await _sendOutgoing(chatId, trimmed);
+  }
+
+  Future<void> _sendOutgoing(String chatId, String text, {Track? track}) async {
+    final uid = currentUid;
+    final key = (uid, chatId);
+    final messageId = _chatsRef
+        .doc(chatId)
+        .collection(FirestoreCollections.messages)
+        .doc()
+        .id;
+    final pending = _outgoing.putIfAbsent(key, () => {});
+    pending[messageId] = Message(
+      id: messageId,
+      senderId: uid,
+      text: text,
+      timestamp: DateTime.now(),
+      type: track == null ? MessageType.text : MessageType.track,
+      trackData: track,
+      isPending: true,
+    );
+    _outgoingChanges.add(key);
     try {
-      final messageId = _chatsRef
-          .doc(chatId)
-          .collection(FirestoreCollections.messages)
-          .doc()
-          .id;
-      final callable = _functions.httpsCallable('sendChatMessage');
-      await callable.call<void>({
+      await _functions.httpsCallable('sendChatMessage').call<void>({
         'chatId': chatId,
         'messageId': messageId,
-        'type': 'text',
-        'text': trimmed,
+        'type': track == null ? 'text' : 'track',
+        if (track == null) 'text': text else 'trackData': track.toMap(),
       });
+      // Se conserva hasta que el listener confirma el mismo ID, incluso si la
+      // respuesta de la callable llega antes que el snapshot.
     } catch (e, stack) {
+      // Un snapshot confirmado prevalece sobre un error tardío de transporte.
+      if (!pending.containsKey(messageId)) return;
+      pending.remove(messageId);
+      _outgoingChanges.add(key);
       if (!isRateLimitError(e)) await reportError(e, stack);
       rethrow;
     }
@@ -418,20 +469,118 @@ class ChatService with AuthenticatedService {
   }) {
     final uid = currentUid;
     final token = _messageCacheToken(uid, chatId);
-    return _messagesQuery(chatId, since: since, from: from)
-        .snapshots()
-        .handleError((Object error, StackTrace stack) {
-          reportError(error, stack).ignore();
-          Error.throwWithStackTrace(error, stack);
-        })
-        .map((snapshot) {
-          final messages = _decodeMessages(snapshot);
-          if (identical(token, _messageCacheTokens[(uid, chatId)]) &&
-              _auth.currentUser?.uid == uid) {
-            _cacheMessages(uid, chatId, since, messages);
-          }
-          return messages;
-        });
+    return Stream<List<Message>>.multi((controller) {
+      var latest = getCachedMessages(chatId) ?? <Message>[];
+      void emit() => controller.add(_withOutgoing(uid, chatId, latest));
+      final outgoing = _outgoingChanges.stream.listen((key) {
+        if (key == (uid, chatId)) emit();
+      });
+      if (_outgoing[(uid, chatId)]?.isNotEmpty ?? false) emit();
+      final remote = _messagesQuery(chatId, since: since, from: from)
+          .snapshots()
+          .listen(
+            (snapshot) {
+              latest = _decodeMessages(snapshot);
+              final pending = _outgoing[(uid, chatId)];
+              for (final message in latest) {
+                pending?.remove(message.id);
+              }
+              if (identical(token, _messageCacheTokens[(uid, chatId)]) &&
+                  _auth.currentUser?.uid == uid) {
+                _cacheMessages(uid, chatId, since, latest);
+                unawaited(_acknowledgeMessages(uid, snapshot.docs));
+              }
+              emit();
+            },
+            onError: (Object error, StackTrace stack) {
+              reportError(error, stack).ignore();
+              controller.addError(error, stack);
+            },
+            onDone: controller.close,
+          );
+      controller.onCancel = () async {
+        await outgoing.cancel();
+        await remote.cancel();
+      };
+    });
+  }
+
+  /// La recepción no implica lectura ni cambia el contador de no leídos.
+  /// Reutiliza el índice read/senderId y admite mensajes antiguos sin delivered.
+  Future<void> markMessagesAsDelivered(String chatId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final key = (uid, chatId);
+    final pending = _deliveryRequests[key];
+    if (pending != null) {
+      _deliveryRefreshes.add(key);
+      return pending;
+    }
+    final future = () async {
+      do {
+        _deliveryRefreshes.remove(key);
+        await _receiveUnreadMessages(uid, chatId);
+      } while (_deliveryRefreshes.remove(key) && _auth.currentUser?.uid == uid);
+    }();
+    _deliveryRequests[key] = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_deliveryRequests[key], future)) {
+        final _ = _deliveryRequests.remove(key);
+      }
+    }
+  }
+
+  Future<void> _receiveUnreadMessages(String uid, String chatId) async {
+    try {
+      final query = _chatsRef
+          .doc(chatId)
+          .collection(FirestoreCollections.messages)
+          .where('read', isEqualTo: false)
+          .where('senderId', isNotEqualTo: uid)
+          .limit(_deleteBatchSize);
+      QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
+      while (_auth.currentUser?.uid == uid) {
+        final snapshot =
+            await (cursor == null ? query : query.startAfterDocument(cursor))
+                .get();
+        await _acknowledgeMessages(uid, snapshot.docs);
+        if (snapshot.docs.length < _deleteBatchSize) break;
+        cursor = snapshot.docs.last;
+      }
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+    }
+  }
+
+  Future<void> _acknowledgeMessages(
+    String uid,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    if (_auth.currentUser?.uid != uid) return;
+    final incoming = docs.where((doc) {
+      final data = doc.data();
+      return data['senderId'] != uid &&
+          data['delivered'] != true &&
+          data['read'] != true;
+    }).toList();
+    try {
+      for (
+        var offset = 0;
+        offset < incoming.length;
+        offset += _deleteBatchSize
+      ) {
+        if (_auth.currentUser?.uid != uid) return;
+        final batch = _firestore.batch();
+        for (final doc in incoming.skip(offset).take(_deleteBatchSize)) {
+          batch.update(doc.reference, {'delivered': true});
+        }
+        await batch.commit();
+      }
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+    }
   }
 
   Query<Map<String, dynamic>> _messagesQuery(
@@ -536,23 +685,7 @@ class ChatService with AuthenticatedService {
       throw ArgumentError('Invalid message');
     }
 
-    try {
-      final messageId = _chatsRef
-          .doc(chatId)
-          .collection(FirestoreCollections.messages)
-          .doc()
-          .id;
-      final callable = _functions.httpsCallable('sendChatMessage');
-      await callable.call<void>({
-        'chatId': chatId,
-        'messageId': messageId,
-        'type': 'track',
-        'trackData': track.toMap(),
-      });
-    } catch (e, stack) {
-      if (!isRateLimitError(e)) await reportError(e, stack);
-      rethrow;
-    }
+    await _sendOutgoing(chatId, text, track: track);
   }
 
   /// Añade o quita una reacción del usuario actual en un mensaje.

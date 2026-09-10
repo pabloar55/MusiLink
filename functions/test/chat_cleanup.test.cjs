@@ -135,3 +135,29 @@ test('mantiene el documento padre cuando ya no quedan mensajes', async () => {
   assert.equal(retainedChat.lastMessage, '');
   assert.deepEqual(retainedChat.unreadCounts, { alice: 0, bob: 0 });
 });
+
+test('push delivery capability is message-specific, idempotent and does not mark read', async () => {
+  const { createDeliveryToken, confirmPushDelivery } = require('../lib/chat_delivery.js');
+  await chatRef.set({ participants: ['alice', 'bob'], unreadCounts: { alice: 0, bob: 1 } });
+  const ref = chatRef.collection('messages').doc('delivered-message');
+  await ref.set({ senderId: 'alice', read: false, delivered: false });
+  const token = await createDeliveryToken(ref);
+  const payload = { chatId: chatRef.id, messageId: ref.id, deliveryToken: token };
+  const persisted = (await ref.get()).data();
+  assert.equal(JSON.stringify(persisted).includes(token), false);
+  assert.equal(await confirmPushDelivery({ ...payload, deliveryToken: '0'.repeat(64) }), false);
+  assert.equal(await confirmPushDelivery({ ...payload, messageId: 'other' }), false);
+  assert.equal(await confirmPushDelivery({ ...payload, chatId: 'other' }), false);
+  assert.equal((await ref.get()).data().delivered, false);
+  // A trigger retry keeps the earlier notification's capability valid.
+  const secondToken = await createDeliveryToken(ref);
+  assert.equal(await confirmPushDelivery(payload), true);
+  assert.equal(await confirmPushDelivery(payload), true);
+  assert.equal(await confirmPushDelivery({ ...payload, deliveryToken: secondToken }), true);
+  const received = (await ref.get()).data();
+  assert.equal(received.delivered, true);
+  assert.equal(received.read, false);
+  assert.deepEqual((await chatRef.get()).data().unreadCounts, { alice: 0, bob: 1 });
+  await ref.delete();
+  assert.equal(await confirmPushDelivery(payload), false);
+});

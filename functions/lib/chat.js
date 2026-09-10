@@ -8,6 +8,7 @@ const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
 const firebase_1 = require("./firebase");
+const chat_delivery_1 = require("./chat_delivery");
 const firestore_values_1 = require("./firestore_values");
 const notifications_1 = require("./notifications");
 const userPrivateCollection = 'user_private';
@@ -196,8 +197,11 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
         const senderPhotoUrl = senderSnap.data()?.photoUrl;
         if (!senderName)
             return;
+        const deliveryToken = await (0, chat_delivery_1.createDeliveryToken)(messageRef);
         await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), { title: senderName, body: message.text ?? '📎' }, {
             type: 'new_message',
+            messageId: messageRef.id,
+            deliveryToken,
             recipientId,
             chatId,
             otherUserId: senderId,

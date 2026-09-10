@@ -255,6 +255,7 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
             text: payload.text,
             timestamp: now,
             read: false,
+            delivered: false,
             type: payload.type,
             ...(payload.trackData ? { trackData: payload.trackData } : {}),
         });

@@ -15,6 +15,7 @@ void main() {
     text: 'Song',
     timestamp: time,
     read: true,
+    delivered: true,
     type: MessageType.track,
     trackData: const Track(
       title: 'Title',
@@ -48,6 +49,7 @@ void main() {
       expect(actual.timestamp, time);
       expect(actual.text, message.text);
       expect(actual.read, isTrue);
+      expect(actual.delivered, isTrue);
       expect(actual.type, MessageType.track);
       expect(actual.trackData!.toMap(), message.trackData!.toMap());
       expect(actual.reactions, message.reactions);

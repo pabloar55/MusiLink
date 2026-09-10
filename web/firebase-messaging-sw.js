@@ -66,4 +66,23 @@ firebase.initializeApp({
 // Initializing Messaging installs the background push handler. Every server
 // payload includes a webpush.notification block, so no duplicate manual
 // showNotification call is needed.
-firebase.messaging();
+firebase.messaging().onBackgroundMessage(async (payload) => {
+  const data = payload.data || {};
+  if (data.type !== 'new_message' || !data.chatId ||
+      !data.messageId || !data.deliveryToken) return;
+  try {
+    // El token de un solo mensaje llega exclusivamente al receptor por FCM.
+    // No requiere abrir la app ni ejecutar reCAPTCHA dentro del worker.
+    await fetch('/api/chat-delivery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: data.chatId,
+        messageId: data.messageId,
+        deliveryToken: data.deliveryToken,
+      }),
+    });
+  } catch (_) {
+    // La app reintenta la entrega al sincronizar si el sistema corta la red.
+  }
+});
