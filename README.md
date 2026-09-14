@@ -19,42 +19,18 @@
 
 ## Tecnologías
 
-- **Framework:** Flutter 3.47.2 (Dart SDK ^3.13.0)
-- **Versión de app:** 1.0.25+30
+- **Framework:** Flutter 3.47.4 (Dart SDK ^3.13.0)
+- **Versión de app:** 1.0.29+34
 - **Backend:** Firebase Auth, Firestore, Cloud Functions, Remote Config, Storage, Analytics, Crashlytics y FCM
 - **Búsqueda musical:** Spotify Web API vía Cloud Functions, con apoyo de Last.fm para géneros y artistas similares
 - **Internacionalización:** `flutter_localizations` + `intl` (EN, ES, FR, EL)
-- **Gestión de estado:** Riverpod (`flutter_riverpod` ^3.3.1)
-- **Navegación:** GoRouter (`go_router` ^17.2.3)
-- **UI/UX:** Material Design 3, soporte nativo Dark/Light mode y paleta personalizada estilo Spotify
-
-### Dependencias principales
-
-| Paquete | Versión |
-|---|---|
-| flutter_riverpod | ^3.3.1 |
-| go_router | ^17.2.3 |
-| firebase_core | ^4.6.0 |
-| firebase_auth | ^6.4.0 |
-| cloud_firestore | ^6.3.0 |
-| cloud_functions | ^6.2.0 |
-| firebase_storage | ^13.3.0 |
-| firebase_messaging | ^16.2.0 |
-| firebase_crashlytics | ^5.2.0 |
-| firebase_analytics | ^12.3.0 |
-| flutter_local_notifications | ^21.0.0 |
-| google_sign_in | ^7.2.0 |
-| cached_network_image | ^3.4.1 |
-| image_picker | ^1.2.2 |
-| flutter_secure_storage | ^10.0.0 |
-| shared_preferences | ^2.5.5 |
-| lucide_icons_flutter | ^3.1.13 |
-| font_awesome_flutter | ^11.0.0 |
-| url_launcher | ^6.3.2 |
+- **Gestión de estado:** Riverpod
+- **Navegación:** GoRouter
+- **UI/UX:** Material Design 3, soporte nativo Dark/Light mode
 
 ## Estructura del Proyecto
 
-El proyecto sigue una arquitectura en capas con separación clara de responsabilidades:
+El proyecto sigue una arquitectura en capas con separación de responsabilidades:
 
 ```text
 lib/
