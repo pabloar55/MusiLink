@@ -2,6 +2,11 @@
 
 **MusiLink** es una app social de música desarrollada en Flutter que conecta usuarios a través de sus gustos musicales. Los usuarios pueden descubrir personas con gustos compatibles, ver perfiles musicales públicos, chatear en tiempo real y compartir canciones con sus amigos.
 
+## Descarga y acceso
+
+- **Android:** [Descargar MusiLink en Google Play](https://play.google.com/store/apps/details?id=app.musilink)
+- **iPhone y iPad (PWA):** [Abrir MusiLink en la web y añadir a pantalla de inicio](https://musilink.app)
+
 ## Características Principales
 
 - **Descubrimiento Musical:** Encuentra personas afines gracias a un algoritmo de compatibilidad basado en artistas y géneros compartidos.
