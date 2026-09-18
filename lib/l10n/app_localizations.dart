@@ -1407,7 +1407,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyLastUpdated.
   ///
   /// In en, this message translates to:
-  /// **'Last updated: 5 May 2026'**
+  /// **'Last updated: 18 September 2026'**
   String get privacyLastUpdated;
 
   /// No description provided for @privacyS1Title.
@@ -1455,7 +1455,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS4Body.
   ///
   /// In en, this message translates to:
-  /// **'We use the following third-party services, each with their own privacy policies:\n\n• Google Firebase Firestore, Crashlytics and Analytics — Google LLC. Your profile data, messages, and usage events are stored on servers in the European region (europe-southwest1).\n\n• Google Firebase Storage — Google LLC. Profile photos are stored on servers located in the United States under standard contractual clauses (Art. 46 GDPR).\n\n• Cloud Functions — Google LLC. Your message and friend request data is processed on servers in the European region (europe-southwest1).\n\n• Spotify and Last.fm. Used as music catalogue providers for artist/song search and artist suggestions. No Spotify account connection is required.'**
+  /// **'We use the following third-party services:\n\n• Firebase Authentication — Google. Manages account sign-in and processes authentication data in the United States.\n\n• Cloud Firestore — Google. Profiles, messages and other social data are stored in the configured database region (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Profile photos are stored in the bucket configured in the United States.\n\n• Cloud Functions for Firebase — Google. Messaging and friend-request functions run in europe-southwest1. Some scheduled and deletion processes run in europe-west1 (Belgium).\n\n• Firebase Analytics and Crashlytics — Google. Process usage events and crash reports; their processing locations are not determined by the Firestore region.\n\n• Spotify and Last.fm. Provide catalogue data for music search and suggestions. No Spotify account connection is required.'**
   String get privacyS4Body;
 
   /// No description provided for @privacyS5Title.
@@ -1467,7 +1467,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS5Body.
   ///
   /// In en, this message translates to:
-  /// **'We do not retain your data beyond the time you use the App. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Some technical records, crash reports, or analytics data held by Google may be subject to Google\'s own retention policies.'**
+  /// **'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Some technical records, crash reports, or analytics data held by Google may be subject to its own retention periods.'**
   String get privacyS5Body;
 
   /// No description provided for @privacyS6Title.
@@ -1479,7 +1479,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS6Body.
   ///
   /// In en, this message translates to:
-  /// **'Under GDPR, you have the following rights:\n\n• Access: request a copy of data we hold about you.\n• Rectification: correct inaccurate or incomplete data.\n• Erasure: delete your account and all data via the \'Delete account\' button in Settings.\n• Restriction: request we limit processing of your data.\n• Portability: receive your data in a structured, machine-readable format.\n• Objection: object to processing based on legitimate interest.\n\nTo exercise these rights, contact armasp80@gmail.com. You may also file a complaint with the Spanish Data Protection Authority (AEPD) at www.aepd.es.'**
+  /// **'Under GDPR, you have the following rights:\n\n• Access: request a copy of data we hold about you.\n• Rectification: correct inaccurate or incomplete data.\n• Erasure: request deletion of your data; you can also delete your account in Settings, with the scope described in section 5.\n• Restriction: request we limit processing of your data.\n• Portability: receive your data in a structured, machine-readable format.\n• Objection: object to processing based on legitimate interest.\n\nTo exercise these rights, contact armasp80@gmail.com. You may also file a complaint with the Spanish Data Protection Authority (AEPD) at www.aepd.es.'**
   String get privacyS6Body;
 
   /// No description provided for @privacyS7Title.
@@ -1527,7 +1527,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS10Body.
   ///
   /// In en, this message translates to:
-  /// **'Profile photos are stored in Google Firebase Storage with servers located in the United States. By using the App, you explicitly authorise this international data transfer of image data. Google has implemented the necessary technical and organisational measures under the Standard Contractual Clauses approved by the European Commission (Art. 46 GDPR) to ensure an adequate level of protection equivalent to that in the EU.\n\nYour personal data, messages, and music profile data are stored on servers located in the European region (europe-southwest1), within the EU.'**
+  /// **'Firebase Authentication processes authentication data in the United States, and profile photos are stored there through Cloud Storage for Firebase. Analytics and Crashlytics may process data in other Google infrastructure locations. Firestore\'s europe-southwest1 location does not automatically apply to these other services.\n\nTransfers outside the European Economic Area are governed by Google\'s data processing terms and applicable safeguards, including standard contractual clauses where relevant. Merely using the app does not constitute consent to these transfers. You can request information about the safeguards at armasp80@gmail.com. Profiles, messages and music data stored in Firestore are held in europe-southwest1.'**
   String get privacyS10Body;
 
   /// No description provided for @updateRequiredTitle.

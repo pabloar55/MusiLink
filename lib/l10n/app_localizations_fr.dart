@@ -745,7 +745,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get privacyTitle => 'Politique de confidentialité';
 
   @override
-  String get privacyLastUpdated => 'Dernière mise à jour : 5 mai 2026';
+  String get privacyLastUpdated => 'Dernière mise à jour : 18 septembre 2026';
 
   @override
   String get privacyS1Title => '1. Responsable du traitement';
@@ -773,21 +773,21 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get privacyS4Body =>
-      'Nous utilisons les services tiers suivants, soumis à leurs propres politiques de confidentialité :\n\n• Google Firebase Firestore, Crashlytics et Analytics — Google LLC. Vos données de profil, messages et événements d\'utilisation sont stockés sur des serveurs situés dans la région européenne (europe-southwest1).\n\n• Google Firebase Storage — Google LLC. Les photos de profil sont stockées sur des serveurs situés aux États-Unis dans le cadre de clauses contractuelles types (Art. 46 RGPD).\n\n• Cloud Functions — Google LLC. Vos données de messages et demandes d\'amitié sont traitées sur des serveurs situés dans la région européenne (europe-southwest1).\n\n• Spotify et Last.fm. Utilisés comme fournisseurs de catalogue musical pour la recherche d\'artistes/chansons et les suggestions d\'artistes. Aucune connexion à un compte Spotify n\'est requise.';
+      'Nous utilisons les services tiers suivants :\n\n• Firebase Authentication — Google. Gère la connexion aux comptes et traite les données d\'authentification aux États-Unis.\n\n• Cloud Firestore — Google. Les profils, messages et autres données sociales sont stockés dans la région configurée pour la base de données (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Les photos de profil sont stockées dans le bucket configuré aux États-Unis.\n\n• Cloud Functions for Firebase — Google. Les fonctions de messagerie et de demandes d\'amitié s\'exécutent dans europe-southwest1. Certains traitements planifiés et de suppression s\'exécutent dans europe-west1 (Belgique).\n\n• Firebase Analytics et Crashlytics — Google. Traitent les événements d\'utilisation et les rapports de plantage ; leurs lieux de traitement ne sont pas déterminés par la région de Firestore.\n\n• Spotify et Last.fm. Fournissent des données de catalogue pour la recherche et les suggestions musicales. Aucune connexion à un compte Spotify n\'est requise.';
 
   @override
   String get privacyS5Title => '5. Conservation et suppression des données';
 
   @override
   String get privacyS5Body =>
-      'Nous ne conservons pas vos données au-delà de la durée d\'utilisation de l\'application. Lorsque vous supprimez votre compte via le bouton « Supprimer le compte » dans les Paramètres, nous supprimons vos données privées, photo de profil, relations, demandes, jetons, préférences et données musicales. Le profil public est remplacé par un marqueur anonyme afin de ne pas rompre les références techniques. Les messages que vous avez envoyés sont retirés des conversations et vos réactions sont supprimées ; si une conversation devient vide, elle est supprimée. Certains journaux techniques, rapports de plantage ou données statistiques conservés par Google peuvent être soumis aux propres politiques de conservation de Google.';
+      'Nous conservons les données du compte tant qu\'il est actif. Lorsque vous supprimez votre compte via le bouton « Supprimer le compte » dans les Paramètres, nous supprimons vos données privées, photo de profil, relations, demandes, jetons, préférences et données musicales. Le profil public est remplacé par un marqueur anonyme afin de ne pas rompre les références techniques. Les messages que vous avez envoyés sont retirés des conversations et vos réactions sont supprimées ; si une conversation devient vide, elle est supprimée. Certains journaux techniques, rapports de plantage ou données statistiques conservés par Google peuvent être soumis à ses propres durées de conservation.';
 
   @override
   String get privacyS6Title => '6. Vos droits';
 
   @override
   String get privacyS6Body =>
-      'En vertu du RGPD, vous disposez des droits suivants :\n\n• Accès : demander une copie des données que nous détenons à votre sujet.\n• Rectification : corriger des données inexactes ou incomplètes.\n• Effacement : supprimer votre compte et toutes les données associées via le bouton « Supprimer le compte » dans les Paramètres.\n• Limitation : demander que nous limitions le traitement de vos données.\n• Portabilité : recevoir vos données dans un format structuré et lisible par machine.\n• Opposition : vous opposer au traitement fondé sur l\'intérêt légitime.\n\nPour exercer ces droits, contactez armasp80@gmail.com. Vous pouvez également introduire une réclamation auprès de l\'Agence Espagnole de Protection des Données (AEPD) à l\'adresse www.aepd.es.';
+      'En vertu du RGPD, vous disposez des droits suivants :\n\n• Accès : demander une copie des données que nous détenons à votre sujet.\n• Rectification : corriger des données inexactes ou incomplètes.\n• Effacement : demander la suppression de vos données ; vous pouvez aussi supprimer votre compte dans les Paramètres, selon les modalités de la section 5.\n• Limitation : demander que nous limitions le traitement de vos données.\n• Portabilité : recevoir vos données dans un format structuré et lisible par machine.\n• Opposition : vous opposer au traitement fondé sur l\'intérêt légitime.\n\nPour exercer ces droits, contactez armasp80@gmail.com. Vous pouvez également introduire une réclamation auprès de l\'Agence Espagnole de Protection des Données (AEPD) à l\'adresse www.aepd.es.';
 
   @override
   String get privacyS7Title => '7. Âge minimum';
@@ -815,7 +815,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get privacyS10Body =>
-      'Les photos de profil sont stockées dans Google Firebase Storage avec des serveurs situés aux États-Unis. En utilisant l\'application, vous autorisez explicitement ce transfert international de données d\'images. Google a mis en place les mesures techniques et organisationnelles nécessaires en vertu des Clauses Contractuelles Types approuvées par la Commission Européenne (Art. 46 RGPD) pour garantir un niveau de protection adéquat équivalent à celui de l\'UE.\n\nVos données personnelles, messages et données de profil musical sont stockés sur des serveurs situés dans la région européenne (europe-southwest1), au sein de l\'UE.';
+      'Firebase Authentication traite les données d\'authentification aux États-Unis, où les photos de profil sont également stockées par Cloud Storage for Firebase. Analytics et Crashlytics peuvent traiter des données dans d\'autres lieux de l\'infrastructure Google. La région europe-southwest1 de Firestore ne s\'applique pas automatiquement à ces autres services.\n\nLes transferts hors de l\'Espace économique européen sont régis par les conditions de traitement des données de Google et les garanties applicables, notamment les clauses contractuelles types lorsqu\'elles s\'appliquent. La simple utilisation de l\'application ne vaut pas consentement à ces transferts. Vous pouvez demander des informations sur les garanties à armasp80@gmail.com. Les profils, messages et données musicales stockés dans Firestore sont conservés dans europe-southwest1.';
 
   @override
   String get updateRequiredTitle => 'Mise à jour requise';
