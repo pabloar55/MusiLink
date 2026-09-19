@@ -15,6 +15,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
+import 'package:musi_link/utils/terms_and_conditions.dart';
 import 'package:musi_link/utils/session_cleanup.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/widgets/delete_account_dialog.dart';
@@ -24,6 +25,7 @@ import 'package:musi_link/widgets/reauth_password_dialog.dart';
 import 'package:musi_link/widgets/signing_out_dialog.dart';
 import 'package:musi_link/widgets/theme_mode_dialog.dart';
 import 'package:musi_link/widgets/user_profile_photo.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -35,6 +37,23 @@ class AccountSettingsScreen extends ConsumerStatefulWidget {
 
 class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   bool _isUploadingPhoto = false;
+
+  Future<void> _openTerms() async {
+    final language = Localizations.localeOf(context).languageCode;
+    try {
+      final opened = await launchUrl(
+        TermsAndConditions.urlForLocale(language),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('Could not open terms');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.termsOpenError)),
+        );
+      }
+    }
+  }
 
   Future<void> _selectThemeMode(ThemeMode currentMode) async {
     final l10n = AppLocalizations.of(context)!;
@@ -140,16 +159,14 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
             .reauthenticateWithGoogle();
       } on GoogleAccountMismatchException {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.reauthWrongAccount)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.reauthWrongAccount)));
         return;
       } catch (e, st) {
         reportError(e, st).ignore();
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.genericError)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.genericError)));
         return;
       }
       if (!success || !mounted) return; // usuario canceló
@@ -169,9 +186,8 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
         final msg = e.code == 'wrong-password' || e.code == 'invalid-credential'
             ? l10n.authErrorWrongPassword
             : l10n.genericError;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
         return;
       }
     }
@@ -209,9 +225,8 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
       reportError(e, st).ignore();
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.genericError)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.genericError)));
     }
   }
 
@@ -341,6 +356,11 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
               _SettingsCard(
                 children: [
                   _ChevronTile(
+                    icon: LucideIcons.fileText,
+                    label: l10n.termsAcceptanceTitle,
+                    onTap: () => unawaited(_openTerms()),
+                  ),
+                  _ChevronTile(
                     icon: LucideIcons.shieldCheck,
                     label: l10n.settingsPrivacyPolicy,
                     onTap: () => context.push('/privacy-policy'),
@@ -469,17 +489,15 @@ class _ProfileCard extends StatelessWidget {
                   children: [
                     Text(
                       displayName,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     if (email.isNotEmpty) ...[
                       const SizedBox(height: AppTokens.spaceXS),
                       Text(
                         email,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
                       ),
                     ],
                   ],
@@ -601,22 +619,14 @@ class _ThemePickerTile extends StatelessWidget {
     };
 
     return ListTile(
-      leading: Icon(
-        LucideIcons.palette,
-        size: 22,
-        color: cs.onSurfaceVariant,
-      ),
+      leading: Icon(LucideIcons.palette, size: 22, color: cs.onSurfaceVariant),
       title: Text(label),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(currentLabel, style: TextStyle(color: cs.onSurfaceVariant)),
           const SizedBox(width: AppTokens.spaceSM),
-          Icon(
-            LucideIcons.chevronRight,
-            size: 18,
-            color: cs.onSurfaceVariant,
-          ),
+          Icon(LucideIcons.chevronRight, size: 18, color: cs.onSurfaceVariant),
         ],
       ),
       onTap: onTap,

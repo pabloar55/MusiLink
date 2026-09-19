@@ -24,7 +24,8 @@ void main() {
 
   tearDown(() => authStream.close());
 
-  AppRouterNotifier buildNotifier() => AppRouterNotifier(auth: mockAuth);
+  AppRouterNotifier buildNotifier() =>
+      AppRouterNotifier(auth: mockAuth, termsAcceptanceRequired: false);
 
   // ── Estado 1: app no inicializada ──────────────────────────────
 
@@ -96,6 +97,7 @@ void main() {
       when(() => mockUser.uid).thenReturn('uid123');
       final n = AppRouterNotifier(
         auth: mockAuth,
+        termsAcceptanceRequired: false,
         initialState: const AppRouterBootstrapState(
           usernameSet: true,
           artistsSelected: true,
@@ -178,6 +180,7 @@ void main() {
       when(() => mockUser.uid).thenReturn('uid123');
       final n = AppRouterNotifier(
         auth: mockAuth,
+        termsAcceptanceRequired: false,
         initialState: const AppRouterBootstrapState(
           usernameSet: true,
           artistsSelected: true,
@@ -205,6 +208,7 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(null);
       final n = AppRouterNotifier(
         auth: mockAuth,
+        termsAcceptanceRequired: false,
         initialState: const AppRouterBootstrapState(
           usernameSet: false,
           artistsSelected: false,
@@ -239,6 +243,7 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(null);
       final n = AppRouterNotifier(
         auth: mockAuth,
+        termsAcceptanceRequired: false,
         initialState: const AppRouterBootstrapState(
           usernameSet: false,
           artistsSelected: false,
@@ -583,4 +588,82 @@ void main() {
       n.dispose();
     },
   );
+
+  group('terms acceptance', () {
+    setUp(() => when(() => mockAuth.currentUser).thenReturn(mockUser));
+
+    test('bloquea cuentas nuevas y existentes hasta aceptar', () {
+      final notifier = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: false,
+          setupStateKnown: true,
+          userUid: 'uid123',
+        ),
+      );
+
+      expect(appRedirect(notifier, '/'), '/terms');
+      expect(appRedirect(notifier, '/chat'), '/terms');
+      expect(appRedirect(notifier, '/terms'), isNull);
+      expect(appRedirect(notifier, '/privacy-policy'), isNull);
+      notifier.setTermsAccepted('otro');
+      expect(appRedirect(notifier, '/'), '/terms');
+
+      notifier.setTermsAccepted('uid123');
+      expect(appRedirect(notifier, '/terms'), '/');
+      expect(appRedirect(notifier, '/chat'), isNull);
+      notifier.dispose();
+    });
+
+    test('la cuenta nueva vuelve a onboarding tras aceptar', () {
+      final notifier = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+          deletionPending: false,
+          setupStateKnown: true,
+          userUid: 'uid123',
+        ),
+      );
+      expect(appRedirect(notifier, '/onboarding'), '/terms');
+      notifier.setTermsAccepted('uid123');
+      expect(appRedirect(notifier, '/terms'), '/onboarding');
+      notifier.dispose();
+    });
+
+    test('cambiar de cuenta invalida la aceptación en memoria', () async {
+      final notifier = AppRouterNotifier(
+        auth: mockAuth,
+        initialState: const AppRouterBootstrapState(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          deletionPending: false,
+          setupStateKnown: true,
+          userUid: 'uid123',
+        ),
+      );
+      notifier.setTermsAccepted('uid123');
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.termsAccepted, isTrue);
+
+      final other = MockUser();
+      when(() => other.uid).thenReturn('other');
+      when(() => mockAuth.currentUser).thenReturn(other);
+      authStream.add(other);
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.termsAccepted, isFalse);
+      expect(appRedirect(notifier, '/'), '/terms');
+      notifier.dispose();
+    });
+  });
 }

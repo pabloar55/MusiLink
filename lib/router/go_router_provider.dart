@@ -11,6 +11,7 @@ import 'package:musi_link/screens/deleting_account_screen.dart';
 import 'package:musi_link/screens/blocked_users_screen.dart';
 import 'package:musi_link/screens/auth_screen.dart';
 import 'package:musi_link/screens/privacy_policy_screen.dart';
+import 'package:musi_link/screens/terms_acceptance_screen.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/screens/main_screen.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
@@ -35,6 +36,7 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
   final prefs = ref.read(sharedPreferencesProvider);
   final notifier = AppRouterNotifier(
     auth: ref.watch(firebaseAuthProvider),
+    termsAcceptanceRequired: true,
     initialState: ref.watch(routerBootstrapStateProvider),
     readCachedUserState: (loginUid) {
       final cached = UserSetupCache.read(prefs, loginUid);
@@ -109,6 +111,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AuthScreen(
           accountDeletionNotice: state.uri.queryParameters['accountDeletion'],
         ),
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) => const TermsAcceptanceScreen(),
       ),
       GoRoute(
         path: '/deleting-account',

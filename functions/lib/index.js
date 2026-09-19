@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.acknowledgeChatDelivery = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.acknowledgeChatDelivery = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -13,6 +13,8 @@ Object.defineProperty(exports, "requestAccountDeletion", { enumerable: true, get
 Object.defineProperty(exports, "processAccountDeletion", { enumerable: true, get: function () { return account_deletion_1.processAccountDeletion; } });
 var user_profile_1 = require("./user_profile");
 Object.defineProperty(exports, "createUserProfile", { enumerable: true, get: function () { return user_profile_1.createUserProfile; } });
+var terms_acceptance_1 = require("./terms_acceptance");
+Object.defineProperty(exports, "acceptTerms", { enumerable: true, get: function () { return terms_acceptance_1.acceptTerms; } });
 var music_profile_write_1 = require("./music_profile_write");
 Object.defineProperty(exports, "saveMusicProfile", { enumerable: true, get: function () { return music_profile_write_1.saveMusicProfile; } });
 var recommendations_1 = require("./recommendations");

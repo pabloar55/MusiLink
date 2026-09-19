@@ -45,6 +45,7 @@ class AppRouterNotifier extends ChangeNotifier {
 
   AppRouterNotifier({
     required this._auth,
+    this.termsAcceptanceRequired = true,
     AppRouterBootstrapState? initialState,
     FetchUserSetupState? fetchUserState,
     ReadCachedUserSetupState? readCachedUserState,
@@ -67,6 +68,8 @@ class AppRouterNotifier extends ChangeNotifier {
   }
 
   StreamSubscription<User?>? _sub;
+  final bool termsAcceptanceRequired;
+  String? _termsAcceptedUid;
   Timer? _retryTimer;
   int _authGeneration = 0;
   int _setupRevision = 0;
@@ -88,6 +91,11 @@ class AppRouterNotifier extends ChangeNotifier {
   bool get photoSetupDone => _photoSetupDone;
   bool get deletionPending => _deletionPending;
   bool get setupStateKnown => _setupStateKnown;
+  bool get termsAccepted {
+    if (!termsAcceptanceRequired) return true;
+    final uid = _auth.currentUser?.uid;
+    return uid != null && _termsAcceptedUid == uid;
+  }
 
   FetchUserSetupState? _fetchUserState;
   ReadCachedUserSetupState? _readCachedUserState;
@@ -125,6 +133,7 @@ class AppRouterNotifier extends ChangeNotifier {
       _retryTimer = null;
       _retryAttempt = 0;
       if (user == null) {
+        _termsAcceptedUid = null;
         _usernameSet = false;
         _artistsSelected = false;
         _onboardingDone = false;
@@ -134,6 +143,7 @@ class AppRouterNotifier extends ChangeNotifier {
         _setupStateUid = null;
         notifyListeners();
       } else if (_fetchUserState != null) {
+        if (_termsAcceptedUid != user.uid) _termsAcceptedUid = null;
         // El estado anterior puede pertenecer a la pantalla sin sesión o a
         // otra cuenta. Solo es seguro reutilizar un snapshot del mismo UID.
         final cachedState = _readCachedState(user.uid);
@@ -154,6 +164,7 @@ class AppRouterNotifier extends ChangeNotifier {
         notifyListeners();
         unawaited(_refreshUserState(user, generation));
       } else {
+        if (_termsAcceptedUid != user.uid) _termsAcceptedUid = null;
         notifyListeners();
       }
     });
@@ -276,6 +287,13 @@ class AppRouterNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Solo se llama tras confirmar la versión vigente con el servidor.
+  void setTermsAccepted(String uid) {
+    if (_auth.currentUser?.uid != uid) return;
+    _termsAcceptedUid = uid;
+    notifyListeners();
+  }
+
   UserSetupState get _currentSetupState => (
     usernameSet: _usernameSet,
     artistsSelected: _artistsSelected,
@@ -323,6 +341,9 @@ class AppRouterNotifier extends ChangeNotifier {
 String? appRedirect(AppRouterNotifier notifier, String location) {
   if (!notifier.isInitialized) {
     if (!notifier.isLoggedIn) return location == '/auth' ? null : '/auth';
+    if (!notifier.termsAccepted) {
+      return location == '/terms' ? null : '/terms';
+    }
     return null;
   }
   if (!notifier.isLoggedIn) {
@@ -331,11 +352,16 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
   if (notifier.deletionPending) {
     return location == '/deleting-account' ? null : '/deleting-account';
   }
+  if (!notifier.termsAccepted) {
+    return location == '/terms' || location == '/privacy-policy'
+        ? null
+        : '/terms';
+  }
   if (!notifier.setupStateKnown) {
     // Tras autenticar una cuenta sin caché, el perfil tarda un instante en
     // resolverse. Mantener /auth durante esa espera evita montar MainScreen
     // (Discovery) antes de saber si hay que iniciar el onboarding.
-    if (location == '/auth') return null;
+    if (location == '/auth' || location == '/terms') return null;
     if (location == '/onboarding' ||
         location == '/username-setup' ||
         location == '/photo-setup' ||
@@ -358,6 +384,7 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
   }
   // Usuario listo: evitar que se quede en pantallas de setup
   if (location == '/auth' ||
+      location == '/terms' ||
       location == '/onboarding' ||
       location == '/username-setup' ||
       location == '/photo-setup' ||

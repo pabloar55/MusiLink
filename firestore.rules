@@ -317,6 +317,15 @@ service cloud.firestore {
       );
       allow delete: if request.auth != null && request.auth.uid == userId;
 
+      // La aceptación se escribe solo desde la callable con hora del servidor.
+      // Vive aquí para que recursiveDelete la elimine junto con la cuenta.
+      match /terms_acceptances/{acceptanceId} {
+        allow read: if request.auth != null
+          && request.auth.uid == userId
+          && acceptanceId == 'current';
+        allow write: if false;
+      }
+
       match /push_tokens/{installationId} {
         allow read, delete: if request.auth != null
           && request.auth.uid == userId;

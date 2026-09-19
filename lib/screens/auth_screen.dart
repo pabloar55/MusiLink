@@ -9,7 +9,9 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/utils/terms_and_conditions.dart';
 import 'package:musi_link/widgets/google_sign_in_web_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Pantalla de autenticación con Firebase.
 /// Permite login/registro con email+contraseña y Google Sign-In.
@@ -152,9 +154,23 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final language = Localizations.localeOf(context).languageCode;
+    try {
+      final opened = await launchUrl(
+        TermsAndConditions.privacyUrlForLocale(language),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('Could not open privacy policy');
+    } catch (_) {
+      if (mounted) {
+        _showError(AppLocalizations.of(context)!.termsOpenError);
+      }
+    }
   }
 
   String _mapFirebaseError(String code) {
@@ -210,8 +226,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                   // Formulario
                   Form(
-                    key:
-                        _formKey, // Asociamos el formulario a la clave para hacer referencia desde fuera de la clase
+                    key: _formKey, // Asociamos el formulario a la clave para hacer referencia desde fuera de la clase
                     child: Column(
                       children: [
                         // Email
@@ -382,6 +397,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _isLoading ? null : _openPrivacyPolicy,
+                    child: Text(l10n.authPrivacyLink),
                   ),
                 ],
               ),

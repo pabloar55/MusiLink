@@ -36,6 +36,7 @@ void main() {
     expect(find.widgetWithText(TextFormField, 'Name'), findsNothing);
     expect(find.widgetWithText(TextFormField, 'Email'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Password'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
   });
 }
 

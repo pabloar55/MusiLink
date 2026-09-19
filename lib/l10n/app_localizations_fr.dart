@@ -115,6 +115,48 @@ class AppLocalizationsFr extends AppLocalizations {
       'Cet e-mail est déjà enregistré avec un mot de passe. Veuillez vous connecter avec e-mail et mot de passe.';
 
   @override
+  String get authPrivacyLink => 'Politique de confidentialité';
+
+  @override
+  String get termsAcceptanceTitle => 'Conditions d\'utilisation';
+
+  @override
+  String get termsAcceptanceIntro =>
+      'Pour continuer à utiliser MusiLink, veuillez lire et accepter les conditions.';
+
+  @override
+  String termsAcceptanceVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get termsOpenDocument => 'Lire les conditions d\'utilisation';
+
+  @override
+  String get termsAcceptCheckbox =>
+      'J\'ai lu et j\'accepte les conditions d\'utilisation de MusiLink.';
+
+  @override
+  String get termsAcceptAndContinue => 'Accepter et continuer';
+
+  @override
+  String get termsAccepting => 'Acceptation…';
+
+  @override
+  String get termsCheckError =>
+      'Impossible de vérifier votre acceptation. Connectez-vous à Internet et réessayez.';
+
+  @override
+  String get termsRetry => 'Réessayer';
+
+  @override
+  String get termsSaveError =>
+      'Impossible d\'enregistrer votre acceptation. Réessayez.';
+
+  @override
+  String get termsOpenError => 'Impossible d\'ouvrir le lien.';
+
+  @override
   String get authUsername => 'Nom d\'utilisateur';
 
   @override

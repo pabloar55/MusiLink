@@ -16,6 +16,7 @@ import 'package:musi_link/services/last_fm_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/services/spotify_cloud_service.dart';
 import 'package:musi_link/services/storage_service.dart';
+import 'package:musi_link/services/terms_acceptance_service.dart';
 import 'package:musi_link/services/user_service.dart';
 
 // ── Chat activo (suprime notificaciones del chat en pantalla) ──────
@@ -66,6 +67,13 @@ final userServiceProvider = Provider<UserService>((ref) {
 
 final storageServiceProvider = Provider<StorageService>((ref) {
   return StorageService(storage: ref.watch(firebaseStorageProvider));
+});
+
+final termsAcceptanceServiceProvider = Provider<TermsAcceptanceService>((ref) {
+  return TermsAcceptanceService(
+    ref.watch(firebaseFirestoreProvider),
+    ref.watch(firebaseFunctionsProvider),
+  );
 });
 
 final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {

@@ -115,6 +115,48 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este email ya está registrado con contraseña. Inicia sesión con email y contraseña.';
 
   @override
+  String get authPrivacyLink => 'Política de privacidad';
+
+  @override
+  String get termsAcceptanceTitle => 'Términos y condiciones';
+
+  @override
+  String get termsAcceptanceIntro =>
+      'Para continuar usando MusiLink, consulta y acepta los términos.';
+
+  @override
+  String termsAcceptanceVersion(String version) {
+    return 'Versión $version';
+  }
+
+  @override
+  String get termsOpenDocument => 'Leer términos y condiciones';
+
+  @override
+  String get termsAcceptCheckbox =>
+      'He leído y acepto los términos y condiciones de MusiLink.';
+
+  @override
+  String get termsAcceptAndContinue => 'Aceptar y continuar';
+
+  @override
+  String get termsAccepting => 'Aceptando…';
+
+  @override
+  String get termsCheckError =>
+      'No se pudo comprobar tu aceptación. Conéctate a internet y reinténtalo.';
+
+  @override
+  String get termsRetry => 'Reintentar';
+
+  @override
+  String get termsSaveError =>
+      'No se pudo guardar la aceptación. Inténtalo de nuevo.';
+
+  @override
+  String get termsOpenError => 'No se pudo abrir el enlace.';
+
+  @override
   String get authUsername => 'Nombre de usuario';
 
   @override

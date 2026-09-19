@@ -113,6 +113,48 @@ class AppLocalizationsEl extends AppLocalizations {
       'Αυτό το email είναι ήδη καταχωρημένο με κωδικό. Συνδεθείτε με email και κωδικό.';
 
   @override
+  String get authPrivacyLink => 'Πολιτική Απορρήτου';
+
+  @override
+  String get termsAcceptanceTitle => 'Όροι και Προϋποθέσεις';
+
+  @override
+  String get termsAcceptanceIntro =>
+      'Για να συνεχίσετε να χρησιμοποιείτε το MusiLink, διαβάστε και αποδεχτείτε τους όρους.';
+
+  @override
+  String termsAcceptanceVersion(String version) {
+    return 'Έκδοση $version';
+  }
+
+  @override
+  String get termsOpenDocument => 'Διαβάστε τους Όρους και Προϋποθέσεις';
+
+  @override
+  String get termsAcceptCheckbox =>
+      'Έχω διαβάσει και αποδέχομαι τους Όρους και Προϋποθέσεις του MusiLink.';
+
+  @override
+  String get termsAcceptAndContinue => 'Αποδοχή και συνέχεια';
+
+  @override
+  String get termsAccepting => 'Αποδοχή…';
+
+  @override
+  String get termsCheckError =>
+      'Δεν ήταν δυνατός ο έλεγχος της αποδοχής σας. Συνδεθείτε στο διαδίκτυο και δοκιμάστε ξανά.';
+
+  @override
+  String get termsRetry => 'Δοκιμάστε ξανά';
+
+  @override
+  String get termsSaveError =>
+      'Δεν ήταν δυνατή η αποθήκευση της αποδοχής σας. Δοκιμάστε ξανά.';
+
+  @override
+  String get termsOpenError => 'Δεν ήταν δυνατό το άνοιγμα του συνδέσμου.';
+
+  @override
   String get authUsername => 'Όνομα χρήστη';
 
   @override

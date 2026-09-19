@@ -94,6 +94,25 @@ test('el cliente no puede saltarse la callable al crear el perfil', async () => 
   }));
 });
 
+test('la aceptación de términos solo la lee el titular y solo la escribe el backend', async () => {
+  await seed('user_private/alice/terms_acceptances/current', {
+    version: '2026-09-18',
+    acceptedAt: new Date(),
+  });
+  const path = 'user_private/alice/terms_acceptances/current';
+
+  await assertSucceeds(getDoc(doc(dbFor('alice'), path)));
+  await assertFails(getDoc(doc(dbFor('bob'), path)));
+  await assertFails(setDoc(doc(dbFor('alice'), path), {
+    version: '2026-09-18',
+    acceptedAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(
+    doc(dbFor('alice'), 'user_private/alice/terms_acceptances/other'),
+    { version: '2026-09-18', acceptedAt: serverTimestamp() },
+  ));
+});
+
 test('un usuario no puede cambiar su username activo', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');

@@ -294,6 +294,78 @@ abstract class AppLocalizations {
   /// **'This email is already registered with a password. Please sign in with email and password.'**
   String get authErrorAccountExistsWithDifferentCredential;
 
+  /// No description provided for @authPrivacyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get authPrivacyLink;
+
+  /// No description provided for @termsAcceptanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms and Conditions'**
+  String get termsAcceptanceTitle;
+
+  /// No description provided for @termsAcceptanceIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'To continue using MusiLink, please read and accept the terms.'**
+  String get termsAcceptanceIntro;
+
+  /// No description provided for @termsAcceptanceVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String termsAcceptanceVersion(String version);
+
+  /// No description provided for @termsOpenDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'Read Terms and Conditions'**
+  String get termsOpenDocument;
+
+  /// No description provided for @termsAcceptCheckbox.
+  ///
+  /// In en, this message translates to:
+  /// **'I have read and accept MusiLink\'s Terms and Conditions.'**
+  String get termsAcceptCheckbox;
+
+  /// No description provided for @termsAcceptAndContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept and continue'**
+  String get termsAcceptAndContinue;
+
+  /// No description provided for @termsAccepting.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepting…'**
+  String get termsAccepting;
+
+  /// No description provided for @termsCheckError.
+  ///
+  /// In en, this message translates to:
+  /// **'We could not check your acceptance. Connect to the internet and try again.'**
+  String get termsCheckError;
+
+  /// No description provided for @termsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get termsRetry;
+
+  /// No description provided for @termsSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'We could not save your acceptance. Please try again.'**
+  String get termsSaveError;
+
+  /// No description provided for @termsOpenError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the link.'**
+  String get termsOpenError;
+
   /// No description provided for @authUsername.
   ///
   /// In en, this message translates to:
