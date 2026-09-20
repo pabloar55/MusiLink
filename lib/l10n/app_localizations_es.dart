@@ -777,7 +777,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyLastUpdated =>
-      'Última actualización: 18 de septiembre de 2026';
+      'Última actualización: 20 de septiembre de 2026';
 
   @override
   String get privacyS1Title => '1. Responsable del tratamiento';
@@ -791,28 +791,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyS2Body =>
-      'Recogemos y tratamos los siguientes datos personales:\n\n• Datos de cuenta: nombre, dirección de correo electrónico, foto de perfil e identificadores de inicio de sesión (mediante correo/contraseña o Google).\n\n• Datos de perfil musical: artistas principales que eliges, géneros principales inferidos, canción del día y canciones compartidas.\n\n• Datos sociales: mensajes, solicitudes de amistad y reacciones con emojis.\n\n• Datos técnicos: informes de fallos recopilados por Firebase Crashlytics y eventos de uso recopilados por Firebase Analytics.';
+      'Recogemos y tratamos los siguientes datos personales:\n\n• Datos de cuenta: nombre, dirección de correo electrónico, foto de perfil e identificadores de inicio de sesión (mediante correo/contraseña o Google).\n\n• Datos de perfil musical: artistas principales que eliges, géneros principales inferidos, canción del día y canciones compartidas.\n\n• Datos sociales: mensajes, solicitudes de amistad y reacciones con emojis.\n\n• Datos técnicos: informes de errores y fallos recopilados por Firebase Crashlytics.';
 
   @override
   String get privacyS3Title => '3. Cómo usamos tus datos';
 
   @override
   String get privacyS3Body =>
-      'Tus datos se tratan con las siguientes finalidades:\n\n• Prestación del servicio (cuenta, compatibilidad musical, descubrimiento, chat). Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Funciones de perfil musical: mostrar y comparar el gusto musical que has seleccionado. Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Estabilidad de la app: diagnóstico de errores y fallos. Base legal: interés legítimo (art. 6.1.f RGPD).\n\n• Mejora de la app: comprender cómo se usa la app para mejorarla. Base legal: interés legítimo (art. 6.1.f RGPD).';
+      'Tus datos se tratan con las siguientes finalidades:\n\n• Prestación del servicio (cuenta, compatibilidad musical, descubrimiento, chat). Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Funciones de perfil musical: mostrar y comparar el gusto musical que has seleccionado. Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Estabilidad de la app: diagnóstico de errores y fallos. Base legal: interés legítimo (art. 6.1.f RGPD).';
 
   @override
   String get privacyS4Title => '4. Servicios de terceros';
 
   @override
   String get privacyS4Body =>
-      'Utilizamos los siguientes servicios de terceros:\n\n• Firebase Authentication — Google. Gestiona el acceso a las cuentas y procesa datos de autenticación en Estados Unidos.\n\n• Cloud Firestore — Google. Los perfiles, mensajes y otros datos sociales se almacenan en la región configurada para la base de datos (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Las fotos de perfil se almacenan en el bucket configurado en Estados Unidos.\n\n• Cloud Functions for Firebase — Google. Las funciones de mensajería y solicitudes de amistad se ejecutan en europe-southwest1. Algunos procesos programados y de eliminación se ejecutan en europe-west1 (Bélgica).\n\n• Firebase Analytics y Crashlytics — Google. Tratan eventos de uso e informes de fallos; su ubicación de tratamiento no viene determinada por la región de Firestore.\n\n• Spotify y Last.fm. Proporcionan datos de catálogo para búsquedas y sugerencias musicales. No es necesario conectar una cuenta de Spotify.';
+      'Utilizamos los siguientes servicios de terceros:\n\n• Firebase Authentication — Google. Gestiona el acceso a las cuentas y procesa datos de autenticación en Estados Unidos.\n\n• Cloud Firestore — Google. Los perfiles, mensajes y otros datos sociales se almacenan en la región configurada para la base de datos (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Las fotos de perfil se almacenan en el bucket configurado en Estados Unidos.\n\n• Cloud Functions for Firebase — Google. Las funciones de mensajería y solicitudes de amistad se ejecutan en europe-southwest1. Algunos procesos programados y de eliminación se ejecutan en europe-west1 (Bélgica).\n\n• Firebase Crashlytics — Google. Trata informes de errores y fallos; su ubicación de tratamiento no viene determinada por la región de Firestore.\n\n• Spotify y Last.fm. Proporcionan datos de catálogo para búsquedas y sugerencias musicales. No es necesario conectar una cuenta de Spotify.';
 
   @override
   String get privacyS5Title => '5. Conservación y eliminación de datos';
 
   @override
   String get privacyS5Body =>
-      'Conservamos los datos de la cuenta mientras esté activa. Al eliminar tu cuenta mediante el botón \'Eliminar cuenta\' en Ajustes, borramos tus datos privados, foto de perfil, relaciones, solicitudes, tokens, preferencias y datos musicales. El perfil público se sustituye por un marcador anónimo para no romper referencias técnicas. Los mensajes que hayas enviado se eliminan de las conversaciones y tus reacciones se retiran; si una conversación queda vacía, se borra. Algunos registros técnicos, informes de fallos o datos analíticos conservados por Google pueden estar sujetos a sus propios plazos de retención.';
+      'Conservamos los datos de la cuenta mientras esté activa. Al eliminar tu cuenta mediante el botón \'Eliminar cuenta\' en Ajustes, borramos tus datos privados, foto de perfil, relaciones, solicitudes, tokens, preferencias y datos musicales. El perfil público se sustituye por un marcador anónimo para no romper referencias técnicas. Los mensajes que hayas enviado se eliminan de las conversaciones y tus reacciones se retiran; si una conversación queda vacía, se borra. Algunos registros técnicos o informes de fallos conservados por Google pueden estar sujetos a sus propios plazos de retención.';
 
   @override
   String get privacyS6Title => '6. Tus derechos';
@@ -847,7 +847,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyS10Body =>
-      'Firebase Authentication procesa datos de autenticación en Estados Unidos y las fotos de perfil se almacenan allí mediante Cloud Storage for Firebase. Analytics y Crashlytics pueden tratar datos en otras ubicaciones de la infraestructura de Google. La ubicación de Firestore en europe-southwest1 no se aplica automáticamente a estos otros servicios.\n\nLas transferencias fuera del Espacio Económico Europeo se rigen por las condiciones de tratamiento de datos de Google y las garantías aplicables, incluidas las cláusulas contractuales tipo cuando procedan. El mero uso de la app no constituye consentimiento para estas transferencias. Puedes solicitar información sobre las garantías en armasp80@gmail.com. Los perfiles, mensajes y datos musicales guardados en Firestore se almacenan en europe-southwest1.';
+      'Firebase Authentication procesa datos de autenticación en Estados Unidos y las fotos de perfil se almacenan allí mediante Cloud Storage for Firebase. Crashlytics puede tratar informes de errores y fallos en otras ubicaciones de la infraestructura de Google. La ubicación de Firestore en europe-southwest1 no se aplica automáticamente a estos otros servicios.\n\nLas transferencias fuera del Espacio Económico Europeo se rigen por las condiciones de tratamiento de datos de Google y las garantías aplicables, incluidas las cláusulas contractuales tipo cuando procedan. El mero uso de la app no constituye consentimiento para estas transferencias. Puedes solicitar información sobre las garantías en armasp80@gmail.com. Los perfiles, mensajes y datos musicales guardados en Firestore se almacenan en europe-southwest1.';
 
   @override
   String get updateRequiredTitle => 'Actualización obligatoria';

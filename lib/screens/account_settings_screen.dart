@@ -55,6 +55,23 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     }
   }
 
+  Future<void> _openPrivacyPolicy() async {
+    final language = Localizations.localeOf(context).languageCode;
+    try {
+      final opened = await launchUrl(
+        TermsAndConditions.privacyUrlForLocale(language),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('Could not open privacy policy');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.termsOpenError)),
+        );
+      }
+    }
+  }
+
   Future<void> _selectThemeMode(ThemeMode currentMode) async {
     final l10n = AppLocalizations.of(context)!;
     final selectedMode = await showThemeModeDialog(
@@ -363,7 +380,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
                   _ChevronTile(
                     icon: LucideIcons.shieldCheck,
                     label: l10n.settingsPrivacyPolicy,
-                    onTap: () => context.push('/privacy-policy'),
+                    onTap: () => unawaited(_openPrivacyPolicy()),
                   ),
                 ],
               ),
