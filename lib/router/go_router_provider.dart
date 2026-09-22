@@ -34,9 +34,12 @@ final initialRouterLocationProvider = Provider<String>((ref) => '/');
 final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
   final userService = ref.read(userServiceProvider);
   final prefs = ref.read(sharedPreferencesProvider);
+  final termsService = ref.read(termsAcceptanceServiceProvider);
   final notifier = AppRouterNotifier(
     auth: ref.watch(firebaseAuthProvider),
     termsAcceptanceRequired: true,
+    readCachedTermsAcceptance: termsService.hasCachedAcceptance,
+    refreshTermsAcceptance: termsService.hasAcceptedCurrentVersion,
     initialState: ref.watch(routerBootstrapStateProvider),
     readCachedUserState: (loginUid) {
       final cached = UserSetupCache.read(prefs, loginUid);

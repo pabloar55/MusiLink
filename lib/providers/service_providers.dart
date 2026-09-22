@@ -74,6 +74,8 @@ final termsAcceptanceServiceProvider = Provider<TermsAcceptanceService>((ref) {
   return TermsAcceptanceService(
     ref.watch(firebaseFirestoreProvider),
     ref.watch(firebaseFunctionsProvider),
+    prefs: ref.watch(sharedPreferencesProvider),
+    auth: ref.watch(firebaseAuthProvider),
   );
 });
 

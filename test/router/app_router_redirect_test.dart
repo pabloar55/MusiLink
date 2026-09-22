@@ -592,6 +592,173 @@ void main() {
   group('terms acceptance', () {
     setUp(() => when(() => mockAuth.currentUser).thenReturn(mockUser));
 
+    AppRouterNotifier cachedNotifier(
+      Future<bool> Function(String) refresh, {
+      bool cached = true,
+    }) => AppRouterNotifier(
+      auth: mockAuth,
+      readCachedTermsAcceptance: (uid) => cached && uid == 'uid123',
+      refreshTermsAcceptance: refresh,
+      initialState: const AppRouterBootstrapState(
+        usernameSet: true,
+        artistsSelected: true,
+        onboardingDone: true,
+        photoSetupDone: true,
+        deletionPending: false,
+        setupStateKnown: true,
+        userUid: 'uid123',
+      ),
+    );
+
+    test(
+      'entra directamente al chat mientras verifica en segundo plano',
+      () async {
+        final pending = Completer<bool>();
+        final checkedUids = <String>[];
+        final notifier = cachedNotifier((uid) {
+          checkedUids.add(uid);
+          return pending.future;
+        });
+        addTearDown(notifier.dispose);
+        expect(appRedirect(notifier, '/chat'), isNull);
+        authStream.add(mockUser);
+        await Future<void>.delayed(Duration.zero);
+        expect(checkedUids, ['uid123']);
+        expect(appRedirect(notifier, '/chat'), isNull);
+        pending.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        expect(notifier.termsAccepted, isTrue);
+      },
+    );
+
+    test('conserva acceso con caché cuando falla la verificación', () async {
+      final notifier = cachedNotifier((_) async => throw StateError('offline'));
+      addTearDown(notifier.dispose);
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+      expect(appRedirect(notifier, '/'), isNull);
+      expect(notifier.termsAccepted, isTrue);
+    });
+
+    testWidgets('sin caché reintenta la consulta fallida sin bloquear', (
+      tester,
+    ) async {
+      var checks = 0;
+      final notifier = cachedNotifier((_) async {
+        checks++;
+        if (checks == 1) throw StateError('offline');
+        return false;
+      }, cached: false);
+      addTearDown(notifier.dispose);
+      expect(appRedirect(notifier, '/chat'), isNull);
+      expect(appRedirect(notifier, '/terms'), '/');
+      authStream.add(mockUser);
+      await tester.pump();
+      expect(checks, 1);
+      expect(notifier.termsAccepted, isFalse);
+      expect(notifier.termsCheckPending, isTrue);
+      expect(appRedirect(notifier, '/'), isNull);
+      await tester.pump(const Duration(seconds: 2));
+      expect(checks, 2);
+      expect(notifier.termsCheckPending, isFalse);
+      expect(appRedirect(notifier, '/'), '/terms');
+    });
+
+    testWidgets('cerrar sesión cancela los reintentos de términos', (
+      tester,
+    ) async {
+      var checks = 0;
+      final notifier = cachedNotifier((_) async {
+        checks++;
+        throw StateError('offline');
+      }, cached: false);
+      addTearDown(notifier.dispose);
+      authStream.add(mockUser);
+      await tester.pump();
+      expect(checks, 1);
+      when(() => mockAuth.currentUser).thenReturn(null);
+      authStream.add(null);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 30));
+      expect(checks, 1);
+      expect(appRedirect(notifier, '/'), '/auth');
+    });
+
+    test(
+      'pide términos si el servidor invalida la aceptación guardada',
+      () async {
+        final notifier = cachedNotifier((_) async => false);
+        addTearDown(notifier.dispose);
+        expect(appRedirect(notifier, '/'), isNull);
+        authStream.add(mockUser);
+        await Future<void>.delayed(Duration.zero);
+        expect(appRedirect(notifier, '/'), '/terms');
+        expect(notifier.termsAccepted, isFalse);
+      },
+    );
+
+    test(
+      'ignora la verificación de otra cuenta y restaura su propia caché',
+      () async {
+        final pending = Completer<bool>();
+        final otherPending = Completer<bool>();
+        final notifier = cachedNotifier(
+          (uid) => uid == 'uid123' ? pending.future : otherPending.future,
+        );
+        addTearDown(notifier.dispose);
+        authStream.add(mockUser);
+        await Future<void>.delayed(Duration.zero);
+        final other = MockUser();
+        when(() => other.uid).thenReturn('other');
+        when(() => mockAuth.currentUser).thenReturn(other);
+        authStream.add(other);
+        await Future<void>.delayed(Duration.zero);
+        expect(appRedirect(notifier, '/'), isNull);
+        pending.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        expect(notifier.termsAccepted, isFalse);
+        expect(notifier.termsCheckPending, isTrue);
+        otherPending.complete(false);
+        await Future<void>.delayed(Duration.zero);
+        expect(appRedirect(notifier, '/'), '/terms');
+
+        when(() => mockAuth.currentUser).thenReturn(mockUser);
+        authStream.add(mockUser);
+        await Future<void>.delayed(Duration.zero);
+        expect(notifier.termsAccepted, isTrue);
+      },
+    );
+
+    test('un refresco anterior no deshace una nueva aceptación', () async {
+      final pending = Completer<bool>();
+      final notifier = cachedNotifier((_) => pending.future);
+      addTearDown(notifier.dispose);
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+      notifier.setTermsAccepted('uid123');
+      pending.complete(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.termsAccepted, isTrue);
+    });
+
+    test(
+      'descarta la verificación tras cerrar sesión o destruir el router',
+      () async {
+        final pending = Completer<bool>();
+        final notifier = cachedNotifier((_) => pending.future);
+        authStream.add(mockUser);
+        await Future<void>.delayed(Duration.zero);
+        when(() => mockAuth.currentUser).thenReturn(null);
+        authStream.add(null);
+        await Future<void>.delayed(Duration.zero);
+        expect(appRedirect(notifier, '/'), '/auth');
+        expect(notifier.termsAccepted, isFalse);
+        notifier.dispose();
+        pending.complete(false);
+        await Future<void>.delayed(Duration.zero);
+      },
+    );
+
     test('bloquea cuentas nuevas y existentes hasta aceptar', () {
       final notifier = AppRouterNotifier(
         auth: mockAuth,
