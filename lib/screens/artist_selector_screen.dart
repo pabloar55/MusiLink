@@ -611,7 +611,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   widget.isEditMode ? 4 : 24,
-                  widget.isEditMode ? 8 : 24,
+                  8,
                   widget.isEditMode ? 24 : 12,
                   0,
                 ),
