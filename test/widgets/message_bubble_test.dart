@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
@@ -20,9 +21,16 @@ void main() {
       chatService = _MockChatService();
     });
 
-    Widget buildBubble({required Message message, required bool isMe}) {
+    Widget buildBubble({
+      required Message message,
+      required bool isMe,
+      VoidCallback? onReport,
+      bool reactionsEnabled = true,
+    }) {
       return ProviderScope(
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: MessageBubble(
               message: message,
@@ -31,6 +39,8 @@ void main() {
               currentUid: 'user1',
               chatId: 'chat1',
               chatService: chatService,
+              onReport: onReport,
+              reactionsEnabled: reactionsEnabled,
             ),
           ),
         ),
@@ -172,6 +182,36 @@ void main() {
       await tester.pumpWidget(buildBubble(message: message, isMe: false));
 
       expect(find.text('09:03'), findsOneWidget);
+    });
+
+    testWidgets('mantener pulsado un mensaje ajeno ofrece denunciarlo', (
+      tester,
+    ) async {
+      var reported = false;
+      await tester.pumpWidget(
+        buildBubble(
+          message: Message(
+            id: 'reported-message',
+            senderId: 'user2',
+            text: 'Contenido denunciable',
+            timestamp: timestamp,
+          ),
+          isMe: false,
+          reactionsEnabled: false,
+          onReport: () => reported = true,
+        ),
+      );
+
+      await tester.longPress(find.text('Contenido denunciable'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('report-message-action')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('report-message-action')));
+      await tester.pumpAndSettle();
+      expect(reported, isTrue);
     });
   });
 }

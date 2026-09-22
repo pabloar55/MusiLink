@@ -353,6 +353,29 @@ test('el cliente no puede modificar un rate limit caducado', async () => {
   }));
 });
 
+test('las denuncias solo son accesibles desde el backend', async () => {
+  await seedActiveUser('alice');
+  await seed('moderation_reports/report-1', {
+    type: 'profile',
+    reason: 'spam',
+    status: 'open',
+    reporterId: 'alice',
+    reportedUserId: 'bob',
+    createdAt: new Date(),
+  });
+
+  const reportRef = doc(dbFor('alice'), 'moderation_reports/report-1');
+  await assertFails(getDoc(reportRef));
+  await assertFails(setDoc(doc(dbFor('alice'), 'moderation_reports/report-2'), {
+    type: 'profile',
+    reason: 'spam',
+    status: 'open',
+    reporterId: 'alice',
+    reportedUserId: 'bob',
+    createdAt: serverTimestamp(),
+  }));
+});
+
 test('no se puede crear un chat sin amistad mutua', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');

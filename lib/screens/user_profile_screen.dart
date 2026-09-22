@@ -19,10 +19,11 @@ import 'package:musi_link/widgets/profile/profile_daily_song_card.dart';
 import 'package:musi_link/widgets/profile/profile_header.dart';
 import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 import 'package:musi_link/widgets/remove_friend_dialog.dart';
+import 'package:musi_link/widgets/report_reason_dialog.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-enum _ProfileMenuAction { block, unblock }
+enum _ProfileMenuAction { report, block, unblock }
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   final AppUser user;
@@ -164,6 +165,39 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
   }
 
+  Future<void> _reportProfile() async {
+    final l10n = AppLocalizations.of(context)!;
+    final reason = await showReportReasonDialog(
+      context,
+      title: l10n.reportProfileTitle(widget.user.displayName),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      final created = await ref
+          .read(moderationServiceProvider)
+          .reportProfile(reportedUserId: widget.user.uid, reason: reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            created ? l10n.reportSubmitted : l10n.reportAlreadySubmitted,
+          ),
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      final message = error.code == 'resource-exhausted'
+          ? l10n.authErrorTooManyRequests
+          : l10n.reportSubmitError;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.reportSubmitError)));
+    }
+  }
+
   Future<void> _removeFriend() async {
     final confirmed = await showRemoveFriendDialog(context);
     if (confirmed == true) {
@@ -238,6 +272,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     return PopupMenuButton<_ProfileMenuAction>(
                       icon: const Icon(LucideIcons.ellipsisVertical),
                       onSelected: (action) {
+                        if (action == _ProfileMenuAction.report) {
+                          _reportProfile();
+                        }
                         if (action == _ProfileMenuAction.block) {
                           _blockUser();
                         }
@@ -247,13 +284,29 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                       },
                       itemBuilder: (_) => [
                         PopupMenuItem(
+                          value: _ProfileMenuAction.report,
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.flag, size: 20),
+                              const SizedBox(width: 12),
+                              Text(l10n.reportProfileAction),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
                           value: isBlocked
                               ? _ProfileMenuAction.unblock
                               : _ProfileMenuAction.block,
-                          child: Text(
-                            isBlocked
-                                ? l10n.blockUserUnblock
-                                : l10n.blockUserBlock,
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.userLock, size: 20),
+                              const SizedBox(width: 12),
+                              Text(
+                                isBlocked
+                                    ? l10n.blockUserUnblock
+                                    : l10n.blockUserBlock,
+                              ),
+                            ],
                           ),
                         ),
                       ],

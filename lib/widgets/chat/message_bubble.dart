@@ -15,6 +15,7 @@ class MessageBubble extends ConsumerStatefulWidget {
   final String chatId;
   final ChatService chatService;
   final bool reactionsEnabled;
+  final VoidCallback? onReport;
 
   const MessageBubble({
     super.key,
@@ -25,6 +26,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     required this.chatId,
     required this.chatService,
     this.reactionsEnabled = true,
+    this.onReport,
   });
 
   @override
@@ -42,7 +44,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   void _showPicker() {
-    if (!widget.reactionsEnabled) return;
+    if (!widget.reactionsEnabled && widget.onReport == null) return;
     _pickerEntry?.remove();
     _pickerEntry = OverlayEntry(
       builder: (_) => FloatingReactionPicker(
@@ -53,6 +55,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         onReact: _toggleReaction,
         onDismiss: () =>
             ref.read(activeReactionPickerProvider.notifier).close(),
+        reactionsEnabled: widget.reactionsEnabled,
+        onReport: widget.onReport == null
+            ? null
+            : () {
+                ref.read(activeReactionPickerProvider.notifier).close();
+                widget.onReport!();
+              },
       ),
     );
     Overlay.of(context).insert(_pickerEntry!);
@@ -86,7 +95,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: widget.reactionsEnabled
+      onLongPress: widget.reactionsEnabled || widget.onReport != null
           ? () => ref
                 .read(activeReactionPickerProvider.notifier)
                 .toggle(widget.message.id)

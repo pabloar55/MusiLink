@@ -78,6 +78,7 @@ Las funciones están escritas en TypeScript, usan Node.js 24 y se despliegan en 
 - `onFriendRequestAccepted` - notifica al solicitante cuando la solicitud es aceptada y elimina el documento de solicitud.
 - `onUserMusicProfileCreated` - crea el índice musical y las recomendaciones iniciales de un usuario nuevo.
 - `onUserMusicProfileChanged` - actualiza el índice de recomendación, refresca recomendaciones propias y recalcula coincidencias recíprocas.
+- `submitModerationReport` - valida y guarda denuncias y avisa al moderador por correo mediante Resend.
 
 **`spotify.ts` - Catálogo musical:**
 
@@ -94,7 +95,11 @@ Las credenciales externas se almacenan en Google Secret Manager y nunca en el c�
 firebase functions:secrets:set SPOTIFY_CLIENT_ID
 firebase functions:secrets:set SPOTIFY_CLIENT_SECRET
 firebase functions:secrets:set LASTFM_API_KEY
+firebase functions:secrets:set RESEND_API_KEY
 ```
+
+La configuración del destinatario, remitente y revisión de denuncias se
+describe en [`docs/moderation_reports.md`](docs/moderation_reports.md).
 
 ### CORS de Firebase Storage
 

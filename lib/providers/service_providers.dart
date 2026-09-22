@@ -11,6 +11,7 @@ import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
+import 'package:musi_link/services/moderation_service.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/last_fm_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
@@ -99,6 +100,10 @@ final friendServiceProvider = Provider<FriendService>((ref) {
     auth: ref.watch(firebaseAuthProvider),
     functions: ref.watch(firebaseFunctionsProvider),
   );
+});
+
+final moderationServiceProvider = Provider<ModerationService>((ref) {
+  return ModerationService(ref.watch(firebaseFunctionsProvider));
 });
 
 // ── Servicios con dependencias ──────────────────────────────────

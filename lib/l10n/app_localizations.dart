@@ -1224,6 +1224,90 @@ abstract class AppLocalizations {
   /// **'{name} has been unblocked'**
   String blockUserUnblockedSnackbar(String name);
 
+  /// No description provided for @reportProfileAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report profile'**
+  String get reportProfileAction;
+
+  /// No description provided for @reportMessageAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report message'**
+  String get reportMessageAction;
+
+  /// No description provided for @reportProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report {name}'**
+  String reportProfileTitle(String name);
+
+  /// No description provided for @reportMessageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report message'**
+  String get reportMessageTitle;
+
+  /// No description provided for @reportReasonPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a reason for this report:'**
+  String get reportReasonPrompt;
+
+  /// No description provided for @reportReasonSpam.
+  ///
+  /// In en, this message translates to:
+  /// **'Spam or misleading content'**
+  String get reportReasonSpam;
+
+  /// No description provided for @reportReasonHarassment.
+  ///
+  /// In en, this message translates to:
+  /// **'Harassment or threats'**
+  String get reportReasonHarassment;
+
+  /// No description provided for @reportReasonSexualContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Inappropriate sexual content'**
+  String get reportReasonSexualContent;
+
+  /// No description provided for @reportReasonHateSpeech.
+  ///
+  /// In en, this message translates to:
+  /// **'Hate or discrimination'**
+  String get reportReasonHateSpeech;
+
+  /// No description provided for @reportReasonImpersonation.
+  ///
+  /// In en, this message translates to:
+  /// **'Impersonation'**
+  String get reportReasonImpersonation;
+
+  /// No description provided for @reportReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Another reason'**
+  String get reportReasonOther;
+
+  /// No description provided for @reportSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Report sent. We\'ll review it as soon as possible.'**
+  String get reportSubmitted;
+
+  /// No description provided for @reportAlreadySubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'You already reported this content.'**
+  String get reportAlreadySubmitted;
+
+  /// No description provided for @reportSubmitError.
+  ///
+  /// In en, this message translates to:
+  /// **'The report couldn\'t be sent. Please try again.'**
+  String get reportSubmitError;
+
   /// No description provided for @settingsPrivacy.
   ///
   /// In en, this message translates to:
@@ -1503,7 +1587,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS2Body.
   ///
   /// In en, this message translates to:
-  /// **'We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, and emoji reactions.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.'**
+  /// **'We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, emoji reactions, and reports of profiles or messages, including a copy of reported content.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.'**
   String get privacyS2Body;
 
   /// No description provided for @privacyS3Title.
@@ -1539,7 +1623,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyS5Body.
   ///
   /// In en, this message translates to:
-  /// **'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Some technical records or crash reports held by Google may be subject to its own retention periods.'**
+  /// **'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Reports and copies of reported content may be retained for as long as needed to investigate abuse and meet legal obligations, including after account deletion. Some technical records or crash reports held by Google may be subject to its own retention periods.'**
   String get privacyS5Body;
 
   /// No description provided for @privacyS6Title.

@@ -639,6 +639,52 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get reportProfileAction => 'Denunciar perfil';
+
+  @override
+  String get reportMessageAction => 'Denunciar mensaje';
+
+  @override
+  String reportProfileTitle(String name) {
+    return 'Denunciar a $name';
+  }
+
+  @override
+  String get reportMessageTitle => 'Denunciar mensaje';
+
+  @override
+  String get reportReasonPrompt => 'Selecciona el motivo de la denuncia:';
+
+  @override
+  String get reportReasonSpam => 'Spam o contenido engañoso';
+
+  @override
+  String get reportReasonHarassment => 'Acoso o amenazas';
+
+  @override
+  String get reportReasonSexualContent => 'Contenido sexual inapropiado';
+
+  @override
+  String get reportReasonHateSpeech => 'Odio o discriminación';
+
+  @override
+  String get reportReasonImpersonation => 'Suplantación de identidad';
+
+  @override
+  String get reportReasonOther => 'Otro motivo';
+
+  @override
+  String get reportSubmitted =>
+      'Denuncia enviada. La revisaremos lo antes posible.';
+
+  @override
+  String get reportAlreadySubmitted => 'Ya habías denunciado este contenido.';
+
+  @override
+  String get reportSubmitError =>
+      'No se pudo enviar la denuncia. Inténtalo de nuevo.';
+
+  @override
   String get settingsPrivacy => 'Privacidad';
 
   @override
@@ -791,7 +837,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyS2Body =>
-      'Recogemos y tratamos los siguientes datos personales:\n\n• Datos de cuenta: nombre, dirección de correo electrónico, foto de perfil e identificadores de inicio de sesión (mediante correo/contraseña o Google).\n\n• Datos de perfil musical: artistas principales que eliges, géneros principales inferidos, canción del día y canciones compartidas.\n\n• Datos sociales: mensajes, solicitudes de amistad y reacciones con emojis.\n\n• Datos técnicos: informes de errores y fallos recopilados por Firebase Crashlytics.';
+      'Recogemos y tratamos los siguientes datos personales:\n\n• Datos de cuenta: nombre, dirección de correo electrónico, foto de perfil e identificadores de inicio de sesión (mediante correo/contraseña o Google).\n\n• Datos de perfil musical: artistas principales que eliges, géneros principales inferidos, canción del día y canciones compartidas.\n\n• Datos sociales: mensajes, solicitudes de amistad, reacciones con emojis y denuncias de perfiles o mensajes, incluida una copia del contenido denunciado.\n\n• Datos técnicos: informes de errores y fallos recopilados por Firebase Crashlytics.';
 
   @override
   String get privacyS3Title => '3. Cómo usamos tus datos';
@@ -812,7 +858,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyS5Body =>
-      'Conservamos los datos de la cuenta mientras esté activa. Al eliminar tu cuenta mediante el botón \'Eliminar cuenta\' en Ajustes, borramos tus datos privados, foto de perfil, relaciones, solicitudes, tokens, preferencias y datos musicales. El perfil público se sustituye por un marcador anónimo para no romper referencias técnicas. Los mensajes que hayas enviado se eliminan de las conversaciones y tus reacciones se retiran; si una conversación queda vacía, se borra. Algunos registros técnicos o informes de fallos conservados por Google pueden estar sujetos a sus propios plazos de retención.';
+      'Conservamos los datos de la cuenta mientras esté activa. Al eliminar tu cuenta mediante el botón \'Eliminar cuenta\' en Ajustes, borramos tus datos privados, foto de perfil, relaciones, solicitudes, tokens, preferencias y datos musicales. El perfil público se sustituye por un marcador anónimo para no romper referencias técnicas. Los mensajes que hayas enviado se eliminan de las conversaciones y tus reacciones se retiran; si una conversación queda vacía, se borra. Las denuncias y la copia del contenido denunciado pueden conservarse mientras sean necesarias para investigar abusos y cumplir obligaciones legales, incluso después de eliminar una cuenta. Algunos registros técnicos o informes de fallos conservados por Google pueden estar sujetos a sus propios plazos de retención.';
 
   @override
   String get privacyS6Title => '6. Tus derechos';

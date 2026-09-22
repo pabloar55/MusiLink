@@ -16,6 +16,7 @@ const {
   createFriendRequest,
   parseChatMessagePayload,
 } = require('../lib/social_writes.js');
+const { createModerationReport } = require('../lib/moderation_reports.js');
 
 before(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -276,5 +277,53 @@ test('sendChatMessage comprueba amistad y bloqueos en el backend', async () => {
   assert.equal(
     (await db.doc('chats/alice_bob/messages/dddddddddddddddddddd').get()).exists,
     false,
+  );
+});
+
+test('las denuncias validan el contexto, conservan el mensaje y se deduplican', async () => {
+  await Promise.all([seedChat(), seedUser('carol')]);
+  await db.doc('chats/alice_bob/messages/message-1').set({
+    senderId: 'bob',
+    text: 'contenido denunciado',
+    type: 'text',
+    timestamp: Timestamp.fromMillis(1_000),
+    read: false,
+  });
+  const payload = {
+    type: 'message',
+    reason: 'harassment',
+    chatId: 'alice_bob',
+    messageId: 'message-1',
+  };
+
+  const created = await createModerationReport(
+    db,
+    'alice',
+    payload,
+    Timestamp.fromMillis(2_000),
+  );
+  assert.equal(created.created, true);
+  const report = (await db.doc(`moderation_reports/${created.reportId}`).get()).data();
+  assert.equal(report.reportedUserId, 'bob');
+  assert.equal(report.message.text, 'contenido denunciado');
+  assert.equal(report.message.timestamp.toMillis(), 1_000);
+  assert.equal(report.status, 'open');
+
+  const duplicate = await createModerationReport(
+    db,
+    'alice',
+    { ...payload, reason: 'other' },
+    Timestamp.fromMillis(3_000),
+  );
+  assert.equal(duplicate.created, false);
+  assert.equal((await db.doc('rate_limits/alice').get()).data().reportCount, 1);
+
+  await assert.rejects(
+    createModerationReport(db, 'carol', payload, Timestamp.fromMillis(4_000)),
+    (error) => error.code === 'not-found',
+  );
+  await assert.rejects(
+    createModerationReport(db, 'bob', payload, Timestamp.fromMillis(4_000)),
+    (error) => error.code === 'invalid-argument',
   );
 });

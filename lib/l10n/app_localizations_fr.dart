@@ -650,6 +650,52 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get reportProfileAction => 'Signaler le profil';
+
+  @override
+  String get reportMessageAction => 'Signaler le message';
+
+  @override
+  String reportProfileTitle(String name) {
+    return 'Signaler $name';
+  }
+
+  @override
+  String get reportMessageTitle => 'Signaler le message';
+
+  @override
+  String get reportReasonPrompt => 'Choisissez le motif du signalement :';
+
+  @override
+  String get reportReasonSpam => 'Spam ou contenu trompeur';
+
+  @override
+  String get reportReasonHarassment => 'Harcèlement ou menaces';
+
+  @override
+  String get reportReasonSexualContent => 'Contenu sexuel inapproprié';
+
+  @override
+  String get reportReasonHateSpeech => 'Haine ou discrimination';
+
+  @override
+  String get reportReasonImpersonation => 'Usurpation d’identité';
+
+  @override
+  String get reportReasonOther => 'Autre motif';
+
+  @override
+  String get reportSubmitted =>
+      'Signalement envoyé. Nous l’examinerons au plus vite.';
+
+  @override
+  String get reportAlreadySubmitted => 'Vous avez déjà signalé ce contenu.';
+
+  @override
+  String get reportSubmitError =>
+      'Le signalement n’a pas pu être envoyé. Réessayez.';
+
+  @override
   String get settingsPrivacy => 'Confidentialité';
 
   @override
@@ -801,7 +847,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get privacyS2Body =>
-      'Nous collectons et traitons les données personnelles suivantes :\n\n• Données de compte : nom, adresse e-mail, photo de profil et identifiants de connexion (via e-mail/mot de passe ou Google).\n\n• Données de profil musical : artistes favoris que vous sélectionnez, genres principaux déduits, chanson du jour et chansons partagées.\n\n• Données sociales : messages, demandes d\'amitié et réactions emoji.\n\n• Données techniques : rapports d\'erreurs et de plantages collectés par Firebase Crashlytics.';
+      'Nous collectons et traitons les données personnelles suivantes :\n\n• Données de compte : nom, adresse e-mail, photo de profil et identifiants de connexion (via e-mail/mot de passe ou Google).\n\n• Données de profil musical : artistes favoris que vous sélectionnez, genres principaux déduits, chanson du jour et chansons partagées.\n\n• Données sociales : messages, demandes d\'amitié, réactions emoji et signalements de profils ou de messages, y compris une copie du contenu signalé.\n\n• Données techniques : rapports d\'erreurs et de plantages collectés par Firebase Crashlytics.';
 
   @override
   String get privacyS3Title => '3. Utilisation de vos données';
@@ -822,7 +868,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get privacyS5Body =>
-      'Nous conservons les données du compte tant qu\'il est actif. Lorsque vous supprimez votre compte via le bouton « Supprimer le compte » dans les Paramètres, nous supprimons vos données privées, photo de profil, relations, demandes, jetons, préférences et données musicales. Le profil public est remplacé par un marqueur anonyme afin de ne pas rompre les références techniques. Les messages que vous avez envoyés sont retirés des conversations et vos réactions sont supprimées ; si une conversation devient vide, elle est supprimée. Certains journaux techniques ou rapports de plantage conservés par Google peuvent être soumis à ses propres durées de conservation.';
+      'Nous conservons les données du compte tant qu\'il est actif. Lorsque vous supprimez votre compte via le bouton « Supprimer le compte » dans les Paramètres, nous supprimons vos données privées, photo de profil, relations, demandes, jetons, préférences et données musicales. Le profil public est remplacé par un marqueur anonyme afin de ne pas rompre les références techniques. Les messages que vous avez envoyés sont retirés des conversations et vos réactions sont supprimées ; si une conversation devient vide, elle est supprimée. Les signalements et les copies du contenu signalé peuvent être conservés aussi longtemps que nécessaire pour enquêter sur les abus et respecter les obligations légales, y compris après la suppression d’un compte. Certains journaux techniques ou rapports de plantage conservés par Google peuvent être soumis à ses propres durées de conservation.';
 
   @override
   String get privacyS6Title => '6. Vos droits';

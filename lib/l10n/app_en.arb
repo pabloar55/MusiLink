@@ -275,6 +275,25 @@
       "name": { "type": "String" }
     }
   },
+  "reportProfileAction": "Report profile",
+  "reportMessageAction": "Report message",
+  "reportProfileTitle": "Report {name}",
+  "@reportProfileTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "reportMessageTitle": "Report message",
+  "reportReasonPrompt": "Choose a reason for this report:",
+  "reportReasonSpam": "Spam or misleading content",
+  "reportReasonHarassment": "Harassment or threats",
+  "reportReasonSexualContent": "Inappropriate sexual content",
+  "reportReasonHateSpeech": "Hate or discrimination",
+  "reportReasonImpersonation": "Impersonation",
+  "reportReasonOther": "Another reason",
+  "reportSubmitted": "Report sent. We'll review it as soon as possible.",
+  "reportAlreadySubmitted": "You already reported this content.",
+  "reportSubmitError": "The report couldn't be sent. Please try again.",
   "settingsPrivacy": "Privacy",
   "settingsBlockedUsers": "Blocked users",
   "blockedUsersTitle": "Blocked users",
@@ -324,13 +343,13 @@
   "privacyS1Title": "1. Data Controller",
   "privacyS1Body": "MusiLink is developed and operated by Pablo Armas (armasp80@gmail.com), established in Spain. Pablo Armas is the data controller responsible for processing your personal data in accordance with Regulation (EU) 2016/679 (GDPR).",
   "privacyS2Title": "2. Data We Collect",
-  "privacyS2Body": "We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, and emoji reactions.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.",
+  "privacyS2Body": "We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, emoji reactions, and reports of profiles or messages, including a copy of reported content.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.",
   "privacyS3Title": "3. How We Use Your Data",
   "privacyS3Body": "Your data is processed for the following purposes:\n\n• Providing the service (account, music compatibility, discovery, chat). Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• Music profile features: displaying and comparing your selected music taste. Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• App stability: diagnosing crashes and errors. Legal basis: legitimate interest (Art. 6.1.f GDPR).",
   "privacyS4Title": "4. Third-Party Services",
   "privacyS4Body": "We use the following third-party services:\n\n• Firebase Authentication — Google. Manages account sign-in and processes authentication data in the United States.\n\n• Cloud Firestore — Google. Profiles, messages and other social data are stored in the configured database region (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Profile photos are stored in the bucket configured in the United States.\n\n• Cloud Functions for Firebase — Google. Messaging and friend-request functions run in europe-southwest1. Some scheduled and deletion processes run in europe-west1 (Belgium).\n\n• Firebase Crashlytics — Google. Processes error and crash reports; its processing locations are not determined by the Firestore region.\n\n• Spotify and Last.fm. Provide catalogue data for music search and suggestions. No Spotify account connection is required.",
   "privacyS5Title": "5. Data Retention & Deletion",
-  "privacyS5Body": "We keep account data while the account is active. When you delete your account via the 'Delete account' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Some technical records or crash reports held by Google may be subject to its own retention periods.",
+  "privacyS5Body": "We keep account data while the account is active. When you delete your account via the 'Delete account' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Reports and copies of reported content may be retained for as long as needed to investigate abuse and meet legal obligations, including after account deletion. Some technical records or crash reports held by Google may be subject to its own retention periods.",
   "privacyS6Title": "6. Your Rights",
   "privacyS6Body": "Under GDPR, you have the following rights:\n\n• Access: request a copy of data we hold about you.\n• Rectification: correct inaccurate or incomplete data.\n• Erasure: request deletion of your data; you can also delete your account in Settings, with the scope described in section 5.\n• Restriction: request we limit processing of your data.\n• Portability: receive your data in a structured, machine-readable format.\n• Objection: object to processing based on legitimate interest.\n\nTo exercise these rights, contact armasp80@gmail.com. You may also file a complaint with the Spanish Data Protection Authority (AEPD) at www.aepd.es.",
   "privacyS7Title": "7. Minimum Age",

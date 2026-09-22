@@ -637,6 +637,52 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get reportProfileAction => 'Report profile';
+
+  @override
+  String get reportMessageAction => 'Report message';
+
+  @override
+  String reportProfileTitle(String name) {
+    return 'Report $name';
+  }
+
+  @override
+  String get reportMessageTitle => 'Report message';
+
+  @override
+  String get reportReasonPrompt => 'Choose a reason for this report:';
+
+  @override
+  String get reportReasonSpam => 'Spam or misleading content';
+
+  @override
+  String get reportReasonHarassment => 'Harassment or threats';
+
+  @override
+  String get reportReasonSexualContent => 'Inappropriate sexual content';
+
+  @override
+  String get reportReasonHateSpeech => 'Hate or discrimination';
+
+  @override
+  String get reportReasonImpersonation => 'Impersonation';
+
+  @override
+  String get reportReasonOther => 'Another reason';
+
+  @override
+  String get reportSubmitted =>
+      'Report sent. We\'ll review it as soon as possible.';
+
+  @override
+  String get reportAlreadySubmitted => 'You already reported this content.';
+
+  @override
+  String get reportSubmitError =>
+      'The report couldn\'t be sent. Please try again.';
+
+  @override
   String get settingsPrivacy => 'Privacy';
 
   @override
@@ -787,7 +833,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get privacyS2Body =>
-      'We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, and emoji reactions.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.';
+      'We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, emoji reactions, and reports of profiles or messages, including a copy of reported content.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.';
 
   @override
   String get privacyS3Title => '3. How We Use Your Data';
@@ -808,7 +854,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get privacyS5Body =>
-      'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Some technical records or crash reports held by Google may be subject to its own retention periods.';
+      'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Reports and copies of reported content may be retained for as long as needed to investigate abuse and meet legal obligations, including after account deletion. Some technical records or crash reports held by Google may be subject to its own retention periods.';
 
   @override
   String get privacyS6Title => '6. Your Rights';

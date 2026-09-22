@@ -438,6 +438,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Las denuncias contienen instantáneas de perfiles o mensajes. Se crean y
+    // consultan únicamente desde backend/Firebase Console, nunca desde clientes.
+    match /moderation_reports/{reportId} {
+      allow read, write: if false;
+    }
+
     match /chats/{chatId} {
       // Solo los participantes pueden leer el chat.
       // resource == null cubre el caso en que el doc aún no existe (p.ej. tx.get

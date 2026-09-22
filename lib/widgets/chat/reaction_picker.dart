@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/theme/app_theme.dart';
 
 const _kEmojis = ['❤️', '🔥', '👏', '😍', '💀'];
@@ -10,6 +12,8 @@ class FloatingReactionPicker extends StatefulWidget {
   final String currentUid;
   final void Function(String emoji) onReact;
   final VoidCallback onDismiss;
+  final bool reactionsEnabled;
+  final VoidCallback? onReport;
 
   const FloatingReactionPicker({
     super.key,
@@ -19,6 +23,8 @@ class FloatingReactionPicker extends StatefulWidget {
     required this.currentUid,
     required this.onReact,
     required this.onDismiss,
+    this.reactionsEnabled = true,
+    this.onReport,
   });
 
   @override
@@ -85,6 +91,8 @@ class _FloatingReactionPickerState extends State<FloatingReactionPicker>
                   reactions: widget.reactions,
                   currentUid: widget.currentUid,
                   onReact: widget.onReact,
+                  reactionsEnabled: widget.reactionsEnabled,
+                  onReport: widget.onReport,
                 ),
               ),
             ),
@@ -99,12 +107,16 @@ class ReactionPicker extends StatelessWidget {
   final Map<String, List<String>> reactions;
   final String currentUid;
   final void Function(String emoji) onReact;
+  final bool reactionsEnabled;
+  final VoidCallback? onReport;
 
   const ReactionPicker({
     super.key,
     required this.reactions,
     required this.currentUid,
     required this.onReact,
+    this.reactionsEnabled = true,
+    this.onReport,
   });
 
   @override
@@ -129,29 +141,47 @@ class ReactionPicker extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: _kEmojis.map((emoji) {
-          final hasReacted = reactions[emoji]?.contains(currentUid) ?? false;
-          return GestureDetector(
-            onTap: () => onReact(emoji),
-            child: SizedBox(
-              width: AppTokens.minTouchTarget,
-              height: AppTokens.minTouchTarget,
-              child: Center(
-                child: AnimatedContainer(
-                  duration: AppTokens.durationFast,
-                  padding: const EdgeInsets.all(AppTokens.spaceXS + 2),
-                  decoration: BoxDecoration(
-                    color: hasReacted
-                        ? cs.onSurface.withAlpha(25)
-                        : Colors.transparent,
-                    shape: BoxShape.circle,
+        children: [
+          if (reactionsEnabled)
+            ..._kEmojis.map((emoji) {
+              final hasReacted =
+                  reactions[emoji]?.contains(currentUid) ?? false;
+              return GestureDetector(
+                onTap: () => onReact(emoji),
+                child: SizedBox(
+                  width: AppTokens.minTouchTarget,
+                  height: AppTokens.minTouchTarget,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: AppTokens.durationFast,
+                      padding: const EdgeInsets.all(AppTokens.spaceXS + 2),
+                      decoration: BoxDecoration(
+                        color: hasReacted
+                            ? cs.onSurface.withAlpha(25)
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                    ),
                   ),
-                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
                 ),
+              );
+            }),
+          if (onReport != null) ...[
+            if (reactionsEnabled)
+              SizedBox(
+                height: 28,
+                child: VerticalDivider(color: cs.outlineVariant),
               ),
+            IconButton(
+              key: const ValueKey('report-message-action'),
+              onPressed: onReport,
+              tooltip: AppLocalizations.of(context)!.reportMessageAction,
+              icon: const Icon(LucideIcons.flag, size: 20),
+              color: cs.error,
             ),
-          );
-        }).toList(),
+          ],
+        ],
       ),
     );
   }

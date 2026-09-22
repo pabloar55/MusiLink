@@ -18,6 +18,7 @@ import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
+import 'package:musi_link/widgets/report_reason_dialog.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';
@@ -456,6 +457,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  Future<void> _reportMessage(Message message) async {
+    final l10n = AppLocalizations.of(context)!;
+    final reason = await showReportReasonDialog(
+      context,
+      title: l10n.reportMessageTitle,
+    );
+    if (reason == null || !mounted) return;
+    try {
+      final created = await ref
+          .read(moderationServiceProvider)
+          .reportMessage(
+            chatId: widget.chatId,
+            messageId: message.id,
+            reason: reason,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            created ? l10n.reportSubmitted : l10n.reportAlreadySubmitted,
+          ),
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      final text = error.code == 'resource-exhausted'
+          ? l10n.authErrorTooManyRequests
+          : l10n.reportSubmitError;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.reportSubmitError)));
+    }
+  }
+
   Future<void> _openOtherUserProfile() async {
     final nav = GoRouter.of(context);
     final user = await _otherUserFuture;
@@ -614,6 +651,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
                       reactionsEnabled: canInteract && !msg.isPending,
+                      onReport: !isMe && !msg.isPending
+                          ? () => _reportMessage(msg)
+                          : null,
                     )
                   : MessageBubble(
                       message: msg,
@@ -623,6 +663,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
                       reactionsEnabled: canInteract && !msg.isPending,
+                      onReport: !isMe && !msg.isPending
+                          ? () => _reportMessage(msg)
+                          : null,
                     );
 
               return Column(
