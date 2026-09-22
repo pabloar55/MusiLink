@@ -36,7 +36,6 @@
   "authPasswordResetSent": "If this email has a password account, we sent you a reset link.",
   "authErrorCouldNotAuth": "Could not authenticate. Please try again.",
   "authErrorUnexpected": "Unexpected error. Please try again.",
-  "authErrorGoogleSignIn": "Could not sign in with Google.",
   "authErrorGoogleSignInGeneric": "Error signing in with Google.",
   "authErrorAccountExistsWithDifferentCredential": "This email is already registered with a password. Please sign in with email and password.",
   "authPrivacyLink": "Privacy Policy",
@@ -49,13 +48,10 @@
   "termsAcceptCheckbox": "I have read and accept MusiLink's Terms and Conditions.",
   "termsAcceptAndContinue": "Accept and continue",
   "termsAccepting": "Accepting…",
-  "termsCheckError": "We could not check your acceptance. Connect to the internet and try again.",
-  "termsRetry": "Try again",
   "termsSaveError": "We could not save your acceptance. Please try again.",
   "termsOpenError": "Could not open the link.",
 
   "authUsername": "Username",
-  "authEnterUsername": "Choose a username",
   "authUsernameHint": "lowercase letters, numbers and _",
   "authUsernameTooShort": "At least 3 characters",
   "authUsernameTooLong": "Max 20 characters",
@@ -68,7 +64,6 @@
   "usernameSetupSubtitle": "This is how others will find you on MusiLink.",
   "usernameSetupButton": "Continue",
 
-  "discoverTitle": "Discover people",
   "discoverErrorLoading": "Error loading discovery",
   "discoverNoUsers": "No users with music data",
   "discoverNoUsersHint": "As more users create their music profile, they will appear here",
@@ -102,30 +97,15 @@
   "chatTypeToSearch": "Type to search songs",
   "chatNoResults": "No results",
   "chatDeleteTitle": "Delete conversation",
-  "chatDeleteBody": "This conversation will be deleted.",
   "chatDeleteConfirm": "Delete",
   "chatDeleteCancel": "Cancel",
   "chatDateToday": "Today",
   "chatDateYesterday": "Yesterday",
 
-  "statsTracks": "Tracks",
   "statsArtists": "Artists",
   "statsGenres": "Genres",
-  "statsShortTerm": "4 weeks",
-  "statsMediumTerm": "6 months",
-  "statsLongTerm": "1 year",
-  "statsError": "Error: {error}",
-  "@statsError": {
-    "placeholders": {
-      "error": { "type": "String" }
-    }
-  },
   "statsEditArtists": "Edit artists",
   "statsNoData": "No data available",
-  "statsOfflineCache": "Offline — showing saved data",
-  "statsStaleCache": "Showing data from over 48 hours ago",
-  "statsOfflineNoData": "No connection and no saved data yet.\nVisit this tab online first.",
-
   "socialNow": "Now",
   "socialMinutes": "{minutes} min",
   "@socialMinutes": {
@@ -167,33 +147,9 @@
   "artistSelectorStageGood": "Good",
   "artistSelectorStageGreat": "Great",
   "artistSelectorStageExpert": "Expert",
-  "artistSelectorStageHint": "Add more to improve your recommendations",
-
-  "menuProfile": "My profile",
   "menuAccountOptions": "Account options",
-  "menuLightMode": "Light mode",
-  "menuDarkMode": "Dark mode",
   "menuSignOut": "Sign out",
   "signingOut": "Signing out...",
-
-  "discoverySharedArtists": "Artists in common: {artists}",
-  "@discoverySharedArtists": {
-    "placeholders": {
-      "artists": { "type": "String" }
-    }
-  },
-  "discoverySharedGenres": "Genres in common: {genres}",
-  "@discoverySharedGenres": {
-    "placeholders": {
-      "genres": { "type": "String" }
-    }
-  },
-  "discoveryCompatible": "{score}% compatible",
-  "@discoveryCompatible": {
-    "placeholders": {
-      "score": { "type": "String" }
-    }
-  },
 
   "friendsReceivedRequests": "Received requests",
   "friendsSentRequests": "Sent requests",
@@ -208,19 +164,11 @@
   "friendsNoFriendsHint": "Search for users to add friends",
   "friendsRemove": "Remove friend",
   "friendsRemoveBody": "This person will be removed from your friends list.",
-  "friendsAlreadyFriends": "Already friends",
   "profileAddFriend": "Add friend",
 
   "dailySongTitle": "Song of the day",
   "dailySongYourTitle": "Your song of the day",
   "dailySongChoose": "Choose your song of the day",
-  "dailySongBy": "by {artist}",
-  "@dailySongBy": {
-    "placeholders": {
-      "artist": { "type": "String" }
-    }
-  },
-
   "discoverTabPeople": "Discover people",
   "dailySongNone": "You haven't chosen your song of the day yet",
   "dailySongNoneHint": "Share with others what you're listening to today",
@@ -248,7 +196,6 @@
   "photoSetupChange": "Change photo",
   "photoSetupContinue": "Continue",
   "photoSetupSkip": "Skip for now",
-  "photoSetupUploading": "Uploading...",
   "photoSetupGallery": "Gallery",
   "photoSetupCamera": "Camera",
   "photoSetupError": "Could not upload photo. Please try again.",
@@ -338,29 +285,6 @@
   "reauthConfirm": "Confirm",
   "reauthWrongAccount": "The selected account is not linked to this app. Please choose the correct account.",
 
-  "privacyTitle": "Privacy Policy",
-  "privacyLastUpdated": "Last updated: 20 September 2026",
-  "privacyS1Title": "1. Data Controller",
-  "privacyS1Body": "MusiLink is developed and operated by Pablo Armas (armasp80@gmail.com), established in Spain. Pablo Armas is the data controller responsible for processing your personal data in accordance with Regulation (EU) 2016/679 (GDPR).",
-  "privacyS2Title": "2. Data We Collect",
-  "privacyS2Body": "We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, emoji reactions, and reports of profiles or messages, including a copy of reported content.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.",
-  "privacyS3Title": "3. How We Use Your Data",
-  "privacyS3Body": "Your data is processed for the following purposes:\n\n• Providing the service (account, music compatibility, discovery, chat). Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• Music profile features: displaying and comparing your selected music taste. Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• App stability: diagnosing crashes and errors. Legal basis: legitimate interest (Art. 6.1.f GDPR).",
-  "privacyS4Title": "4. Third-Party Services",
-  "privacyS4Body": "We use the following third-party services:\n\n• Firebase Authentication — Google. Manages account sign-in and processes authentication data in the United States.\n\n• Cloud Firestore — Google. Profiles, messages and other social data are stored in the configured database region (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Profile photos are stored in the bucket configured in the United States.\n\n• Cloud Functions for Firebase — Google. Messaging and friend-request functions run in europe-southwest1. Some scheduled and deletion processes run in europe-west1 (Belgium).\n\n• Firebase Crashlytics — Google. Processes error and crash reports; its processing locations are not determined by the Firestore region.\n\n• Spotify and Last.fm. Provide catalogue data for music search and suggestions. No Spotify account connection is required.",
-  "privacyS5Title": "5. Data Retention & Deletion",
-  "privacyS5Body": "We keep account data while the account is active. When you delete your account via the 'Delete account' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Reports and copies of reported content may be retained for as long as needed to investigate abuse and meet legal obligations, including after account deletion. Some technical records or crash reports held by Google may be subject to its own retention periods.",
-  "privacyS6Title": "6. Your Rights",
-  "privacyS6Body": "Under GDPR, you have the following rights:\n\n• Access: request a copy of data we hold about you.\n• Rectification: correct inaccurate or incomplete data.\n• Erasure: request deletion of your data; you can also delete your account in Settings, with the scope described in section 5.\n• Restriction: request we limit processing of your data.\n• Portability: receive your data in a structured, machine-readable format.\n• Objection: object to processing based on legitimate interest.\n\nTo exercise these rights, contact armasp80@gmail.com. You may also file a complaint with the Spanish Data Protection Authority (AEPD) at www.aepd.es.",
-  "privacyS7Title": "7. Minimum Age",
-  "privacyS7Body": "MusiLink is intended for users aged 16 and over. We do not knowingly collect personal data from anyone under 16. If you believe a minor has provided us with personal data, contact us at armasp80@gmail.com and we will delete it immediately.",
-  "privacyS8Title": "8. Security",
-  "privacyS8Body": "We implement appropriate technical and organisational measures to protect your personal data against unauthorised access, loss, or alteration. Data is stored in Google Firebase, which applies industry-standard security controls.",
-  "privacyS9Title": "9. Contact",
-  "privacyS9Body": "For any questions about this Privacy Policy or the processing of your data, please contact:\n\nPablo Armas\narmasp80@gmail.com",
-  "privacyS10Title": "10. International Data Transfers",
-  "privacyS10Body": "Firebase Authentication processes authentication data in the United States, and profile photos are stored there through Cloud Storage for Firebase. Crashlytics may process error and crash reports in other Google infrastructure locations. Firestore's europe-southwest1 location does not automatically apply to these other services.\n\nTransfers outside the European Economic Area are governed by Google's data processing terms and applicable safeguards, including standard contractual clauses where relevant. Merely using the app does not constitute consent to these transfers. You can request information about the safeguards at armasp80@gmail.com. Profiles, messages and music data stored in Firestore are held in europe-southwest1."
-  ,
   "updateRequiredTitle": "Update required",
   "updateRequiredBody": "A new version of MusiLink is required to continue. Update now to keep your account and chats working securely.",
   "updateCurrentVersion": "Installed version: {version} ({build})",

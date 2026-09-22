@@ -65,7 +65,6 @@ lib/
 | `stats_screen` | Estadísticas musicales del perfil |
 | `account_settings_screen` | Configuración de cuenta, notificaciones y privacidad |
 | `blocked_users_screen` | Gestión de usuarios bloqueados |
-| `privacy_policy_screen` | Política de privacidad |
 
 ## Cloud Functions (`functions/src/`)
 

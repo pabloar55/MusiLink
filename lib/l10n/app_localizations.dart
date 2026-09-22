@@ -276,12 +276,6 @@ abstract class AppLocalizations {
   /// **'Unexpected error. Please try again.'**
   String get authErrorUnexpected;
 
-  /// No description provided for @authErrorGoogleSignIn.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not sign in with Google.'**
-  String get authErrorGoogleSignIn;
-
   /// No description provided for @authErrorGoogleSignInGeneric.
   ///
   /// In en, this message translates to:
@@ -342,18 +336,6 @@ abstract class AppLocalizations {
   /// **'Accepting…'**
   String get termsAccepting;
 
-  /// No description provided for @termsCheckError.
-  ///
-  /// In en, this message translates to:
-  /// **'We could not check your acceptance. Connect to the internet and try again.'**
-  String get termsCheckError;
-
-  /// No description provided for @termsRetry.
-  ///
-  /// In en, this message translates to:
-  /// **'Try again'**
-  String get termsRetry;
-
   /// No description provided for @termsSaveError.
   ///
   /// In en, this message translates to:
@@ -371,12 +353,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Username'**
   String get authUsername;
-
-  /// No description provided for @authEnterUsername.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose a username'**
-  String get authEnterUsername;
 
   /// No description provided for @authUsernameHint.
   ///
@@ -437,12 +413,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get usernameSetupButton;
-
-  /// No description provided for @discoverTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Discover people'**
-  String get discoverTitle;
 
   /// No description provided for @discoverErrorLoading.
   ///
@@ -618,12 +588,6 @@ abstract class AppLocalizations {
   /// **'Delete conversation'**
   String get chatDeleteTitle;
 
-  /// No description provided for @chatDeleteBody.
-  ///
-  /// In en, this message translates to:
-  /// **'This conversation will be deleted.'**
-  String get chatDeleteBody;
-
   /// No description provided for @chatDeleteConfirm.
   ///
   /// In en, this message translates to:
@@ -648,12 +612,6 @@ abstract class AppLocalizations {
   /// **'Yesterday'**
   String get chatDateYesterday;
 
-  /// No description provided for @statsTracks.
-  ///
-  /// In en, this message translates to:
-  /// **'Tracks'**
-  String get statsTracks;
-
   /// No description provided for @statsArtists.
   ///
   /// In en, this message translates to:
@@ -666,30 +624,6 @@ abstract class AppLocalizations {
   /// **'Genres'**
   String get statsGenres;
 
-  /// No description provided for @statsShortTerm.
-  ///
-  /// In en, this message translates to:
-  /// **'4 weeks'**
-  String get statsShortTerm;
-
-  /// No description provided for @statsMediumTerm.
-  ///
-  /// In en, this message translates to:
-  /// **'6 months'**
-  String get statsMediumTerm;
-
-  /// No description provided for @statsLongTerm.
-  ///
-  /// In en, this message translates to:
-  /// **'1 year'**
-  String get statsLongTerm;
-
-  /// No description provided for @statsError.
-  ///
-  /// In en, this message translates to:
-  /// **'Error: {error}'**
-  String statsError(String error);
-
   /// No description provided for @statsEditArtists.
   ///
   /// In en, this message translates to:
@@ -701,24 +635,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No data available'**
   String get statsNoData;
-
-  /// No description provided for @statsOfflineCache.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline — showing saved data'**
-  String get statsOfflineCache;
-
-  /// No description provided for @statsStaleCache.
-  ///
-  /// In en, this message translates to:
-  /// **'Showing data from over 48 hours ago'**
-  String get statsStaleCache;
-
-  /// No description provided for @statsOfflineNoData.
-  ///
-  /// In en, this message translates to:
-  /// **'No connection and no saved data yet.\nVisit this tab online first.'**
-  String get statsOfflineNoData;
 
   /// No description provided for @socialNow.
   ///
@@ -834,35 +750,11 @@ abstract class AppLocalizations {
   /// **'Expert'**
   String get artistSelectorStageExpert;
 
-  /// No description provided for @artistSelectorStageHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Add more to improve your recommendations'**
-  String get artistSelectorStageHint;
-
-  /// No description provided for @menuProfile.
-  ///
-  /// In en, this message translates to:
-  /// **'My profile'**
-  String get menuProfile;
-
   /// No description provided for @menuAccountOptions.
   ///
   /// In en, this message translates to:
   /// **'Account options'**
   String get menuAccountOptions;
-
-  /// No description provided for @menuLightMode.
-  ///
-  /// In en, this message translates to:
-  /// **'Light mode'**
-  String get menuLightMode;
-
-  /// No description provided for @menuDarkMode.
-  ///
-  /// In en, this message translates to:
-  /// **'Dark mode'**
-  String get menuDarkMode;
 
   /// No description provided for @menuSignOut.
   ///
@@ -875,24 +767,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Signing out...'**
   String get signingOut;
-
-  /// No description provided for @discoverySharedArtists.
-  ///
-  /// In en, this message translates to:
-  /// **'Artists in common: {artists}'**
-  String discoverySharedArtists(String artists);
-
-  /// No description provided for @discoverySharedGenres.
-  ///
-  /// In en, this message translates to:
-  /// **'Genres in common: {genres}'**
-  String discoverySharedGenres(String genres);
-
-  /// No description provided for @discoveryCompatible.
-  ///
-  /// In en, this message translates to:
-  /// **'{score}% compatible'**
-  String discoveryCompatible(String score);
 
   /// No description provided for @friendsReceivedRequests.
   ///
@@ -972,12 +846,6 @@ abstract class AppLocalizations {
   /// **'This person will be removed from your friends list.'**
   String get friendsRemoveBody;
 
-  /// No description provided for @friendsAlreadyFriends.
-  ///
-  /// In en, this message translates to:
-  /// **'Already friends'**
-  String get friendsAlreadyFriends;
-
   /// No description provided for @profileAddFriend.
   ///
   /// In en, this message translates to:
@@ -1001,12 +869,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose your song of the day'**
   String get dailySongChoose;
-
-  /// No description provided for @dailySongBy.
-  ///
-  /// In en, this message translates to:
-  /// **'by {artist}'**
-  String dailySongBy(String artist);
 
   /// No description provided for @discoverTabPeople.
   ///
@@ -1157,12 +1019,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Skip for now'**
   String get photoSetupSkip;
-
-  /// No description provided for @photoSetupUploading.
-  ///
-  /// In en, this message translates to:
-  /// **'Uploading...'**
-  String get photoSetupUploading;
 
   /// No description provided for @photoSetupGallery.
   ///
@@ -1553,138 +1409,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The selected account is not linked to this app. Please choose the correct account.'**
   String get reauthWrongAccount;
-
-  /// No description provided for @privacyTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Privacy Policy'**
-  String get privacyTitle;
-
-  /// No description provided for @privacyLastUpdated.
-  ///
-  /// In en, this message translates to:
-  /// **'Last updated: 20 September 2026'**
-  String get privacyLastUpdated;
-
-  /// No description provided for @privacyS1Title.
-  ///
-  /// In en, this message translates to:
-  /// **'1. Data Controller'**
-  String get privacyS1Title;
-
-  /// No description provided for @privacyS1Body.
-  ///
-  /// In en, this message translates to:
-  /// **'MusiLink is developed and operated by Pablo Armas (armasp80@gmail.com), established in Spain. Pablo Armas is the data controller responsible for processing your personal data in accordance with Regulation (EU) 2016/679 (GDPR).'**
-  String get privacyS1Body;
-
-  /// No description provided for @privacyS2Title.
-  ///
-  /// In en, this message translates to:
-  /// **'2. Data We Collect'**
-  String get privacyS2Title;
-
-  /// No description provided for @privacyS2Body.
-  ///
-  /// In en, this message translates to:
-  /// **'We collect and process the following personal data:\n\n• Account data: name, email address, profile photo, and login identifiers (via email/password or Google Sign-In).\n\n• Music profile data: top artists you select, inferred top genres, daily song selections, and shared songs.\n\n• Social data: messages, friend requests, emoji reactions, and reports of profiles or messages, including a copy of reported content.\n\n• Technical data: error and crash reports collected by Firebase Crashlytics.'**
-  String get privacyS2Body;
-
-  /// No description provided for @privacyS3Title.
-  ///
-  /// In en, this message translates to:
-  /// **'3. How We Use Your Data'**
-  String get privacyS3Title;
-
-  /// No description provided for @privacyS3Body.
-  ///
-  /// In en, this message translates to:
-  /// **'Your data is processed for the following purposes:\n\n• Providing the service (account, music compatibility, discovery, chat). Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• Music profile features: displaying and comparing your selected music taste. Legal basis: contract performance (Art. 6.1.b GDPR).\n\n• App stability: diagnosing crashes and errors. Legal basis: legitimate interest (Art. 6.1.f GDPR).'**
-  String get privacyS3Body;
-
-  /// No description provided for @privacyS4Title.
-  ///
-  /// In en, this message translates to:
-  /// **'4. Third-Party Services'**
-  String get privacyS4Title;
-
-  /// No description provided for @privacyS4Body.
-  ///
-  /// In en, this message translates to:
-  /// **'We use the following third-party services:\n\n• Firebase Authentication — Google. Manages account sign-in and processes authentication data in the United States.\n\n• Cloud Firestore — Google. Profiles, messages and other social data are stored in the configured database region (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Profile photos are stored in the bucket configured in the United States.\n\n• Cloud Functions for Firebase — Google. Messaging and friend-request functions run in europe-southwest1. Some scheduled and deletion processes run in europe-west1 (Belgium).\n\n• Firebase Crashlytics — Google. Processes error and crash reports; its processing locations are not determined by the Firestore region.\n\n• Spotify and Last.fm. Provide catalogue data for music search and suggestions. No Spotify account connection is required.'**
-  String get privacyS4Body;
-
-  /// No description provided for @privacyS5Title.
-  ///
-  /// In en, this message translates to:
-  /// **'5. Data Retention & Deletion'**
-  String get privacyS5Title;
-
-  /// No description provided for @privacyS5Body.
-  ///
-  /// In en, this message translates to:
-  /// **'We keep account data while the account is active. When you delete your account via the \'Delete account\' button in Settings, we delete your private data, profile photo, relationships, requests, tokens, preferences, and music data. The public profile is replaced with an anonymous placeholder so technical references do not break. Messages you sent are removed from conversations and your reactions are removed; if a conversation becomes empty, it is deleted. Reports and copies of reported content may be retained for as long as needed to investigate abuse and meet legal obligations, including after account deletion. Some technical records or crash reports held by Google may be subject to its own retention periods.'**
-  String get privacyS5Body;
-
-  /// No description provided for @privacyS6Title.
-  ///
-  /// In en, this message translates to:
-  /// **'6. Your Rights'**
-  String get privacyS6Title;
-
-  /// No description provided for @privacyS6Body.
-  ///
-  /// In en, this message translates to:
-  /// **'Under GDPR, you have the following rights:\n\n• Access: request a copy of data we hold about you.\n• Rectification: correct inaccurate or incomplete data.\n• Erasure: request deletion of your data; you can also delete your account in Settings, with the scope described in section 5.\n• Restriction: request we limit processing of your data.\n• Portability: receive your data in a structured, machine-readable format.\n• Objection: object to processing based on legitimate interest.\n\nTo exercise these rights, contact armasp80@gmail.com. You may also file a complaint with the Spanish Data Protection Authority (AEPD) at www.aepd.es.'**
-  String get privacyS6Body;
-
-  /// No description provided for @privacyS7Title.
-  ///
-  /// In en, this message translates to:
-  /// **'7. Minimum Age'**
-  String get privacyS7Title;
-
-  /// No description provided for @privacyS7Body.
-  ///
-  /// In en, this message translates to:
-  /// **'MusiLink is intended for users aged 16 and over. We do not knowingly collect personal data from anyone under 16. If you believe a minor has provided us with personal data, contact us at armasp80@gmail.com and we will delete it immediately.'**
-  String get privacyS7Body;
-
-  /// No description provided for @privacyS8Title.
-  ///
-  /// In en, this message translates to:
-  /// **'8. Security'**
-  String get privacyS8Title;
-
-  /// No description provided for @privacyS8Body.
-  ///
-  /// In en, this message translates to:
-  /// **'We implement appropriate technical and organisational measures to protect your personal data against unauthorised access, loss, or alteration. Data is stored in Google Firebase, which applies industry-standard security controls.'**
-  String get privacyS8Body;
-
-  /// No description provided for @privacyS9Title.
-  ///
-  /// In en, this message translates to:
-  /// **'9. Contact'**
-  String get privacyS9Title;
-
-  /// No description provided for @privacyS9Body.
-  ///
-  /// In en, this message translates to:
-  /// **'For any questions about this Privacy Policy or the processing of your data, please contact:\n\nPablo Armas\narmasp80@gmail.com'**
-  String get privacyS9Body;
-
-  /// No description provided for @privacyS10Title.
-  ///
-  /// In en, this message translates to:
-  /// **'10. International Data Transfers'**
-  String get privacyS10Title;
-
-  /// No description provided for @privacyS10Body.
-  ///
-  /// In en, this message translates to:
-  /// **'Firebase Authentication processes authentication data in the United States, and profile photos are stored there through Cloud Storage for Firebase. Crashlytics may process error and crash reports in other Google infrastructure locations. Firestore\'s europe-southwest1 location does not automatically apply to these other services.\n\nTransfers outside the European Economic Area are governed by Google\'s data processing terms and applicable safeguards, including standard contractual clauses where relevant. Merely using the app does not constitute consent to these transfers. You can request information about the safeguards at armasp80@gmail.com. Profiles, messages and music data stored in Firestore are held in europe-southwest1.'**
-  String get privacyS10Body;
 
   /// No description provided for @updateRequiredTitle.
   ///

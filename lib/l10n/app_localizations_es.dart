@@ -104,9 +104,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authErrorUnexpected => 'Error inesperado. Inténtalo de nuevo.';
 
   @override
-  String get authErrorGoogleSignIn => 'No se pudo iniciar sesión con Google.';
-
-  @override
   String get authErrorGoogleSignInGeneric =>
       'Error al iniciar sesión con Google.';
 
@@ -143,13 +140,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get termsAccepting => 'Aceptando…';
 
   @override
-  String get termsCheckError =>
-      'No se pudo comprobar tu aceptación. Conéctate a internet y reinténtalo.';
-
-  @override
-  String get termsRetry => 'Reintentar';
-
-  @override
   String get termsSaveError =>
       'No se pudo guardar la aceptación. Inténtalo de nuevo.';
 
@@ -158,9 +148,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authUsername => 'Nombre de usuario';
-
-  @override
-  String get authEnterUsername => 'Elige un nombre de usuario';
 
   @override
   String get authUsernameHint => 'letras minúsculas, números y _';
@@ -191,9 +178,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get usernameSetupButton => 'Continuar';
-
-  @override
-  String get discoverTitle => 'Descubrir personas';
 
   @override
   String get discoverErrorLoading => 'Error al cargar descubrimiento';
@@ -287,9 +271,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatDeleteTitle => 'Eliminar conversación';
 
   @override
-  String get chatDeleteBody => 'Se eliminará esta conversación.';
-
-  @override
   String get chatDeleteConfirm => 'Eliminar';
 
   @override
@@ -302,43 +283,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatDateYesterday => 'Ayer';
 
   @override
-  String get statsTracks => 'Canciones';
-
-  @override
   String get statsArtists => 'Artistas';
 
   @override
   String get statsGenres => 'Géneros';
 
   @override
-  String get statsShortTerm => '4 semanas';
-
-  @override
-  String get statsMediumTerm => '6 meses';
-
-  @override
-  String get statsLongTerm => '1 año';
-
-  @override
-  String statsError(String error) {
-    return 'Error: $error';
-  }
-
-  @override
   String get statsEditArtists => 'Editar artistas';
 
   @override
   String get statsNoData => 'No hay datos disponibles';
-
-  @override
-  String get statsOfflineCache => 'Sin conexión — mostrando datos guardados';
-
-  @override
-  String get statsStaleCache => 'Mostrando datos de hace más de 48 horas';
-
-  @override
-  String get statsOfflineNoData =>
-      'Sin conexión y sin datos guardados.\nVisita esta pestaña con internet primero.';
 
   @override
   String get socialNow => 'Ahora';
@@ -418,41 +372,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artistSelectorStageExpert => 'Experto';
 
   @override
-  String get artistSelectorStageHint =>
-      'Añade más para mejorar tus recomendaciones';
-
-  @override
-  String get menuProfile => 'Mi perfil';
-
-  @override
   String get menuAccountOptions => 'Opciones de cuenta';
-
-  @override
-  String get menuLightMode => 'Modo claro';
-
-  @override
-  String get menuDarkMode => 'Modo oscuro';
 
   @override
   String get menuSignOut => 'Cerrar sesión';
 
   @override
   String get signingOut => 'Cerrando sesión...';
-
-  @override
-  String discoverySharedArtists(String artists) {
-    return 'Artistas en común: $artists';
-  }
-
-  @override
-  String discoverySharedGenres(String genres) {
-    return 'Géneros en común: $genres';
-  }
-
-  @override
-  String discoveryCompatible(String score) {
-    return '$score% compatible';
-  }
 
   @override
   String get friendsReceivedRequests => 'Solicitudes recibidas';
@@ -495,9 +421,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta persona será eliminada de tu lista de amigos.';
 
   @override
-  String get friendsAlreadyFriends => 'Ya son amigos';
-
-  @override
   String get profileAddFriend => 'Añadir amigo';
 
   @override
@@ -508,11 +431,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dailySongChoose => 'Elegir tu canción del día';
-
-  @override
-  String dailySongBy(String artist) {
-    return 'de $artist';
-  }
 
   @override
   String get discoverTabPeople => 'Descubrir personas';
@@ -597,9 +515,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get photoSetupSkip => 'Omitir por ahora';
-
-  @override
-  String get photoSetupUploading => 'Subiendo...';
 
   @override
   String get photoSetupGallery => 'Galería';
@@ -817,83 +732,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get reauthWrongAccount =>
       'La cuenta seleccionada no está vinculada a esta app. Por favor, elige la cuenta correcta.';
-
-  @override
-  String get privacyTitle => 'Política de privacidad';
-
-  @override
-  String get privacyLastUpdated =>
-      'Última actualización: 20 de septiembre de 2026';
-
-  @override
-  String get privacyS1Title => '1. Responsable del tratamiento';
-
-  @override
-  String get privacyS1Body =>
-      'MusiLink es desarrollada y operada por Pablo Armas (armasp80@gmail.com), con domicilio en España. Pablo Armas actúa como responsable del tratamiento de tus datos personales conforme al Reglamento (UE) 2016/679 (RGPD).';
-
-  @override
-  String get privacyS2Title => '2. Datos que recogemos';
-
-  @override
-  String get privacyS2Body =>
-      'Recogemos y tratamos los siguientes datos personales:\n\n• Datos de cuenta: nombre, dirección de correo electrónico, foto de perfil e identificadores de inicio de sesión (mediante correo/contraseña o Google).\n\n• Datos de perfil musical: artistas principales que eliges, géneros principales inferidos, canción del día y canciones compartidas.\n\n• Datos sociales: mensajes, solicitudes de amistad, reacciones con emojis y denuncias de perfiles o mensajes, incluida una copia del contenido denunciado.\n\n• Datos técnicos: informes de errores y fallos recopilados por Firebase Crashlytics.';
-
-  @override
-  String get privacyS3Title => '3. Cómo usamos tus datos';
-
-  @override
-  String get privacyS3Body =>
-      'Tus datos se tratan con las siguientes finalidades:\n\n• Prestación del servicio (cuenta, compatibilidad musical, descubrimiento, chat). Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Funciones de perfil musical: mostrar y comparar el gusto musical que has seleccionado. Base legal: ejecución de un contrato (art. 6.1.b RGPD).\n\n• Estabilidad de la app: diagnóstico de errores y fallos. Base legal: interés legítimo (art. 6.1.f RGPD).';
-
-  @override
-  String get privacyS4Title => '4. Servicios de terceros';
-
-  @override
-  String get privacyS4Body =>
-      'Utilizamos los siguientes servicios de terceros:\n\n• Firebase Authentication — Google. Gestiona el acceso a las cuentas y procesa datos de autenticación en Estados Unidos.\n\n• Cloud Firestore — Google. Los perfiles, mensajes y otros datos sociales se almacenan en la región configurada para la base de datos (europe-southwest1, Madrid).\n\n• Cloud Storage for Firebase — Google. Las fotos de perfil se almacenan en el bucket configurado en Estados Unidos.\n\n• Cloud Functions for Firebase — Google. Las funciones de mensajería y solicitudes de amistad se ejecutan en europe-southwest1. Algunos procesos programados y de eliminación se ejecutan en europe-west1 (Bélgica).\n\n• Firebase Crashlytics — Google. Trata informes de errores y fallos; su ubicación de tratamiento no viene determinada por la región de Firestore.\n\n• Spotify y Last.fm. Proporcionan datos de catálogo para búsquedas y sugerencias musicales. No es necesario conectar una cuenta de Spotify.';
-
-  @override
-  String get privacyS5Title => '5. Conservación y eliminación de datos';
-
-  @override
-  String get privacyS5Body =>
-      'Conservamos los datos de la cuenta mientras esté activa. Al eliminar tu cuenta mediante el botón \'Eliminar cuenta\' en Ajustes, borramos tus datos privados, foto de perfil, relaciones, solicitudes, tokens, preferencias y datos musicales. El perfil público se sustituye por un marcador anónimo para no romper referencias técnicas. Los mensajes que hayas enviado se eliminan de las conversaciones y tus reacciones se retiran; si una conversación queda vacía, se borra. Las denuncias y la copia del contenido denunciado pueden conservarse mientras sean necesarias para investigar abusos y cumplir obligaciones legales, incluso después de eliminar una cuenta. Algunos registros técnicos o informes de fallos conservados por Google pueden estar sujetos a sus propios plazos de retención.';
-
-  @override
-  String get privacyS6Title => '6. Tus derechos';
-
-  @override
-  String get privacyS6Body =>
-      'En virtud del RGPD, tienes los siguientes derechos:\n\n• Acceso: solicitar una copia de los datos que conservamos sobre ti.\n• Rectificación: corregir datos inexactos o incompletos.\n• Supresión: solicitar la eliminación de tus datos; también puedes eliminar la cuenta desde Ajustes, con el alcance descrito en la sección 5.\n• Limitación: solicitar que limitemos el tratamiento de tus datos.\n• Portabilidad: recibir tus datos en un formato estructurado y legible por máquina.\n• Oposición: oponerte al tratamiento basado en interés legítimo.\n\nPara ejercer estos derechos, contacta en armasp80@gmail.com. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD) en www.aepd.es.';
-
-  @override
-  String get privacyS7Title => '7. Edad mínima';
-
-  @override
-  String get privacyS7Body =>
-      'MusiLink está destinada a usuarios de 16 años en adelante. No recogemos conscientemente datos de personas menores de 16 años. Si crees que un menor nos ha facilitado datos personales, contacta en armasp80@gmail.com y los eliminaremos de inmediato.';
-
-  @override
-  String get privacyS8Title => '8. Seguridad';
-
-  @override
-  String get privacyS8Body =>
-      'Aplicamos medidas técnicas y organizativas adecuadas para proteger tus datos personales frente a accesos no autorizados, pérdidas o alteraciones. Los datos se almacenan en Google Firebase, que aplica controles de seguridad estándar del sector.';
-
-  @override
-  String get privacyS9Title => '9. Contacto';
-
-  @override
-  String get privacyS9Body =>
-      'Para cualquier consulta sobre esta Política de Privacidad o el tratamiento de tus datos, puedes contactarnos en:\n\nPablo Armas\narmasp80@gmail.com';
-
-  @override
-  String get privacyS10Title => '10. Transferencias internacionales de datos';
-
-  @override
-  String get privacyS10Body =>
-      'Firebase Authentication procesa datos de autenticación en Estados Unidos y las fotos de perfil se almacenan allí mediante Cloud Storage for Firebase. Crashlytics puede tratar informes de errores y fallos en otras ubicaciones de la infraestructura de Google. La ubicación de Firestore en europe-southwest1 no se aplica automáticamente a estos otros servicios.\n\nLas transferencias fuera del Espacio Económico Europeo se rigen por las condiciones de tratamiento de datos de Google y las garantías aplicables, incluidas las cláusulas contractuales tipo cuando procedan. El mero uso de la app no constituye consentimiento para estas transferencias. Puedes solicitar información sobre las garantías en armasp80@gmail.com. Los perfiles, mensajes y datos musicales guardados en Firestore se almacenan en europe-southwest1.';
 
   @override
   String get updateRequiredTitle => 'Actualización obligatoria';

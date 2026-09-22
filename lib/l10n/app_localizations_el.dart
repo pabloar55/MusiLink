@@ -103,9 +103,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authErrorUnexpected => 'Απροσδόκητο σφάλμα. Δοκιμάστε ξανά.';
 
   @override
-  String get authErrorGoogleSignIn => 'Δεν ήταν δυνατή η σύνδεση με Google.';
-
-  @override
   String get authErrorGoogleSignInGeneric => 'Σφάλμα σύνδεσης με Google.';
 
   @override
@@ -141,13 +138,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get termsAccepting => 'Αποδοχή…';
 
   @override
-  String get termsCheckError =>
-      'Δεν ήταν δυνατός ο έλεγχος της αποδοχής σας. Συνδεθείτε στο διαδίκτυο και δοκιμάστε ξανά.';
-
-  @override
-  String get termsRetry => 'Δοκιμάστε ξανά';
-
-  @override
   String get termsSaveError =>
       'Δεν ήταν δυνατή η αποθήκευση της αποδοχής σας. Δοκιμάστε ξανά.';
 
@@ -156,9 +146,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get authUsername => 'Όνομα χρήστη';
-
-  @override
-  String get authEnterUsername => 'Επιλέξτε όνομα χρήστη';
 
   @override
   String get authUsernameHint => 'πεζά γράμματα, αριθμοί και _';
@@ -190,9 +177,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get usernameSetupButton => 'Συνέχεια';
-
-  @override
-  String get discoverTitle => 'Ανακαλύψτε ανθρώπους';
 
   @override
   String get discoverErrorLoading => 'Σφάλμα φόρτωσης ανακάλυψης';
@@ -286,9 +270,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatDeleteTitle => 'Διαγραφή συνομιλίας';
 
   @override
-  String get chatDeleteBody => 'Αυτή η συνομιλία θα διαγραφεί.';
-
-  @override
   String get chatDeleteConfirm => 'Διαγραφή';
 
   @override
@@ -301,44 +282,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatDateYesterday => 'Χθες';
 
   @override
-  String get statsTracks => 'Τραγούδια';
-
-  @override
   String get statsArtists => 'Καλλιτέχνες';
 
   @override
   String get statsGenres => 'Είδη';
 
   @override
-  String get statsShortTerm => '4 εβδομάδες';
-
-  @override
-  String get statsMediumTerm => '6 μήνες';
-
-  @override
-  String get statsLongTerm => '1 χρόνος';
-
-  @override
-  String statsError(String error) {
-    return 'Σφάλμα: $error';
-  }
-
-  @override
   String get statsEditArtists => 'Επεξεργασία καλλιτεχνών';
 
   @override
   String get statsNoData => 'Δεν υπάρχουν διαθέσιμα δεδομένα';
-
-  @override
-  String get statsOfflineCache =>
-      'Εκτός σύνδεσης — εμφάνιση αποθηκευμένων δεδομένων';
-
-  @override
-  String get statsStaleCache => 'Εμφάνιση δεδομένων από πάνω από 48 ώρες πριν';
-
-  @override
-  String get statsOfflineNoData =>
-      'Δεν υπάρχει σύνδεση και δεν υπάρχουν αποθηκευμένα δεδομένα.\nΕπισκεφθείτε αυτή την καρτέλα online πρώτα.';
 
   @override
   String get socialNow => 'Τώρα';
@@ -420,41 +373,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get artistSelectorStageExpert => 'Ειδικός';
 
   @override
-  String get artistSelectorStageHint =>
-      'Προσθέστε περισσότερους για να βελτιώσετε τις συστάσεις σας';
-
-  @override
-  String get menuProfile => 'Το προφίλ μου';
-
-  @override
   String get menuAccountOptions => 'Επιλογές λογαριασμού';
-
-  @override
-  String get menuLightMode => 'Ανοιχτή λειτουργία';
-
-  @override
-  String get menuDarkMode => 'Σκοτεινή λειτουργία';
 
   @override
   String get menuSignOut => 'Αποσύνδεση';
 
   @override
   String get signingOut => 'Αποσύνδεση...';
-
-  @override
-  String discoverySharedArtists(String artists) {
-    return 'Κοινοί καλλιτέχνες: $artists';
-  }
-
-  @override
-  String discoverySharedGenres(String genres) {
-    return 'Κοινά είδη: $genres';
-  }
-
-  @override
-  String discoveryCompatible(String score) {
-    return '$score% συμβατοί';
-  }
 
   @override
   String get friendsReceivedRequests => 'Ληφθείσες αιτήσεις';
@@ -498,9 +423,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Αυτό το άτομο θα αφαιρεθεί από τη λίστα φίλων σας.';
 
   @override
-  String get friendsAlreadyFriends => 'Ήδη φίλοι';
-
-  @override
   String get profileAddFriend => 'Προσθήκη φίλου';
 
   @override
@@ -511,11 +433,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dailySongChoose => 'Επιλέξτε το τραγούδι σας της ημέρας';
-
-  @override
-  String dailySongBy(String artist) {
-    return 'από $artist';
-  }
 
   @override
   String get discoverTabPeople => 'Ανακαλύψτε ανθρώπους';
@@ -600,9 +517,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get photoSetupSkip => 'Παράλειψη προς το παρόν';
-
-  @override
-  String get photoSetupUploading => 'Μεταφόρτωση...';
 
   @override
   String get photoSetupGallery => 'Γκαλερί';
@@ -823,82 +737,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get reauthWrongAccount =>
       'Ο επιλεγμένος λογαριασμός δεν είναι συνδεδεμένος με αυτή την εφαρμογή. Επιλέξτε τον σωστό λογαριασμό.';
-
-  @override
-  String get privacyTitle => 'Πολιτική Απορρήτου';
-
-  @override
-  String get privacyLastUpdated => 'Τελευταία ενημέρωση: 20 Σεπτεμβρίου 2026';
-
-  @override
-  String get privacyS1Title => '1. Υπεύθυνος Επεξεργασίας Δεδομένων';
-
-  @override
-  String get privacyS1Body =>
-      'Το MusiLink αναπτύσσεται και λειτουργεί από τον Pablo Armas (armasp80@gmail.com), εγκατεστημένο στην Ισπανία. Ο Pablo Armas είναι ο υπεύθυνος επεξεργασίας που είναι αρμόδιος για την επεξεργασία των προσωπικών σας δεδομένων σύμφωνα με τον Κανονισμό (ΕΕ) 2016/679 (ΓΚΠΔ).';
-
-  @override
-  String get privacyS2Title => '2. Δεδομένα που Συλλέγουμε';
-
-  @override
-  String get privacyS2Body =>
-      'Συλλέγουμε και επεξεργαζόμαστε τα ακόλουθα προσωπικά δεδομένα:\n\n• Δεδομένα λογαριασμού: όνομα, διεύθυνση email, φωτογραφία προφίλ και αναγνωριστικά σύνδεσης (μέσω email/κωδικού ή Google Sign-In).\n\n• Δεδομένα μουσικού προφίλ: κορυφαίοι καλλιτέχνες που επιλέγετε, συναγόμενα κορυφαία είδη, επιλογές τραγουδιού της ημέρας και κοινοποιημένα τραγούδια.\n\n• Κοινωνικά δεδομένα: μηνύματα, αιτήματα φιλίας, αντιδράσεις emoji και αναφορές προφίλ ή μηνυμάτων, συμπεριλαμβανομένου αντιγράφου του αναφερόμενου περιεχομένου.\n\n• Τεχνικά δεδομένα: αναφορές σφαλμάτων και δυσλειτουργιών που συλλέγονται από το Firebase Crashlytics.';
-
-  @override
-  String get privacyS3Title => '3. Πώς Χρησιμοποιούμε τα Δεδομένα σας';
-
-  @override
-  String get privacyS3Body =>
-      'Τα δεδομένα σας επεξεργάζονται για τους ακόλουθους σκοπούς:\n\n• Παροχή της υπηρεσίας (λογαριασμός, μουσική συμβατότητα, ανακάλυψη, συνομιλία). Νομική βάση: εκτέλεση σύμβασης (Άρθρο 6.1.β ΓΚΠΔ).\n\n• Λειτουργίες μουσικού προφίλ: εμφάνιση και σύγκριση του επιλεγμένου μουσικού σας γούστου. Νομική βάση: εκτέλεση σύμβασης (Άρθρο 6.1.β ΓΚΠΔ).\n\n• Σταθερότητα εφαρμογής: διάγνωση σφαλμάτων. Νομική βάση: έννομο συμφέρον (Άρθρο 6.1.στ ΓΚΠΔ).';
-
-  @override
-  String get privacyS4Title => '4. Υπηρεσίες Τρίτων';
-
-  @override
-  String get privacyS4Body =>
-      'Χρησιμοποιούμε τις ακόλουθες υπηρεσίες τρίτων:\n\n• Firebase Authentication — Google. Διαχειρίζεται τη σύνδεση στους λογαριασμούς και επεξεργάζεται δεδομένα ταυτοποίησης στις Ηνωμένες Πολιτείες.\n\n• Cloud Firestore — Google. Τα προφίλ, τα μηνύματα και άλλα κοινωνικά δεδομένα αποθηκεύονται στη διαμορφωμένη περιοχή της βάσης δεδομένων (europe-southwest1, Μαδρίτη).\n\n• Cloud Storage for Firebase — Google. Οι φωτογραφίες προφίλ αποθηκεύονται στον χώρο αποθήκευσης που έχει διαμορφωθεί στις Ηνωμένες Πολιτείες.\n\n• Cloud Functions for Firebase — Google. Οι λειτουργίες μηνυμάτων και αιτημάτων φιλίας εκτελούνται στην europe-southwest1. Ορισμένες προγραμματισμένες διαδικασίες και διαδικασίες διαγραφής εκτελούνται στην europe-west1 (Βέλγιο).\n\n• Firebase Crashlytics — Google. Επεξεργάζεται αναφορές σφαλμάτων και δυσλειτουργιών· οι τοποθεσίες επεξεργασίας του δεν καθορίζονται από την περιοχή του Firestore.\n\n• Spotify και Last.fm. Παρέχουν δεδομένα καταλόγου για μουσικές αναζητήσεις και προτάσεις. Δεν απαιτείται σύνδεση λογαριασμού Spotify.';
-
-  @override
-  String get privacyS5Title => '5. Διατήρηση και Διαγραφή Δεδομένων';
-
-  @override
-  String get privacyS5Body =>
-      'Διατηρούμε τα δεδομένα λογαριασμού όσο ο λογαριασμός είναι ενεργός. Όταν διαγράφετε τον λογαριασμό σας μέσω του κουμπιού «Διαγραφή λογαριασμού» στις Ρυθμίσεις, διαγράφουμε τα ιδιωτικά σας δεδομένα, τη φωτογραφία προφίλ, τις σχέσεις, τα αιτήματα, τα tokens, τις προτιμήσεις και τα μουσικά δεδομένα. Το δημόσιο προφίλ αντικαθίσταται από ανώνυμο placeholder. Τα μηνύματα που στείλατε αφαιρούνται από τις συνομιλίες· εάν μια συνομιλία αδειάσει, διαγράφεται. Οι αναφορές και τα αντίγραφα του αναφερόμενου περιεχομένου μπορούν να διατηρούνται όσο απαιτείται για τη διερεύνηση καταχρήσεων και την τήρηση νομικών υποχρεώσεων, ακόμη και μετά τη διαγραφή λογαριασμού. Ορισμένες τεχνικές εγγραφές ή αναφορές σφαλμάτων και δυσλειτουργιών που διατηρεί η Google μπορεί να υπόκεινται στις δικές της περιόδους διατήρησης.';
-
-  @override
-  String get privacyS6Title => '6. Τα Δικαιώματά σας';
-
-  @override
-  String get privacyS6Body =>
-      'Δυνάμει του ΓΚΠΔ, έχετε τα ακόλουθα δικαιώματα:\n\n• Πρόσβαση: αίτημα αντιγράφου των δεδομένων που διατηρούμε για εσάς.\n• Διόρθωση: διόρθωση ανακριβών ή ελλιπών δεδομένων.\n• Διαγραφή: αίτημα διαγραφής των δεδομένων σας· μπορείτε επίσης να διαγράψετε τον λογαριασμό στις Ρυθμίσεις, με την έκταση που περιγράφεται στην ενότητα 5.\n• Περιορισμός: αίτημα περιορισμού της επεξεργασίας των δεδομένων σας.\n• Φορητότητα: λήψη των δεδομένων σας σε δομημένη, αναγνώσιμη από μηχανή μορφή.\n• Εναντίωση: εναντίωση στην επεξεργασία βάσει έννομου συμφέροντος.\n\nΓια να ασκήσετε αυτά τα δικαιώματα, επικοινωνήστε στο armasp80@gmail.com. Μπορείτε επίσης να υποβάλετε καταγγελία στην Αρχή Προστασίας Δεδομένων Προσωπικού Χαρακτήρα (ΑΠΔΠΧ) στο www.dpa.gr.';
-
-  @override
-  String get privacyS7Title => '7. Ελάχιστη Ηλικία';
-
-  @override
-  String get privacyS7Body =>
-      'Το MusiLink απευθύνεται σε χρήστες 16 ετών και άνω. Δεν συλλέγουμε εν γνώσει μας προσωπικά δεδομένα από άτομα κάτω των 16 ετών. Εάν πιστεύετε ότι ανήλικος μάς έχει παράσχει προσωπικά δεδομένα, επικοινωνήστε μαζί μας στο armasp80@gmail.com και θα τα διαγράψουμε αμέσως.';
-
-  @override
-  String get privacyS8Title => '8. Ασφάλεια';
-
-  @override
-  String get privacyS8Body =>
-      'Εφαρμόζουμε κατάλληλα τεχνικά και οργανωτικά μέτρα για την προστασία των προσωπικών σας δεδομένων από μη εξουσιοδοτημένη πρόσβαση, απώλεια ή αλλοίωση. Τα δεδομένα αποθηκεύονται στο Google Firebase, το οποίο εφαρμόζει ελέγχους ασφαλείας βιομηχανικού επιπέδου.';
-
-  @override
-  String get privacyS9Title => '9. Επικοινωνία';
-
-  @override
-  String get privacyS9Body =>
-      'Για οποιαδήποτε ερώτηση σχετικά με αυτή την Πολιτική Απορρήτου ή την επεξεργασία των δεδομένων σας, επικοινωνήστε:\n\nPablo Armas\narmasp80@gmail.com';
-
-  @override
-  String get privacyS10Title => '10. Διεθνείς Μεταφορές Δεδομένων';
-
-  @override
-  String get privacyS10Body =>
-      'Το Firebase Authentication επεξεργάζεται δεδομένα ταυτοποίησης στις Ηνωμένες Πολιτείες, όπου αποθηκεύονται και οι φωτογραφίες προφίλ μέσω του Cloud Storage for Firebase. Το Crashlytics ενδέχεται να επεξεργάζεται αναφορές σφαλμάτων και δυσλειτουργιών σε άλλες τοποθεσίες της υποδομής της Google. Η περιοχή europe-southwest1 του Firestore δεν ισχύει αυτόματα για αυτές τις άλλες υπηρεσίες.\n\nΟι διαβιβάσεις εκτός του Ευρωπαϊκού Οικονομικού Χώρου διέπονται από τους όρους επεξεργασίας δεδομένων της Google και τις εφαρμοστέες εγγυήσεις, συμπεριλαμβανομένων των τυποποιημένων συμβατικών ρητρών όπου εφαρμόζονται. Η απλή χρήση της εφαρμογής δεν αποτελεί συγκατάθεση για αυτές τις διαβιβάσεις. Μπορείτε να ζητήσετε πληροφορίες για τις εγγυήσεις στο armasp80@gmail.com. Τα προφίλ, τα μηνύματα και τα μουσικά δεδομένα που αποθηκεύονται στο Firestore διατηρούνται στην europe-southwest1.';
 
   @override
   String get updateRequiredTitle => 'Απαιτείται ενημέρωση';
