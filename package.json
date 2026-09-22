@@ -2,6 +2,7 @@
   "name": "musilink-firestore-rules",
   "private": true,
   "scripts": {
+    "test:terms-versions": "node --test tests/terms_versions.test.cjs",
     "test:web-shell": "node --test tests/pwa_viewport.test.cjs tests/chat_delivery_sw.test.cjs",
     "test:rules": "firebase emulators:exec --project musilink-rules-test --only firestore \"node --test tests/firestore.rules.test.cjs\"",
     "test:storage": "firebase emulators:exec --project musilink-functions-test --only firestore,storage \"node --test tests/storage.rules.test.cjs\"",
