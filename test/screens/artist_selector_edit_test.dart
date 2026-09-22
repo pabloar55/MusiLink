@@ -33,6 +33,66 @@ const _serverArtists = [
 void main() {
   setUpAll(() => registerFallbackValue(<Artist>[]));
 
+  for (final locale in [const Locale('es'), const Locale('el')]) {
+    testWidgets(
+      'la cabecera no se mueve al mostrar y ocultar la flecha (${locale.languageCode})',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final catalog = _MockMusicCatalogService();
+        when(() => catalog.searchArtists('artist', limit: 10))
+            .thenAnswer((_) async => _serverArtists);
+        when(() => catalog.searchArtists(any(), limit: 1))
+            .thenAnswer((_) async => []);
+        when(() => catalog.getRelatedArtists(any()))
+            .thenAnswer((_) async => []);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [musicCatalogServiceProvider.overrideWithValue(catalog)],
+            child: MaterialApp(
+              locale: locale,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const ArtistSelectorScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final context = tester.element(find.byType(ArtistSelectorScreen));
+        final l10n = AppLocalizations.of(context)!;
+        final title = find.text(l10n.artistSelectorTitle);
+        final titleBounds = tester.getRect(title);
+        final searchBounds = tester.getRect(find.byType(TextField));
+        final arrow = find.widgetWithIcon(IconButton, Icons.arrow_forward);
+        expect(arrow.hitTestable(), findsNothing);
+
+        for (final artist in _serverArtists) {
+          await tester.enterText(find.byType(TextField), 'artist');
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(artist.name));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(title), titleBounds);
+          expect(tester.getRect(find.byType(TextField)), searchBounds);
+        }
+        expect(arrow.hitTestable(), findsOneWidget);
+        final arrowBounds = tester.getRect(find.byIcon(Icons.arrow_forward));
+        expect(arrowBounds.center.dy, closeTo(titleBounds.center.dy, 1));
+        expect(360 - arrowBounds.right, 24);
+
+        await tester.tap(find.widgetWithIcon(IconButton, Icons.close).last);
+        await tester.pumpAndSettle();
+        expect(arrow.hitTestable(), findsNothing);
+        expect(tester.getRect(title), titleBounds);
+        expect(tester.getRect(find.byType(TextField)), searchBounds);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'editar sale sin esperar a Firebase y reabre con los cambios pendientes',
     (tester) async {

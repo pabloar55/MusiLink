@@ -612,7 +612,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                 padding: EdgeInsets.fromLTRB(
                   widget.isEditMode ? 4 : 24,
                   widget.isEditMode ? 8 : 24,
-                  24,
+                  widget.isEditMode ? 24 : 12,
                   0,
                 ),
                 child: Row(
@@ -639,11 +639,17 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
-                    if (!widget.isEditMode && _selected.length >= _minArtists)
-                      IconButton(
-                        tooltip: l10n.artistSelectorContinue,
-                        onPressed: _isSaving ? null : _save,
-                        icon: const Icon(Icons.arrow_forward),
+                    if (!widget.isEditMode)
+                      Visibility(
+                        visible: _selected.length >= _minArtists,
+                        maintainState: true,
+                        maintainAnimation: true,
+                        maintainSize: true,
+                        child: IconButton(
+                          tooltip: l10n.artistSelectorContinue,
+                          onPressed: _isSaving ? null : _save,
+                          icon: const Icon(Icons.arrow_forward),
+                        ),
                       ),
                   ],
                 ),

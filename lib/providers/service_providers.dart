@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
@@ -58,6 +59,8 @@ final pendingNotificationProvider =
     );
 
 // ── Servicios sin dependencias ──────────────────────────────────
+
+final imagePickerProvider = Provider<ImagePicker>((ref) => ImagePicker());
 
 final userServiceProvider = Provider<UserService>((ref) {
   return UserService(

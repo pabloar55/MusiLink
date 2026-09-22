@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/notification_prefs_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
@@ -36,8 +37,6 @@ class AccountSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
-  bool _isUploadingPhoto = false;
-
   Future<void> _openTerms() async {
     final language = Localizations.localeOf(context).languageCode;
     try {
@@ -96,39 +95,40 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
 
   Future<void> _changePhoto() async {
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final auth = ref.read(firebaseAuthProvider);
+    final uid = auth.currentUser?.uid;
+    if (uid == null) return;
 
     final source = await showImageSourcePicker(context);
     if (source == null || !mounted) return;
 
-    final image = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
+    final image = await ref
+        .read(imagePickerProvider)
+        .pickImage(
+          source: source,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 85,
+        );
     if (image == null || !mounted) return;
 
-    setState(() => _isUploadingPhoto = true);
     try {
-      final uid = ref.read(firebaseAuthProvider).currentUser!.uid;
-      final url = await ref
-          .read(storageServiceProvider)
-          .uploadProfilePhoto(uid, image);
-      if (url != null && mounted) {
-        await ref.read(userServiceProvider).updateProfile(uid, photoUrl: url);
-      }
+      final bytes = await image.readAsBytes();
+      if (!mounted || auth.currentUser?.uid != uid) return;
+      await ref
+          .read(profilePhotoUploadProvider.notifier)
+          .upload(uid: uid, image: image, bytes: bytes);
     } catch (e, st) {
       reportError(e, st).ignore();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (messenger.mounted && auth.currentUser?.uid == uid) {
+        messenger.showSnackBar(
           SnackBar(
             content: Text(l10n.photoSetupError),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isUploadingPhoto = false);
     }
   }
 
@@ -276,6 +276,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     final themeMode = ref.watch(themeModeProvider);
     final vibrationEnabled = ref.watch(vibrationEnabledProvider);
     final soundEnabled = ref.watch(soundEnabledProvider);
+    final photoUpload = ref.watch(profilePhotoUploadProvider);
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -284,6 +285,9 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
         builder: (context) {
           final appUser = ref.watch(currentUserProvider).asData?.value;
           final firebaseUser = ref.read(firebaseAuthProvider).currentUser;
+          final currentPhotoUpload = photoUpload?.uid == firebaseUser?.uid
+              ? photoUpload
+              : null;
           final imageUrl = appUser?.photoUrl ?? '';
           final displayName = appUser?.displayName ?? l10n.socialUser;
           final email = firebaseUser?.email ?? '';
@@ -305,7 +309,8 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
                 uid: appUser?.uid ?? firebaseUser?.uid ?? '',
                 onTap: _goToProfile,
                 onAvatarTap: _changePhoto,
-                isUploadingPhoto: _isUploadingPhoto,
+                isUploadingPhoto: currentPhotoUpload?.isUploading ?? false,
+                localPhotoBytes: currentPhotoUpload?.bytes,
               ),
 
               const SizedBox(height: AppTokens.spaceXL),
@@ -428,6 +433,7 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onAvatarTap;
   final bool isUploadingPhoto;
+  final Uint8List? localPhotoBytes;
 
   const _ProfileCard({
     required this.imageUrl,
@@ -437,6 +443,7 @@ class _ProfileCard extends StatelessWidget {
     required this.onTap,
     required this.onAvatarTap,
     required this.isUploadingPhoto,
+    required this.localPhotoBytes,
   });
 
   @override
@@ -459,28 +466,22 @@ class _ProfileCard extends StatelessWidget {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: cs.surfaceContainerHighest,
-                      child: isUploadingPhoto
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  cs.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : ClipOval(
-                              child: SizedBox.expand(
-                                child: UserProfilePhoto(
+                      child: ClipOval(
+                        child: SizedBox.expand(
+                          child: localPhotoBytes != null
+                              ? Image.memory(
+                                  localPhotoBytes!,
+                                  fit: BoxFit.cover,
+                                )
+                              : UserProfilePhoto(
                                   photoUrl: imageUrl,
                                   fallback: Icon(
                                     LucideIcons.user,
                                     color: cs.onSurfaceVariant,
                                   ),
                                 ),
-                              ),
-                            ),
+                        ),
+                      ),
                     ),
                     if (!isUploadingPhoto)
                       Container(

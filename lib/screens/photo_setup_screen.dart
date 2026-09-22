@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,9 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/go_router_provider.dart';
-import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/widgets/image_source_picker.dart';
 
 class PhotoSetupScreen extends ConsumerStatefulWidget {
@@ -21,18 +22,20 @@ class PhotoSetupScreen extends ConsumerStatefulWidget {
 class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
   XFile? _selectedImage;
   Uint8List? _selectedImageBytes;
-  bool _isUploading = false;
+  bool _isContinuing = false;
 
   Future<void> _pickImage() async {
     final source = await showImageSourcePicker(context);
-    if (source == null) return;
+    if (source == null || !mounted) return;
 
-    final image = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
+    final image = await ref
+        .read(imagePickerProvider)
+        .pickImage(
+          source: source,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 85,
+        );
 
     if (image != null) {
       final bytes = await image.readAsBytes();
@@ -44,42 +47,36 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
     }
   }
 
-  Future<void> _completeSetup() async {
-    ref.read(appRouterNotifierProvider).setPhotoSetupDone();
-  }
-
-  Future<void> _handleContinue() async {
-    if (_selectedImage == null) {
-      await _completeSetup();
-      return;
-    }
-
-    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    if (uid == null) return;
-    setState(() => _isUploading = true);
-
-    try {
-      final url = await ref
-          .read(storageServiceProvider)
-          .uploadProfilePhoto(uid, _selectedImage!);
-      if (url != null) {
-        await ref.read(userServiceProvider).updateSetupPhoto(uid, url);
-      }
-      if (!mounted || ref.read(firebaseAuthProvider).currentUser?.uid != uid) {
-        return;
-      }
-      await _completeSetup();
-    } catch (e, st) {
-      reportError(e, st).ignore();
-      if (!mounted) return;
-      setState(() => _isUploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.photoSetupError),
-          behavior: SnackBarBehavior.floating,
-        ),
+  void _handleContinue() {
+    if (_isContinuing) return;
+    final image = _selectedImage;
+    if (image != null) {
+      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+      if (uid == null) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final errorMessage = AppLocalizations.of(context)!.photoSetupError;
+      unawaited(
+        ref
+            .read(profilePhotoUploadProvider.notifier)
+            .upload(
+              uid: uid,
+              image: image,
+              bytes: _selectedImageBytes!,
+              isSetup: true,
+            )
+            .catchError((Object error) {
+              if (!messenger.mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(errorMessage),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }),
       );
     }
+    setState(() => _isContinuing = true);
+    ref.read(appRouterNotifierProvider).setPhotoSetupDone();
   }
 
   @override
@@ -99,7 +96,7 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
 
               // Avatar
               GestureDetector(
-                onTap: _isUploading ? null : _pickImage,
+                onTap: _isContinuing ? null : _pickImage,
                 child: Stack(
                   alignment: Alignment.bottomRight,
                   children: [
@@ -174,29 +171,16 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                  onPressed: _isUploading
+                  onPressed: _isContinuing
                       ? null
                       : (hasPhoto ? _handleContinue : _pickImage),
-                  child: _isUploading
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              colorScheme.onPrimary,
-                            ),
-                          ),
-                        )
-                      : Text(
-                          hasPhoto
-                              ? l10n.photoSetupContinue
-                              : l10n.photoSetupChoose,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                  child: Text(
+                    hasPhoto ? l10n.photoSetupContinue : l10n.photoSetupChoose,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
 
@@ -204,7 +188,7 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
 
               // Skip / change photo link
               TextButton(
-                onPressed: _isUploading
+                onPressed: _isContinuing
                     ? null
                     : (hasPhoto ? _pickImage : _handleContinue),
                 child: Text(
