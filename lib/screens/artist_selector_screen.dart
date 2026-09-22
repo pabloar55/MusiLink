@@ -632,11 +632,19 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                           : BackButton(
                               onPressed: () => unawaited(_saveAndPop()),
                             ),
-                    Text(
-                      l10n.artistSelectorTitle,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        l10n.artistSelectorTitle,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                     ),
+                    if (!widget.isEditMode && _selected.length >= _minArtists)
+                      IconButton(
+                        tooltip: l10n.artistSelectorContinue,
+                        onPressed: _isSaving ? null : _save,
+                        icon: const Icon(Icons.arrow_forward),
+                      ),
                   ],
                 ),
               ),
