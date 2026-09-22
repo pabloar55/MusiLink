@@ -13,7 +13,7 @@ const moderationEmail = defineString('MODERATION_EMAIL', {
   description: 'Dirección que recibirá los correos de moderación.',
 });
 const moderationFrom = defineString('MODERATION_FROM', {
-  description: 'Remitente verificado en Resend, por ejemplo MusiLink <reports@musilink.app>.',
+  description: 'Remitente verificado en Resend',
 });
 
 const reportReasons = new Set([

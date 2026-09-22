@@ -18,7 +18,7 @@ const moderationEmail = (0, params_1.defineString)('MODERATION_EMAIL', {
     description: 'Dirección que recibirá los correos de moderación.',
 });
 const moderationFrom = (0, params_1.defineString)('MODERATION_FROM', {
-    description: 'Remitente verificado en Resend, por ejemplo MusiLink <reports@musilink.app>.',
+    description: 'Remitente verificado en Resend',
 });
 const reportReasons = new Set([
     'spam',
