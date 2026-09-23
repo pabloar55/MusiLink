@@ -21,6 +21,7 @@ const {
   maxCatalogSearchesPerWindow,
 } = require('../lib/rate_limits.js');
 const { createModerationReport } = require('../lib/moderation_reports.js');
+const { LastFmCatalog } = require('../lib/lastfm_catalog.js');
 
 before(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -90,22 +91,39 @@ test('advanceFixedWindow usa exclusivamente el tiempo recibido del backend', () 
 test('catalog searches atomically reserve the last slot under concurrent requests', async () => {
   const now = Timestamp.fromMillis(1_000);
   await db.doc('rate_limits/alice').set({
-    catalogSearchWindowStart: now,
-    catalogSearchCount: maxCatalogSearchesPerWindow - 1,
+    spotifySearchWindowStart: now,
+    spotifySearchCount: maxCatalogSearchesPerWindow - 1,
     messageCount: 7,
   });
   const results = await Promise.allSettled(Array.from({ length: 8 }, () => (
-    consumeCatalogSearchQuota(db, 'alice', now)
+    consumeCatalogSearchQuota(db, 'alice', 'spotifySearch', now)
   )));
   assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
   for (const result of results.filter((result) => result.status === 'rejected')) {
     assert.equal(result.reason.code, 'resource-exhausted');
   }
   const limiter = (await db.doc('rate_limits/alice').get()).data();
-  assert.equal(limiter.catalogSearchCount, maxCatalogSearchesPerWindow);
+  assert.equal(limiter.spotifySearchCount, maxCatalogSearchesPerWindow);
   assert.equal(limiter.messageCount, 7);
-  await consumeCatalogSearchQuota(db, 'bob', now);
-  assert.equal((await db.doc('rate_limits/bob').get()).data().catalogSearchCount, 1);
+  await consumeCatalogSearchQuota(db, 'alice', 'lastFmSimilar', now);
+  assert.equal((await db.doc('rate_limits/alice').get()).data().lastFmSimilarCount, 1);
+  await consumeCatalogSearchQuota(db, 'bob', 'spotifySearch', now);
+  assert.equal((await db.doc('rate_limits/bob').get()).data().spotifySearchCount, 1);
+});
+
+test('Last.fm cache survives a new service instance and refreshes expired documents', async (t) => {
+  const fetchMock = t.mock.method(global, 'fetch', async () => Response.json({ values: ['Muse'] }));
+  const parse = (data) => data.values;
+  const first = new LastFmCatalog(db);
+  assert.deepEqual(await first.getStrings('artist.getSimilar', 'Radiohead', 'test-key', parse), ['Muse']);
+  const second = new LastFmCatalog(db);
+  assert.deepEqual(await second.getStrings('artist.getSimilar', 'radiohead', 'test-key', parse), ['Muse']);
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const snapshot = await db.collection('lastfm_cache').get();
+  assert.equal(snapshot.size, 1);
+  await snapshot.docs[0].ref.update({ expiresAt: Timestamp.fromMillis(1) });
+  await second.getStrings('artist.getSimilar', 'radiohead', 'test-key', parse);
+  assert.equal(fetchMock.mock.callCount(), 2);
 });
 
 test('sendChatMessage valida estrictamente texto y metadatos de Spotify', () => {

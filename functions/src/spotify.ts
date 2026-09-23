@@ -3,6 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { db } from './firebase';
 import { consumeCatalogSearchQuota } from './rate_limits';
+import { lastFmCatalog } from './lastfm_catalog';
 import {
   isRecord,
   parseSpotifyArtistSearchRequest,
@@ -16,7 +17,6 @@ const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
 const spotifyRequestTimeoutMs = 8_000;
-const lastFmRequestTimeoutMs = 5_000;
 
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken: string | null = null;
@@ -372,26 +372,23 @@ function scoreArtistMatch(item: SpotifyArtistItem, queryKey: string, queryTokens
 
 async function getLastFmGenres(artistName: string, apiKey: string): Promise<string[]> {
   try {
-    const url = new URL('https://ws.audioscrobbler.com/2.0/');
-    url.searchParams.set('method', 'artist.getTopTags');
-    url.searchParams.set('artist', artistName);
-    url.searchParams.set('api_key', apiKey);
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('autocorrect', '1');
-
-    const res = await fetchExternal(url.toString(), {}, lastFmRequestTimeoutMs, 'Last.fm');
-    if (!res.ok) return [];
-
-    const data: unknown = await res.json();
-    if (!isRecord(data) || !isRecord(data.toptags)) return [];
-    const tags = data.toptags.tag;
-    if (!Array.isArray(tags)) return [];
-
-    return normalizeLastFmTags(tags.filter((tag): tag is { name?: string; count?: number | string } => (
-      isRecord(tag) &&
-      (tag.name === undefined || typeof tag.name === 'string') &&
-      (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')
-    )));
+    return await lastFmCatalog.getStrings(
+      'artist.getTopTags', artistName, apiKey, (data) => {
+        const tags = isRecord(data) && isRecord(data.toptags) ? data.toptags.tag : undefined;
+        if (!Array.isArray(tags)) {
+          throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+        }
+        const validTags = tags.filter((tag): tag is { name: string; count?: number | string } => (
+          isRecord(tag) &&
+          typeof tag.name === 'string' && tag.name.trim().length > 0 &&
+          (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')
+        ));
+        if (validTags.length !== tags.length) {
+          throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+        }
+        return normalizeLastFmTags(validTags);
+      },
+    );
   } catch {
     return [];
   }
@@ -425,7 +422,7 @@ export const searchSpotifyArtists = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
     const { value: query, limit, market } = parseSpotifyArtistSearchRequest(request.data);
-    await consumeCatalogSearchQuota(db, request.auth.uid);
+    await consumeCatalogSearchQuota(db, request.auth.uid, 'spotifySearch');
     const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 
@@ -503,7 +500,7 @@ export const searchSpotifyTracks = onCall(
       if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
       const { value: query, limit } = parseSpotifySearchRequest(request.data);
-      await consumeCatalogSearchQuota(db, request.auth.uid);
+      await consumeCatalogSearchQuota(db, request.auth.uid, 'spotifySearch');
 
       const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 

@@ -1,6 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:musi_link/models/artist.dart' as app;
-import 'package:musi_link/utils/error_reporter.dart';
 
 class LastFmService {
   LastFmService(this._functions);
@@ -12,24 +11,20 @@ class LastFmService {
     int limit = 10,
   }) async {
     if (artistName.trim().isEmpty) return [];
-    try {
-      final callable = _functions.httpsCallable('getSimilarArtists');
-      final result = await callable.call<List<dynamic>>({
-        'artistName': artistName,
-        'limit': limit,
-      });
-      return result.data
-          .map(
-            (dynamic name) => app.Artist(
-              name: name as String? ?? 'Unknown',
-              imageUrl: '',
-              genres: const [],
-            ),
-          )
-          .toList();
-    } catch (e, st) {
-      await reportError(e, st);
-      return [];
-    }
+    // Preserve failures so the catalog and screen do not cache them as empty.
+    final callable = _functions.httpsCallable('getSimilarArtists');
+    final result = await callable.call<List<dynamic>>({
+      'artistName': artistName,
+      'limit': limit,
+    });
+    return result.data
+        .map(
+          (dynamic name) => app.Artist(
+            name: name as String? ?? 'Unknown',
+            imageUrl: '',
+            genres: const [],
+          ),
+        )
+        .toList();
   }
 }

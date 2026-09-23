@@ -53,6 +53,17 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "lastfm_cache",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "lastfm_cache",
+      "fieldPath": "values",
+      "indexes": []
+    },
+    {
       "collectionGroup": "recommendations",
       "fieldPath": "userId",
       "indexes": [

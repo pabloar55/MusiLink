@@ -377,7 +377,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
           final related = await service.getRelatedArtists(entry.value.name);
           _relatedArtistsByKey[entry.key] = related;
         } catch (e, st) {
-          reportError(e, st).ignore();
+          if (!isRateLimitError(e)) reportError(e, st).ignore();
         } finally {
           _loadingRelatedArtistKeys.remove(entry.key);
         }
@@ -435,7 +435,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   void _replaceSuggestions(List<Artist> suggestions) {
     if (!mounted) return;
     setState(() {
-      _suggestions = suggestions;
+      _suggestions = List<Artist>.of(suggestions);
       _suggestionsListKey = GlobalKey();
     });
   }

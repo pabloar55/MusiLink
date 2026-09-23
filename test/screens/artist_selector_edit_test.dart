@@ -33,6 +33,55 @@ const _serverArtists = [
 void main() {
   setUpAll(() => registerFallbackValue(<Artist>[]));
 
+  testWidgets(
+    'una consulta fallida de similares se reintenta al volver a seleccionar',
+    (tester) async {
+      final catalog = _MockMusicCatalogService();
+      const muse = Artist(
+        name: 'Muse',
+        imageUrl: 'https://i.scdn.co/image/muse',
+        genres: ['rock'],
+      );
+      const related = Artist(name: 'Radiohead', imageUrl: '', genres: []);
+      var attempts = 0;
+      final failure = MockFirebaseFunctionsException();
+      when(() => failure.code).thenReturn('resource-exhausted');
+      when(() => catalog.searchArtists('muse', limit: 10))
+          .thenAnswer((_) async => [muse]);
+      when(() => catalog.getRelatedArtists('Muse')).thenAnswer((_) async {
+        if (attempts++ == 0) throw failure;
+        return [related];
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [musicCatalogServiceProvider.overrideWithValue(catalog)],
+          child: const MaterialApp(
+            locale: Locale('es'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ArtistSelectorScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var attempt = 0; attempt < 2; attempt++) {
+        await tester.enterText(find.byType(TextField), 'muse');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Muse'));
+        await tester.pumpAndSettle();
+        if (attempt == 0) {
+          expect(find.text('Radiohead'), findsNothing);
+          await tester.tap(find.widgetWithIcon(IconButton, Icons.close).last);
+          await tester.pumpAndSettle();
+        }
+      }
+      expect(find.text('Radiohead'), findsOneWidget);
+      verify(() => catalog.getRelatedArtists('Muse')).called(2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final locale in [const Locale('es'), const Locale('el')]) {
     testWidgets(
       'la cabecera no se mueve al mostrar y ocultar la flecha (${locale.languageCode})',

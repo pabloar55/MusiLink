@@ -369,6 +369,20 @@ test('el cliente no puede modificar un rate limit caducado', async () => {
   }));
 });
 
+test('la caché de Last.fm es privada del backend y no se puede envenenar', async () => {
+  await seedActiveUser('alice');
+  await seed('lastfm_cache/existing', {
+    values: ['Muse'],
+    expiresAt: new Date('2030-01-01T00:00:00Z'),
+  });
+  for (const db of [dbFor('alice'), env.unauthenticatedContext().firestore()]) {
+    await assertFails(getDoc(doc(db, 'lastfm_cache/existing')));
+    await assertFails(getDocs(collection(db, 'lastfm_cache')));
+    await assertFails(setDoc(doc(db, 'lastfm_cache/new'), { values: ['Injected'] }));
+    await assertFails(updateDoc(doc(db, 'lastfm_cache/existing'), { values: [] }));
+  }
+});
+
 test('las denuncias solo son accesibles desde el backend', async () => {
   await seedActiveUser('alice');
   await seed('moderation_reports/report-1', {

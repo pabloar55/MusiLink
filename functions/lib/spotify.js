@@ -6,6 +6,7 @@ const params_1 = require("firebase-functions/params");
 const v2_1 = require("firebase-functions/v2");
 const firebase_1 = require("./firebase");
 const rate_limits_1 = require("./rate_limits");
+const lastfm_catalog_1 = require("./lastfm_catalog");
 const catalog_request_1 = require("./catalog_request");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
@@ -14,7 +15,6 @@ const maxSpotifyGenresPerArtist = 5;
 const maxLastFmGenresPerArtist = 2;
 const minLastFmTagCount = 10;
 const spotifyRequestTimeoutMs = 8_000;
-const lastFmRequestTimeoutMs = 5_000;
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -348,24 +348,19 @@ function scoreArtistMatch(item, queryKey, queryTokens) {
 }
 async function getLastFmGenres(artistName, apiKey) {
     try {
-        const url = new URL('https://ws.audioscrobbler.com/2.0/');
-        url.searchParams.set('method', 'artist.getTopTags');
-        url.searchParams.set('artist', artistName);
-        url.searchParams.set('api_key', apiKey);
-        url.searchParams.set('format', 'json');
-        url.searchParams.set('autocorrect', '1');
-        const res = await fetchExternal(url.toString(), {}, lastFmRequestTimeoutMs, 'Last.fm');
-        if (!res.ok)
-            return [];
-        const data = await res.json();
-        if (!(0, catalog_request_1.isRecord)(data) || !(0, catalog_request_1.isRecord)(data.toptags))
-            return [];
-        const tags = data.toptags.tag;
-        if (!Array.isArray(tags))
-            return [];
-        return normalizeLastFmTags(tags.filter((tag) => ((0, catalog_request_1.isRecord)(tag) &&
-            (tag.name === undefined || typeof tag.name === 'string') &&
-            (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string'))));
+        return await lastfm_catalog_1.lastFmCatalog.getStrings('artist.getTopTags', artistName, apiKey, (data) => {
+            const tags = (0, catalog_request_1.isRecord)(data) && (0, catalog_request_1.isRecord)(data.toptags) ? data.toptags.tag : undefined;
+            if (!Array.isArray(tags)) {
+                throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+            }
+            const validTags = tags.filter((tag) => ((0, catalog_request_1.isRecord)(tag) &&
+                typeof tag.name === 'string' && tag.name.trim().length > 0 &&
+                (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')));
+            if (validTags.length !== tags.length) {
+                throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+            }
+            return normalizeLastFmTags(validTags);
+        });
     }
     catch {
         return [];
@@ -380,7 +375,7 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: query, limit, market } = (0, catalog_request_1.parseSpotifyArtistSearchRequest)(request.data);
-    await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid);
+    await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid, 'spotifySearch');
     const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
     const url = new URL('https://api.spotify.com/v1/search');
@@ -446,7 +441,7 @@ exports.searchSpotifyTracks = (0, https_1.onCall)({
         if (!request.auth)
             throw new https_1.HttpsError('unauthenticated', 'Login required');
         const { value: query, limit } = (0, catalog_request_1.parseSpotifySearchRequest)(request.data);
-        await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid);
+        await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid, 'spotifySearch');
         const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
         const url = new URL('https://api.spotify.com/v1/search');
         url.searchParams.set('q', query);

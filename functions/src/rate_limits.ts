@@ -30,24 +30,27 @@ export function advanceFixedWindow(
   return { limited: false, windowStart, count: count + 1 };
 }
 
-// One shared budget prevents switching catalog endpoints to bypass the limit.
-// Artist searches can also issue up to ten Last.fm genre lookups; those are
-// bounded by the existing result limit and covered by the admitted search.
+// Spotify artist/track searches share a budget. Similar-artist suggestions have
+// their own budget so selecting an artist does not consume it twice.
 export const catalogSearchWindowMs = 60_000;
 export const maxCatalogSearchesPerWindow = 60;
+export type CatalogSearchQuota = 'spotifySearch' | 'lastFmSimilar';
 
 export async function consumeCatalogSearchQuota(
   firestore: Firestore,
   uid: string,
+  quota: CatalogSearchQuota,
   now = Timestamp.now(),
 ): Promise<void> {
   const limiterRef = firestore.doc(`rate_limits/${uid}`);
+  const windowField = `${quota}WindowStart`;
+  const countField = `${quota}Count`;
   await firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(limiterRef);
     const data = snapshot.data();
     const next = advanceFixedWindow(
-      data?.catalogSearchWindowStart,
-      data?.catalogSearchCount,
+      data?.[windowField],
+      data?.[countField],
       now,
       catalogSearchWindowMs,
       maxCatalogSearchesPerWindow,
@@ -57,8 +60,8 @@ export async function consumeCatalogSearchQuota(
     }
     // Reserve before any external I/O. Failed upstream requests still cost quota.
     transaction.set(limiterRef, {
-      catalogSearchWindowStart: next.windowStart,
-      catalogSearchCount: next.count,
+      [windowField]: next.windowStart,
+      [countField]: next.count,
     }, { merge: true });
   });
 }
