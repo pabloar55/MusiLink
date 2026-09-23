@@ -6,7 +6,7 @@ const params_1 = require("firebase-functions/params");
 const v2_1 = require("firebase-functions/v2");
 const firebase_1 = require("./firebase");
 const rate_limits_1 = require("./rate_limits");
-const lastfm_catalog_1 = require("./lastfm_catalog");
+const lastfm_request_1 = require("./lastfm_request");
 const catalog_request_1 = require("./catalog_request");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
@@ -348,19 +348,18 @@ function scoreArtistMatch(item, queryKey, queryTokens) {
 }
 async function getLastFmGenres(artistName, apiKey) {
     try {
-        return await lastfm_catalog_1.lastFmCatalog.getStrings('artist.getTopTags', artistName, apiKey, (data) => {
-            const tags = (0, catalog_request_1.isRecord)(data) && (0, catalog_request_1.isRecord)(data.toptags) ? data.toptags.tag : undefined;
-            if (!Array.isArray(tags)) {
-                throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
-            }
-            const validTags = tags.filter((tag) => ((0, catalog_request_1.isRecord)(tag) &&
-                typeof tag.name === 'string' && tag.name.trim().length > 0 &&
-                (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')));
-            if (validTags.length !== tags.length) {
-                throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
-            }
-            return normalizeLastFmTags(validTags);
-        });
+        const data = await (0, lastfm_request_1.fetchLastFm)('artist.getTopTags', artistName, apiKey);
+        const tags = (0, catalog_request_1.isRecord)(data) && (0, catalog_request_1.isRecord)(data.toptags) ? data.toptags.tag : undefined;
+        if (!Array.isArray(tags)) {
+            throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+        }
+        const validTags = tags.filter((tag) => ((0, catalog_request_1.isRecord)(tag) &&
+            typeof tag.name === 'string' && tag.name.trim().length > 0 &&
+            (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')));
+        if (validTags.length !== tags.length) {
+            throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+        }
+        return normalizeLastFmTags(validTags);
     }
     catch {
         return [];

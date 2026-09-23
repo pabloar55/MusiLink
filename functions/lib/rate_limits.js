@@ -36,7 +36,7 @@ async function consumeCatalogSearchQuota(firestore, uid, quota, now = firestore_
         if (next.limited) {
             throw new https_1.HttpsError('resource-exhausted', 'Catalog search rate limit reached.');
         }
-        // Reserve before any external I/O. Failed upstream requests still cost quota.
+        // Reserve before calling external providers. Failed upstream requests still cost quota.
         transaction.set(limiterRef, {
             [windowField]: next.windowStart,
             [countField]: next.count,

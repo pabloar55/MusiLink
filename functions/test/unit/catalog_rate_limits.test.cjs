@@ -29,11 +29,11 @@ function setTestSecrets(t) {
 
 function quotaStore(t, initial = {}) {
   const documents = new Map(Object.entries(initial));
-  t.mock.method(db, 'doc', (path) => ({
-    path,
-    async get() { return { data: () => documents.get(path) }; },
-    async set(data) { documents.set(path, data); },
-  }));
+  t.mock.method(db, 'doc', (path) => {
+    // Catalog requests may access only rate-limit documents, never a cache.
+    assert.match(path, /^rate_limits\/[^/]+$/);
+    return { path };
+  });
   const transaction = t.mock.method(db, 'runTransaction', async (callback) => callback({
     async get(ref) {
       return { data: () => documents.get(ref.path) };
@@ -203,7 +203,7 @@ test('30 artists with two Spotify searches each leave room for all 30 suggestion
   await consumeCatalogSearchQuota(db, 'alice', 'lastFmSimilar', now);
 });
 
-test('similar artists reuse the full cached list across limits and users despite exhausted Spotify quota', async (t) => {
+test('similar artists call Last.fm directly with the requested limit despite exhausted Spotify quota', async (t) => {
   setTestSecrets(t);
   const { documents } = quotaStore(t, {
     'rate_limits/alice': {
@@ -211,8 +211,9 @@ test('similar artists reuse the full cached list across limits and users despite
       spotifySearchCount: maxCatalogSearchesPerWindow,
     },
   });
+  const requestedLimits = [];
   const fetchMock = t.mock.method(global, 'fetch', async (input) => {
-    assert.equal(new URL(input).searchParams.get('limit'), '10');
+    requestedLimits.push(new URL(input).searchParams.get('limit'));
     return Response.json({ similarartists: { artist: [{ name: 'Muse' }, { name: 'Radiohead' }] } });
   });
   assert.deepEqual(await getSimilarArtists.run({
@@ -221,12 +222,13 @@ test('similar artists reuse the full cached list across limits and users despite
   assert.deepEqual(await getSimilarArtists.run({
     auth: { uid: 'bob' }, data: { artistName: ' portishead ', limit: 10 },
   }), ['Muse', 'Radiohead']);
-  assert.equal(fetchMock.mock.callCount(), 1);
+  assert.equal(fetchMock.mock.callCount(), 2);
+  assert.deepEqual(requestedLimits, ['1', '10']);
   assert.equal(documents.get('rate_limits/alice').lastFmSimilarCount, 1);
   assert.equal(documents.get('rate_limits/bob').lastFmSimilarCount, 1);
 });
 
-test('Last.fm JSON throttles and malformed responses propagate and are not cached', async (t) => {
+test('Last.fm JSON throttles and malformed responses propagate and allow another attempt', async (t) => {
   setTestSecrets(t);
   quotaStore(t);
   let response = { error: 29, message: 'Rate limit exceeded' };
@@ -242,7 +244,7 @@ test('Last.fm JSON throttles and malformed responses propagate and are not cache
   assert.equal(fetchMock.mock.callCount(), 4);
 });
 
-test('Spotify genre enrichment reuses cached Last.fm tags without consuming similar-artist quota', async (t) => {
+test('Spotify genre enrichment calls Last.fm directly without consuming similar-artist quota', async (t) => {
   setTestSecrets(t);
   const { documents } = quotaStore(t, {
     'rate_limits/alice': {
@@ -270,7 +272,7 @@ test('Spotify genre enrichment reuses cached Last.fm tags without consuming simi
     const result = await searchSpotifyArtists.run({ auth: { uid: 'alice' }, data: { query } });
     assert.deepEqual(result[0].genres, ['rock']);
   }
-  assert.equal(tagRequests, 2);
+  assert.equal(tagRequests, 3);
   assert.equal(documents.get('rate_limits/alice').spotifySearchCount, 3);
   assert.equal(documents.get('rate_limits/alice').lastFmSimilarCount, maxCatalogSearchesPerWindow);
 });

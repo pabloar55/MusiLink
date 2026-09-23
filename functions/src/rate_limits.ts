@@ -58,7 +58,7 @@ export async function consumeCatalogSearchQuota(
     if (next.limited) {
       throw new HttpsError('resource-exhausted', 'Catalog search rate limit reached.');
     }
-    // Reserve before any external I/O. Failed upstream requests still cost quota.
+    // Reserve before calling external providers. Failed upstream requests still cost quota.
     transaction.set(limiterRef, {
       [windowField]: next.windowStart,
       [countField]: next.count,

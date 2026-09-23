@@ -3,7 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { db } from './firebase';
 import { consumeCatalogSearchQuota } from './rate_limits';
-import { lastFmCatalog } from './lastfm_catalog';
+import { fetchLastFm } from './lastfm_request';
 import {
   isRecord,
   parseSpotifyArtistSearchRequest,
@@ -372,23 +372,20 @@ function scoreArtistMatch(item: SpotifyArtistItem, queryKey: string, queryTokens
 
 async function getLastFmGenres(artistName: string, apiKey: string): Promise<string[]> {
   try {
-    return await lastFmCatalog.getStrings(
-      'artist.getTopTags', artistName, apiKey, (data) => {
-        const tags = isRecord(data) && isRecord(data.toptags) ? data.toptags.tag : undefined;
-        if (!Array.isArray(tags)) {
-          throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
-        }
-        const validTags = tags.filter((tag): tag is { name: string; count?: number | string } => (
-          isRecord(tag) &&
-          typeof tag.name === 'string' && tag.name.trim().length > 0 &&
-          (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')
-        ));
-        if (validTags.length !== tags.length) {
-          throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
-        }
-        return normalizeLastFmTags(validTags);
-      },
-    );
+    const data = await fetchLastFm('artist.getTopTags', artistName, apiKey);
+    const tags = isRecord(data) && isRecord(data.toptags) ? data.toptags.tag : undefined;
+    if (!Array.isArray(tags)) {
+      throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+    }
+    const validTags = tags.filter((tag): tag is { name: string; count?: number | string } => (
+      isRecord(tag) &&
+      typeof tag.name === 'string' && tag.name.trim().length > 0 &&
+      (tag.count === undefined || typeof tag.count === 'number' || typeof tag.count === 'string')
+    ));
+    if (validTags.length !== tags.length) {
+      throw new HttpsError('unavailable', 'Last.fm returned an invalid tag list');
+    }
+    return normalizeLastFmTags(validTags);
   } catch {
     return [];
   }

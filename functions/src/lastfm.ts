@@ -2,8 +2,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { db } from './firebase';
 import { consumeCatalogSearchQuota } from './rate_limits';
-import { catalogSearchMaxLimit, isRecord, parseLastFmSearchRequest } from './catalog_request';
-import { lastFmCatalog } from './lastfm_catalog';
+import { isRecord, parseLastFmSearchRequest } from './catalog_request';
+import { fetchLastFm } from './lastfm_request';
 
 const lastFmApiKey = defineSecret('LASTFM_API_KEY');
 
@@ -21,23 +21,19 @@ export const getSimilarArtists = onCall(
     const { value: artistName, limit } = parseLastFmSearchRequest(request.data);
     await consumeCatalogSearchQuota(db, request.auth.uid, 'lastFmSimilar');
 
-    const artists = await lastFmCatalog.getStrings(
-      'artist.getSimilar', artistName, lastFmApiKey.value(), (data) => {
-        const items = isRecord(data) && isRecord(data.similarartists)
-          ? data.similarartists.artist
-          : undefined;
-        if (!Array.isArray(items) || items.some((artist) => (
-          !isRecord(artist) || typeof artist.name !== 'string' || !artist.name.trim()
-        ))) {
-          throw new HttpsError('unavailable', 'Last.fm returned an invalid artist list');
-        }
-        return items
-          .filter(isRecord)
-          .map((artist) => typeof artist.name === 'string' ? artist.name : '')
-          .filter((name) => name && !collabPattern.test(name))
-          .slice(0, catalogSearchMaxLimit);
-      },
-    );
-    return artists.slice(0, limit);
+    const data = await fetchLastFm('artist.getSimilar', artistName, lastFmApiKey.value(), limit);
+    const items = isRecord(data) && isRecord(data.similarartists)
+      ? data.similarartists.artist
+      : undefined;
+    if (!Array.isArray(items) || items.some((artist) => (
+      !isRecord(artist) || typeof artist.name !== 'string' || !artist.name.trim()
+    ))) {
+      throw new HttpsError('unavailable', 'Last.fm returned an invalid artist list');
+    }
+    return items
+      .filter(isRecord)
+      .map((artist) => typeof artist.name === 'string' ? artist.name : '')
+      .filter((name) => name && !collabPattern.test(name))
+      .slice(0, limit);
   },
 );
