@@ -9,6 +9,7 @@ const {
 } = require('@firebase/rules-unit-testing');
 const {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -126,8 +127,18 @@ test('un usuario no puede cambiar su username activo', async () => {
 test('la anonimización libera la reserva y revoca el perfil privado en el mismo batch', async () => {
   await seedActiveUser('alice');
   const db = dbFor('alice');
+  const userRef = doc(db, 'users/alice');
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: {
+      title: 'Song',
+      artist: 'Artist',
+      imageUrl: '',
+      spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+    },
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
   const batch = writeBatch(db);
-  batch.update(doc(db, 'users/alice'), {
+  batch.update(userRef, {
     displayName: 'Deleted user',
     username: 'deleted_user',
     photoUrl: '',
@@ -138,15 +149,20 @@ test('la anonimización libera la reserva y revoca el perfil privado en el mismo
   await assertFails(batch.commit());
 
   const completeBatch = writeBatch(db);
-  completeBatch.update(doc(db, 'users/alice'), {
+  completeBatch.update(userRef, {
     displayName: 'Deleted user',
     username: 'deleted_user',
     photoUrl: '',
     profileIdentityUpdatedAt: serverTimestamp(),
+    dailySong: deleteField(),
+    dailySongUpdatedAt: deleteField(),
   });
   completeBatch.delete(doc(db, 'usernames/alice_name'));
   completeBatch.delete(doc(db, 'user_private/alice'));
   await assertSucceeds(completeBatch.commit());
+  const deletedProfile = (await getDoc(userRef)).data();
+  assert.equal('dailySong' in deletedProfile, false);
+  assert.equal('dailySongUpdatedAt' in deletedProfile, false);
 });
 
 test('una reserva no se puede liberar sin anonimizar el perfil', async () => {
@@ -567,6 +583,63 @@ test('solo acepta URLs canónicas de canciones de Spotify', async () => {
       dailySongUpdatedAt: serverTimestamp(),
     }));
   }
+});
+
+test('la canción del día exige fecha del servidor y permite republicar el mismo tema', async () => {
+  await seedActiveUser('alice');
+  const userRef = doc(dbFor('alice'), 'users/alice');
+  const track = {
+    title: 'Song',
+    artist: 'Artist',
+    imageUrl: '',
+    spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+  };
+
+  await assertFails(updateDoc(userRef, { dailySong: track }));
+  await assertFails(updateDoc(userRef, {
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: track,
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: track,
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+
+  const replacement = { ...track, title: 'Another song' };
+  await assertFails(updateDoc(userRef, { dailySong: replacement }));
+  // Firestore cannot distinguish a timestamp-only refresh from an identical
+  // song sent with a new server timestamp; both renew the same 24-hour window.
+  await assertSucceeds(updateDoc(userRef, {
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(userRef, {
+    dailySongUpdatedAt: deleteField(),
+  }));
+  await assertFails(updateDoc(userRef, {
+    dailySong: deleteField(),
+  }));
+  for (const date of [
+    new Date(Date.now() - 60_000),
+    new Date(Date.now() + 60_000),
+  ]) {
+    await assertFails(updateDoc(userRef, { dailySongUpdatedAt: date }));
+    await assertFails(updateDoc(userRef, {
+      dailySong: replacement,
+      dailySongUpdatedAt: date,
+    }));
+  }
+
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: replacement,
+    dailySongUpdatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(userRef, {
+    dailySong: deleteField(),
+    dailySongUpdatedAt: deleteField(),
+  }));
 });
 
 test('solo acepta imágenes de canciones del CDN de Spotify', async () => {

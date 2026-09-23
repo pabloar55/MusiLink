@@ -135,6 +135,17 @@ service cloud.firestore {
       );
     }
 
+    function validDailySongUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let dailySongFields = ['dailySong', 'dailySongUpdatedAt'];
+      return !changed.hasAny(dailySongFields)
+        // Both fields may be removed together (for example, on account deletion).
+        || !request.resource.data.keys().hasAny(dailySongFields)
+        // Re-publishing the same song only changes its timestamp in the diff.
+        || request.resource.data.keys().hasAll(dailySongFields)
+          && request.resource.data.dailySongUpdatedAt == request.time;
+    }
+
     function ownsUsernameAfter(userId, username) {
       return existsAfter(/databases/$(database)/documents/usernames/$(username))
         && getAfter(/databases/$(database)/documents/usernames/$(username)).data.uid == userId;
@@ -263,6 +274,7 @@ service cloud.firestore {
           'dailySongUpdatedAt',
         ])
         && validPublicProfile(userId, request.resource.data)
+        && validDailySongUpdate()
         && validIdentityUpdateCooldown()
         && keepsUsernameOrAnonymizes(userId);
       allow delete: if false;
