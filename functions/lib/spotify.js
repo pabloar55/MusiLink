@@ -4,6 +4,8 @@ exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const v2_1 = require("firebase-functions/v2");
+const firebase_1 = require("./firebase");
+const rate_limits_1 = require("./rate_limits");
 const catalog_request_1 = require("./catalog_request");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
@@ -378,6 +380,7 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: query, limit, market } = (0, catalog_request_1.parseSpotifyArtistSearchRequest)(request.data);
+    await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid);
     const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
     const url = new URL('https://api.spotify.com/v1/search');
@@ -443,6 +446,7 @@ exports.searchSpotifyTracks = (0, https_1.onCall)({
         if (!request.auth)
             throw new https_1.HttpsError('unauthenticated', 'Login required');
         const { value: query, limit } = (0, catalog_request_1.parseSpotifySearchRequest)(request.data);
+        await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid);
         const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
         const url = new URL('https://api.spotify.com/v1/search');
         url.searchParams.set('q', query);

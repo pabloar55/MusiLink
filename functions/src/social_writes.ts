@@ -6,7 +6,8 @@ import {
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { db } from './firebase';
-import { chatParticipants, stringList, timestampValue } from './firestore_values';
+import { advanceFixedWindow } from './rate_limits';
+import { chatParticipants, stringList } from './firestore_values';
 
 const callableOptions = {
   region: 'europe-southwest1',
@@ -18,12 +19,6 @@ const messageWindowMs = 10 * 1000;
 const friendRequestWindowMs = 10 * 60 * 1000;
 const maxMessagesPerWindow = 20;
 const maxFriendRequestsPerWindow = 20;
-
-interface FixedWindowResult {
-  limited: boolean;
-  windowStart: Timestamp;
-  count: number;
-}
 
 interface TrackPayload {
   title: string;
@@ -150,28 +145,6 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
   }
 
   throw new HttpsError('invalid-argument', 'Message type is invalid.');
-}
-
-export function advanceFixedWindow(
-  windowStartValue: unknown,
-  countValue: unknown,
-  now: Timestamp,
-  windowMs: number,
-  maximum: number,
-): FixedWindowResult {
-  const windowStart = timestampValue(windowStartValue);
-  const count = typeof countValue === 'number'
-    && Number.isInteger(countValue)
-    && countValue >= 0
-    ? countValue
-    : 0;
-  if (!windowStart || now.toMillis() - windowStart.toMillis() > windowMs) {
-    return { limited: false, windowStart: now, count: 1 };
-  }
-  if (count >= maximum) {
-    return { limited: true, windowStart, count };
-  }
-  return { limited: false, windowStart, count: count + 1 };
 }
 
 function isActiveUser(

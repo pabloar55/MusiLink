@@ -4,6 +4,8 @@ exports.getSimilarArtists = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const v2_1 = require("firebase-functions/v2");
+const firebase_1 = require("./firebase");
+const rate_limits_1 = require("./rate_limits");
 const catalog_request_1 = require("./catalog_request");
 const lastFmApiKey = (0, params_1.defineSecret)('LASTFM_API_KEY');
 const collabPattern = /(&|feat\.?|ft\.?)/i;
@@ -27,6 +29,7 @@ exports.getSimilarArtists = (0, https_1.onCall)({
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: artistName, limit } = (0, catalog_request_1.parseLastFmSearchRequest)(request.data);
+    await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid);
     const url = new URL('https://ws.audioscrobbler.com/2.0/');
     url.searchParams.set('method', 'artist.getSimilar');
     url.searchParams.set('artist', artistName);

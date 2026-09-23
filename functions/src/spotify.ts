@@ -1,6 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
+import { db } from './firebase';
+import { consumeCatalogSearchQuota } from './rate_limits';
 import {
   isRecord,
   parseSpotifyArtistSearchRequest,
@@ -423,6 +425,7 @@ export const searchSpotifyArtists = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
     const { value: query, limit, market } = parseSpotifyArtistSearchRequest(request.data);
+    await consumeCatalogSearchQuota(db, request.auth.uid);
     const spotifyLimit = 10;
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 
@@ -500,6 +503,7 @@ export const searchSpotifyTracks = onCall(
       if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
       const { value: query, limit } = parseSpotifySearchRequest(request.data);
+      await consumeCatalogSearchQuota(db, request.auth.uid);
 
       const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
 

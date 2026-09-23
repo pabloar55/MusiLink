@@ -2,12 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendChatMessage = exports.sendFriendRequest = void 0;
 exports.parseChatMessagePayload = parseChatMessagePayload;
-exports.advanceFixedWindow = advanceFixedWindow;
 exports.createFriendRequest = createFriendRequest;
 exports.createChatMessage = createChatMessage;
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const firebase_1 = require("./firebase");
+const rate_limits_1 = require("./rate_limits");
 const firestore_values_1 = require("./firestore_values");
 const callableOptions = {
     region: 'europe-southwest1',
@@ -109,21 +109,6 @@ function parseChatMessagePayload(value) {
     }
     throw new https_1.HttpsError('invalid-argument', 'Message type is invalid.');
 }
-function advanceFixedWindow(windowStartValue, countValue, now, windowMs, maximum) {
-    const windowStart = (0, firestore_values_1.timestampValue)(windowStartValue);
-    const count = typeof countValue === 'number'
-        && Number.isInteger(countValue)
-        && countValue >= 0
-        ? countValue
-        : 0;
-    if (!windowStart || now.toMillis() - windowStart.toMillis() > windowMs) {
-        return { limited: false, windowStart: now, count: 1 };
-    }
-    if (count >= maximum) {
-        return { limited: true, windowStart, count };
-    }
-    return { limited: false, windowStart, count: count + 1 };
-}
 function isActiveUser(publicData, deletionExists) {
     return publicData !== undefined
         && publicData.username !== deletedUsername
@@ -177,7 +162,7 @@ async function createFriendRequest(firestore, senderId, receiverId, now = firest
             return false;
         }
         const limiterData = limiterSnap.data();
-        const next = advanceFixedWindow(limiterData?.friendRequestWindowStart, limiterData?.friendRequestCount, now, friendRequestWindowMs, maxFriendRequestsPerWindow);
+        const next = (0, rate_limits_1.advanceFixedWindow)(limiterData?.friendRequestWindowStart, limiterData?.friendRequestCount, now, friendRequestWindowMs, maxFriendRequestsPerWindow);
         if (next.limited) {
             throw new https_1.HttpsError('resource-exhausted', 'Friend request rate limit reached.');
         }
@@ -246,7 +231,7 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
             return messageRef.id;
         }
         const limiterData = limiterSnap.data();
-        const next = advanceFixedWindow(limiterData?.messageWindowStart, limiterData?.messageCount, now, messageWindowMs, maxMessagesPerWindow);
+        const next = (0, rate_limits_1.advanceFixedWindow)(limiterData?.messageWindowStart, limiterData?.messageCount, now, messageWindowMs, maxMessagesPerWindow);
         if (next.limited) {
             throw new https_1.HttpsError('resource-exhausted', 'Message rate limit reached.');
         }

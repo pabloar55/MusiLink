@@ -11,11 +11,15 @@ const {
   establishAcceptedFriendship,
 } = require('../lib/friendships.js');
 const {
-  advanceFixedWindow,
   createChatMessage,
   createFriendRequest,
   parseChatMessagePayload,
 } = require('../lib/social_writes.js');
+const {
+  advanceFixedWindow,
+  consumeCatalogSearchQuota,
+  maxCatalogSearchesPerWindow,
+} = require('../lib/rate_limits.js');
 const { createModerationReport } = require('../lib/moderation_reports.js');
 
 before(() => {
@@ -81,6 +85,27 @@ test('advanceFixedWindow usa exclusivamente el tiempo recibido del backend', () 
   assert.equal(expired.limited, false);
   assert.equal(expired.count, 1);
   assert.equal(expired.windowStart.toMillis(), 11_001);
+});
+
+test('catalog searches atomically reserve the last slot under concurrent requests', async () => {
+  const now = Timestamp.fromMillis(1_000);
+  await db.doc('rate_limits/alice').set({
+    catalogSearchWindowStart: now,
+    catalogSearchCount: maxCatalogSearchesPerWindow - 1,
+    messageCount: 7,
+  });
+  const results = await Promise.allSettled(Array.from({ length: 8 }, () => (
+    consumeCatalogSearchQuota(db, 'alice', now)
+  )));
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  for (const result of results.filter((result) => result.status === 'rejected')) {
+    assert.equal(result.reason.code, 'resource-exhausted');
+  }
+  const limiter = (await db.doc('rate_limits/alice').get()).data();
+  assert.equal(limiter.catalogSearchCount, maxCatalogSearchesPerWindow);
+  assert.equal(limiter.messageCount, 7);
+  await consumeCatalogSearchQuota(db, 'bob', now);
+  assert.equal((await db.doc('rate_limits/bob').get()).data().catalogSearchCount, 1);
 });
 
 test('sendChatMessage valida estrictamente texto y metadatos de Spotify', () => {

@@ -1,6 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
+import { db } from './firebase';
+import { consumeCatalogSearchQuota } from './rate_limits';
 import { isRecord, parseLastFmSearchRequest } from './catalog_request';
 
 const lastFmApiKey = defineSecret('LASTFM_API_KEY');
@@ -29,6 +31,7 @@ export const getSimilarArtists = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
     const { value: artistName, limit } = parseLastFmSearchRequest(request.data);
+    await consumeCatalogSearchQuota(db, request.auth.uid);
 
     const url = new URL('https://ws.audioscrobbler.com/2.0/');
     url.searchParams.set('method', 'artist.getSimilar');
