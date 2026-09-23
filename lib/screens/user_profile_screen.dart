@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
+import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
@@ -135,6 +136,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     try {
       await ref.read(friendServiceProvider).blockUser(widget.user.uid);
       ref.read(musicProfileServiceProvider).clearCache();
+      final discoverNotifier = ref.read(discoverProvider.notifier);
+      discoverNotifier.hideBlockedUser(widget.user.uid);
+      unawaited(discoverNotifier.refresh());
       if (!mounted) return;
       ref.invalidate(relationshipProvider(widget.user.uid));
       ScaffoldMessenger.of(context).showSnackBar(
@@ -150,6 +154,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Future<void> _unblockUser() async {
     try {
       await ref.read(friendServiceProvider).unblockUser(widget.user.uid);
+      ref.read(musicProfileServiceProvider).clearCache();
+      final discoverNotifier = ref.read(discoverProvider.notifier);
+      discoverNotifier.unhideUser(widget.user.uid);
+      unawaited(discoverNotifier.refresh());
       if (!mounted) return;
       ref.invalidate(relationshipProvider(widget.user.uid));
       final l10n = AppLocalizations.of(context)!;

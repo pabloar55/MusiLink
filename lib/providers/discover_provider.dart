@@ -50,25 +50,59 @@ class DiscoverState {
 const _sentinel = Object();
 
 class DiscoverNotifier extends Notifier<DiscoverState> {
+  final Set<String> _hiddenUserIds = {};
+  int _visibilityRevision = 0;
+
   @override
   DiscoverState build() => const DiscoverState(isLoading: true);
 
+  void hideBlockedUser(String uid) {
+    _visibilityRevision++;
+    _hiddenUserIds.add(uid);
+    state = state.copyWith(
+      results: _visibleResults(state.results),
+      isLoading: false,
+      isLoadingMore: false,
+      hasMore: false,
+      isStale: false,
+    );
+  }
+
+  void unhideUser(String uid) {
+    _visibilityRevision++;
+    _hiddenUserIds.remove(uid);
+    state = state.copyWith(
+      isLoading: false,
+      isLoadingMore: false,
+      hasMore: false,
+      isStale: false,
+    );
+  }
+
+  List<DiscoveryResult> _visibleResults(List<DiscoveryResult> results) =>
+      results
+          .where((result) => !_hiddenUserIds.contains(result.user.uid))
+          .toList(growable: false);
+
   Future<void> loadDiscovery({bool useLocalCache = true}) async {
     final service = ref.read(musicProfileServiceProvider);
+    final previousState = state;
+    final revision = _visibilityRevision;
 
     if (useLocalCache) {
       // Intentar caché local de Firestore primero (< 100 ms, sin red).
       final cached = await service.readDiscoveryUsersFromLocalCache();
+      if (revision != _visibilityRevision) return;
       if (cached != null) {
         state = state.copyWith(
-          results: cached,
+          results: _visibleResults(cached),
           isLoading: false,
           isStale: true,
           hasMore: service.hasMoreDiscoveryUsers,
           error: null,
         );
         // Refrescar desde el servidor en background sin bloquear la UI.
-        unawaited(_refreshInBackground(service));
+        unawaited(_refreshInBackground(service, revision));
         return;
       }
     }
@@ -86,13 +120,24 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
 
     try {
       final results = await service.readStoredDiscoveryUsers();
+      if (revision != _visibilityRevision) return;
       state = state.copyWith(
-        results: results,
+        results: _visibleResults(results),
         isLoading: false,
         isStale: false,
         hasMore: service.hasMoreDiscoveryUsers,
       );
+    } on BlockedUsersReadException {
+      if (revision != _visibilityRevision) return;
+      state = previousState.copyWith(
+        results: _visibleResults(previousState.results),
+        isLoading: false,
+        isLoadingMore: false,
+        isStale: false,
+        error: null,
+      );
     } catch (e, stack) {
+      if (revision != _visibilityRevision) return;
       await reportError(e, stack);
       state = state.copyWith(isLoading: false, isStale: false, error: e);
     }
@@ -102,33 +147,41 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
 
   Future<void> loadMore() async {
     if (state.isLoadingMore || state.isStale || !state.hasMore) return;
+    final revision = _visibilityRevision;
     state = state.copyWith(isLoadingMore: true);
 
     try {
       final (allResults, hasMore) = await ref
           .read(musicProfileServiceProvider)
           .loadMoreDiscoveryUsers();
+      if (revision != _visibilityRevision) return;
 
       state = state.copyWith(
-        results: allResults,
+        results: _visibleResults(allResults),
         isLoadingMore: false,
         hasMore: hasMore,
       );
     } catch (e, stack) {
+      if (revision != _visibilityRevision) return;
       await reportError(e, stack);
       state = state.copyWith(isLoadingMore: false);
     }
   }
 
-  Future<void> _refreshInBackground(MusicProfileService service) async {
+  Future<void> _refreshInBackground(
+    MusicProfileService service,
+    int revision,
+  ) async {
     try {
       final results = await service.readStoredDiscoveryUsers();
+      if (revision != _visibilityRevision) return;
       state = state.copyWith(
-        results: results,
+        results: _visibleResults(results),
         isStale: false,
         hasMore: service.hasMoreDiscoveryUsers,
       );
     } catch (e, stack) {
+      if (revision != _visibilityRevision) return;
       await reportError(e, stack);
       // Mantenemos los resultados de caché visibles; solo limpiamos isStale.
       state = state.copyWith(isStale: false);

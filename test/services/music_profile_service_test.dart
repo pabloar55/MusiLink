@@ -1,4 +1,6 @@
 // ignore_for_file: avoid_redundant_argument_values, subtype_of_sealed_class
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -417,9 +419,12 @@ void main() {
     late MockHttpsCallable mockSaveMusicProfileCallable;
     late MockUser mockCurrentUser;
     late MockCollectionReference mockUsersRef;
+    late MockCollectionReference mockPrivateUsersRef;
     late MockCollectionReference mockRecommendationsRef;
     late MockDocumentReference mockMyDocRef;
+    late MockDocumentReference mockPrivateDocRef;
     late MockDocumentSnapshot mockMyDocSnap;
+    late MockDocumentSnapshot mockPrivateDocSnap;
     late MockDocumentReference mockStoredRecommendationDocRef;
     late MockDocumentSnapshot mockStoredRecommendationDocSnap;
     late MockQuery mockRecommendationOrderQuery;
@@ -482,9 +487,12 @@ void main() {
       mockSaveMusicProfileCallable = MockHttpsCallable();
       mockCurrentUser = MockUser();
       mockUsersRef = MockCollectionReference();
+      mockPrivateUsersRef = MockCollectionReference();
       mockRecommendationsRef = MockCollectionReference();
       mockMyDocRef = MockDocumentReference();
+      mockPrivateDocRef = MockDocumentReference();
       mockMyDocSnap = MockDocumentSnapshot();
+      mockPrivateDocSnap = MockDocumentSnapshot();
       mockStoredRecommendationDocRef = MockDocumentReference();
       mockStoredRecommendationDocSnap = MockDocumentSnapshot();
       mockRecommendationOrderQuery = MockQuery();
@@ -505,6 +513,14 @@ void main() {
       when(() => mockSaveMusicProfileCallable.call<void>(any()))
           .thenAnswer((_) async => MockHttpsCallableResult<void>());
       when(() => mockFirestore.collection(any())).thenReturn(mockUsersRef);
+      when(() => mockFirestore.collection('user_private'))
+          .thenReturn(mockPrivateUsersRef);
+      when(() => mockPrivateUsersRef.doc(myUid)).thenReturn(mockPrivateDocRef);
+      when(() => mockPrivateDocRef.get())
+          .thenAnswer((_) async => mockPrivateDocSnap);
+      when(() => mockPrivateDocRef.get(any()))
+          .thenAnswer((_) async => mockPrivateDocSnap);
+      when(() => mockPrivateDocSnap.data()).thenReturn({'blockedUsers': []});
 
       stubMyUserDoc();
       when(() => mockMyDocRef.update(any())).thenAnswer((_) async {});
@@ -620,6 +636,66 @@ void main() {
     });
 
     group('stored discovery reads', () {
+      test('filters blocked users from recommendations', () async {
+        stubStoredRecommendations(
+          recommendationDocs: [
+            buildRecommendationDoc('blocked'),
+            buildRecommendationDoc('visible'),
+          ],
+        );
+        when(() => mockPrivateDocSnap.data()).thenReturn({
+          'blockedUsers': ['blocked'],
+        });
+
+        final results = await service.readStoredDiscoveryUsers();
+
+        expect(results.map((result) => result.user.uid), ['visible']);
+      });
+
+      test(
+        'does not return recommendations when blocked users read fails',
+        () async {
+          stubStoredRecommendations(
+            recommendationDocs: [buildRecommendationDoc('other1')],
+          );
+          when(() => mockPrivateDocRef.get()).thenThrow(
+            FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+          );
+
+          await expectLater(
+            service.readStoredDiscoveryUsers(),
+            throwsA(isA<BlockedUsersReadException>()),
+          );
+          verifyNever(() => mockRecommendationLimitQuery.get());
+        },
+      );
+
+      test(
+        'a read started before cache invalidation cannot refill it',
+        () async {
+          final queryStarted = Completer<void>();
+          final pendingQuery = Completer<QuerySnapshot<Map<String, dynamic>>>();
+          when(() => mockRecommendationLimitQuery.get()).thenAnswer((_) {
+            queryStarted.complete();
+            return pendingQuery.future;
+          });
+
+          final read = service.readStoredDiscoveryUsers();
+          await queryStarted.future;
+          service.clearCache();
+          pendingQuery.complete(
+            buildSnapshot([buildRecommendationDoc('blocked')]),
+          );
+          await read;
+
+          when(() => mockMyDocRef.get(any())).thenThrow(
+            FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+          );
+          expect(await service.readDiscoveryUsersFromLocalCache(), isNull);
+        verify(() => mockMyDocRef.get(any())).called(2);
+        },
+      );
+
       test(
         'more than 20 stored recommendations sets hasMoreDiscoveryUsers true',
         () async {
