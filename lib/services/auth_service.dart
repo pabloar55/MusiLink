@@ -169,14 +169,16 @@ class AuthService {
   }
 
   /// Cierra sesión de Firebase y Google.
-  /// Limpia el FCM token por defecto; durante una eliminación lo hace el
-  /// backend porque la cuenta ya está congelada para escrituras cliente.
+  /// Limpia los avisos locales. Limpia el FCM token por defecto; durante una
+  /// eliminación lo hace el backend porque la cuenta ya está congelada para
+  /// escrituras cliente.
   Future<void> signOut({bool clearNotificationToken = true}) async {
     // Give remote cleanup a short window while Firestore still has credentials.
     // Neither a pending network operation nor error reporting may block the
     // local sign-out, and independent cleanup operations share the same window.
     try {
       await Future.wait([
+        _runSignOutCleanup(_notificationService.clearLocalNotifications),
         if (clearNotificationToken)
           _runSignOutCleanup(_notificationService.clearToken),
         _runSignOutCleanup(_signOutGoogle),

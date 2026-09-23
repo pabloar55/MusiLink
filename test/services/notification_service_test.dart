@@ -82,6 +82,7 @@ void main() {
     late MockWriteBatch batch;
     late MockDocumentSnapshot profile;
     late SharedPreferences prefs;
+    late MockLocalNotifications localNotifications;
     late NotificationService service;
 
     setUp(() async {
@@ -100,7 +101,7 @@ void main() {
       final privateUsers = MockCollectionReference();
       final privateUser = MockDocumentReference();
       final tokens = MockCollectionReference();
-      final localNotifications = MockLocalNotifications();
+      localNotifications = MockLocalNotifications();
       prefs = await SharedPreferences.getInstance();
 
       when(() => auth.currentUser).thenReturn(user);
@@ -150,6 +151,21 @@ void main() {
         foregroundMessages: const Stream.empty(),
       );
     });
+
+    test(
+      'clears chat notification history and displayed local notices',
+      () async {
+        await prefs.setString('chat_notification_history', '{"chat":[]}');
+        await prefs.setBool('notification_sound', false);
+        when(() => localNotifications.cancelAll()).thenAnswer((_) async {});
+
+        await service.clearLocalNotifications();
+
+        expect(prefs.getString('chat_notification_history'), isNull);
+        expect(prefs.getBool('notification_sound'), isFalse);
+        verify(() => localNotifications.cancelAll()).called(1);
+      },
+    );
 
     test(
       'defers tokens during onboarding and retries after publication',

@@ -564,6 +564,8 @@ void main() {
 
     group('signOut', () {
       setUp(() async {
+        when(() => mockNotificationService.clearLocalNotifications())
+            .thenAnswer((_) async {});
         when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
         await authService.initializeGoogleSignInForWeb();
         addTearDown(authService.dispose);
@@ -581,6 +583,8 @@ void main() {
         final signOut = authService.signOut();
         await Future<void>.delayed(Duration.zero);
         verify(() => mockNotificationService.clearToken()).called(1);
+        verify(() => mockNotificationService.clearLocalNotifications())
+            .called(1);
         verify(() => mockGoogleSignIn.signOut()).called(1);
         await signOut.timeout(const Duration(seconds: 3));
 
@@ -635,6 +639,8 @@ void main() {
         await authService.signOut(clearNotificationToken: false);
 
         verifyNever(() => mockNotificationService.clearToken());
+        verify(() => mockNotificationService.clearLocalNotifications())
+            .called(1);
         verify(() => mockGoogleSignIn.signOut()).called(1);
         verify(() => mockAuth.signOut()).called(1);
       });

@@ -380,6 +380,18 @@ class NotificationService {
     ]);
   }
 
+  /// Borra los mensajes usados para agrupar avisos y retira los avisos locales
+  /// de la sesión, también cuando el backend se encarga de eliminar el token.
+  Future<void> clearLocalNotifications() async {
+    _signingOut = true;
+    _tokenGeneration++;
+    try {
+      await _prefs.remove(_chatHistoryKey);
+    } finally {
+      if (!kIsWeb) await _localNotifications.cancelAll();
+    }
+  }
+
   Future<void> _revokeMessagingToken() async {
     try {
       await _deleteMessagingToken().timeout(_tokenCleanupTimeout);
@@ -447,6 +459,7 @@ class NotificationService {
   }
 
   void _onForegroundMessage(RemoteMessage message) {
+    if (_signingOut) return;
     final chatId = message.data['chatId'] as String?;
     if (message.data['type'] == 'new_message' && chatId != null) {
       if (chatId == _getActiveChatId()) return;
