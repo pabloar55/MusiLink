@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/models/daily_song_reply.dart';
 
 /// Tipo de mensaje: texto normal o canción compartida.
 enum MessageType { text, track }
@@ -17,6 +18,7 @@ class Message {
   final bool isPending;
   final MessageType type;
   final Track? trackData;
+  final DailySongReply? dailySongReply;
   final Map<String, List<String>> reactions; // emoji -> lista de uids
 
   const Message({
@@ -29,10 +31,22 @@ class Message {
     this.isPending = false,
     this.type = MessageType.text,
     this.trackData,
+    this.dailySongReply,
     this.reactions = const {},
   });
 
   bool get isTrack => type == MessageType.track;
+
+  /// Older replies included the song caption in the message body.
+  String get bodyText {
+    if (dailySongReply != null &&
+        dailySongReply!.formatVersion < 2 &&
+        text.startsWith('🎵 “')) {
+      final separator = text.indexOf('\n\n');
+      if (separator >= 0) return text.substring(separator + 2);
+    }
+    return text;
+  }
 
   static Message? fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
@@ -60,6 +74,7 @@ class Message {
       delivered: (data['delivered'] as bool?) ?? false,
       type: type,
       trackData: trackData,
+      dailySongReply: DailySongReply.tryFromMap(data['dailySongReply']),
       reactions: reactions,
     );
   }
@@ -77,6 +92,7 @@ class Message {
     if (trackData != null) {
       map['trackData'] = trackData!.toMap();
     }
+    if (dailySongReply != null) map['dailySongReply'] = dailySongReply!.toMap();
 
     if (reactions.isNotEmpty) {
       map['reactions'] = reactions;
@@ -96,6 +112,7 @@ class Message {
       isPending: isPending,
       type: type,
       trackData: trackData,
+      dailySongReply: dailySongReply,
       reactions: reactions,
     );
   }

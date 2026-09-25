@@ -35,6 +35,7 @@ const phases = [
     'sent_notification_limits',
     'received_notification_limits',
     'sent_messages',
+    'daily_song_likes',
     'reactions_heart',
     'reactions_fire',
     'reactions_clap',
@@ -321,6 +322,10 @@ async function verifyCleanup(uid) {
             query: db.collection('friend_request_notification_limits').where('receiverId', '==', uid),
         },
         {
+            phase: 'daily_song_likes',
+            query: db.collectionGroup('daily_song_likes').where('senderId', '==', uid),
+        },
+        {
             phase: 'sent_messages',
             query: db.collectionGroup('messages').where('senderId', '==', uid),
         },
@@ -412,7 +417,11 @@ async function processPhase(uid, job) {
         }
         case 'sent_messages': {
             const count = await commitDeletes(db.collectionGroup('messages').where('senderId', '==', uid));
-            return { nextPhase: count === batchSize ? 'sent_messages' : 'reactions_heart', processed: count };
+            return { nextPhase: count === batchSize ? 'sent_messages' : 'daily_song_likes', processed: count };
+        }
+        case 'daily_song_likes': {
+            const count = await commitDeletes(db.collectionGroup('daily_song_likes').where('senderId', '==', uid));
+            return { nextPhase: count === batchSize ? 'daily_song_likes' : 'reactions_heart', processed: count };
         }
         case 'reactions_heart':
         case 'reactions_fire':

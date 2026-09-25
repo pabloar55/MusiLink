@@ -924,6 +924,84 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load the songs of the day.'**
   String get dailySongLoadError;
 
+  /// No description provided for @dailySongReplyOutgoing.
+  ///
+  /// In en, this message translates to:
+  /// **'You replied to their song of the day'**
+  String get dailySongReplyOutgoing;
+
+  /// No description provided for @dailySongReplyIncoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Replied to your song of the day'**
+  String get dailySongReplyIncoming;
+
+  /// No description provided for @dailySongLikesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Likes'**
+  String get dailySongLikesTitle;
+
+  /// No description provided for @dailySongNoLikes.
+  ///
+  /// In en, this message translates to:
+  /// **'Your song has no likes yet.'**
+  String get dailySongNoLikes;
+
+  /// No description provided for @dailySongLike.
+  ///
+  /// In en, this message translates to:
+  /// **'Like'**
+  String get dailySongLike;
+
+  /// No description provided for @dailySongUnlike.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlike'**
+  String get dailySongUnlike;
+
+  /// No description provided for @dailySongReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get dailySongReply;
+
+  /// No description provided for @dailySongReplyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your reply will be sent privately in your chat with this friend.'**
+  String get dailySongReplyHint;
+
+  /// No description provided for @dailySongReplySend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get dailySongReplySend;
+
+  /// No description provided for @dailySongReplySending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending…'**
+  String get dailySongReplySending;
+
+  /// No description provided for @dailySongReplySent.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply sent to your chat.'**
+  String get dailySongReplySent;
+
+  /// No description provided for @dailySongInteractionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save. Check that you are still friends and the song is still available, then try again.'**
+  String get dailySongInteractionError;
+
+  /// No description provided for @dailySongReplyTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'The reply is too long.'**
+  String get dailySongReplyTooLong;
+
   /// No description provided for @dailySongRetry.
   ///
   /// In en, this message translates to:

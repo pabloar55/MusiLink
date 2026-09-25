@@ -16,7 +16,7 @@ import {
 import { db } from './firebase';
 import { createDeliveryToken } from './chat_delivery';
 import { chatParticipants, timestampValue } from './firestore_values';
-import { sendNotification } from './notifications';
+import { chatNotification, sendNotification } from './notifications';
 
 const userPrivateCollection = 'user_private';
 const chatsCollection = 'chats';
@@ -238,10 +238,11 @@ export const onNewMessage = onDocumentCreated(
       if (!senderName) return;
 
       const deliveryToken = await createDeliveryToken(messageRef);
+      const notification = chatNotification(message, senderName, recipientSnap.data());
       await sendNotification(
         recipientId,
         recipientSnap.data(),
-        { title: senderName, body: (message.text as string | undefined) ?? '📎' },
+        notification,
         {
           type: 'new_message',
           messageId: messageRef.id,
@@ -250,7 +251,8 @@ export const onNewMessage = onDocumentCreated(
           chatId,
           otherUserId: senderId,
           otherUserName: senderName,
-          messageText: (message.text as string | undefined) ?? '📎',
+          messageText: notification.body,
+          ...(message.dailySongReply ? { notificationTitle: notification.title } : {}),
           ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
         },
         chatId,

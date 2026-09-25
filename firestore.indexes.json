@@ -53,6 +53,13 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "daily_song_likes",
+      "fieldPath": "senderId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "recommendations",
       "fieldPath": "userId",
       "indexes": [

@@ -19,6 +19,13 @@ void main() {
       );
     });
 
+    test('routes daily song likes to the daily-song tab', () {
+      expect(
+        notificationLocationFromData(const {'type': 'daily_song_liked'}),
+        '/?tab=daily-song',
+      );
+    });
+
     test('builds a chat location from a message notification', () {
       expect(
         notificationLocationFromData(const {

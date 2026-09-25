@@ -16,11 +16,10 @@ MusiLink compara el número de build instalado con una política de Firebase Rem
 | `android_store_url` | String | URL de Google Play | Respaldo si Play Core no está disponible |
 | `ios_store_url` | String | URL de App Store | Destino de actualización en iOS |
 
-La plantilla versionada está en `remoteconfig.template.json` y se puede publicar con:
-
-```bash
-firebase deploy --only remoteconfig
-```
+Los parámetros se gestionan y publican directamente en Firebase Console >
+Remote Config, dentro del proyecto `musi-link-e7759`. No se mantiene una plantilla
+local: `firebase.json` excluye Remote Config, por lo que `firebase deploy` no
+requiere ese archivo ni modifica los valores publicados en la consola.
 
 Para bloquear builds inferiores a `11`, publica primero la build `11`, confirma que está disponible en las tiendas y después activa:
 
@@ -40,7 +39,7 @@ La versión `1.0.6+10` es la primera que contiene el comprobador. Debe publicars
 
 Orden recomendado:
 
-1. Publicar Cloud Functions nuevas y la plantilla segura de Remote Config.
+1. Publicar Cloud Functions nuevas y configurar en la consola los valores seguros de Remote Config indicados arriba.
 2. Publicar `1.0.6+10` en Google Play y App Store.
 3. Confirmar que ambas tiendas sirven realmente esa build.
 4. Desplegar las reglas estrictas de Firestore.

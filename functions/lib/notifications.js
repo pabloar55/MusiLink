@@ -4,6 +4,7 @@ exports.notificationText = void 0;
 exports.notifChannelId = notifChannelId;
 exports.notificationPath = notificationPath;
 exports.preferredLocale = preferredLocale;
+exports.chatNotification = chatNotification;
 exports.sendNotification = sendNotification;
 const v2_1 = require("firebase-functions/v2");
 const firebase_1 = require("./firebase");
@@ -30,6 +31,18 @@ exports.notificationText = {
         es: () => '¡Tu canción del día ha caducado! Publica una nueva.',
         fr: () => 'Votre chanson du jour a expiré. Partagez-en une nouvelle !',
     },
+    dailySongReply: {
+        el: (name) => `${name} απάντησε στο τραγούδι σας`,
+        en: (name) => `${name} replied to your song`,
+        es: (name) => `${name} ha respondido a tu canción`,
+        fr: (name) => `${name} a répondu à votre chanson`,
+    },
+    dailySongLiked: {
+        el: (name) => `Στον χρήστη ${name} άρεσε το τραγούδι της ημέρας σας`,
+        en: (name) => `${name} liked your song of the day`,
+        es: (name) => `A ${name} le ha gustado tu canción del día`,
+        fr: (name) => `${name} a aimé votre chanson du jour`,
+    },
 };
 function notifChannelId(sound, vibration) {
     if (sound && vibration)
@@ -52,7 +65,7 @@ function notificationPath(data) {
     if (data.type === 'friend_request' || data.type === 'friend_request_accepted') {
         return '/?tab=friends';
     }
-    if (data.type === 'daily_song_expired')
+    if (data.type === 'daily_song_expired' || data.type === 'daily_song_liked')
         return '/?tab=daily-song';
     return '/';
 }
@@ -64,6 +77,19 @@ function preferredLocale(data) {
     return supportedLocales.has(languageCode)
         ? languageCode
         : defaultLocale;
+}
+function chatNotification(message, senderName, recipient) {
+    const reply = message.dailySongReply;
+    let body = typeof message.text === 'string' ? message.text : '📎';
+    if (reply && reply.formatVersion !== 2 && body.startsWith('🎵 “')) {
+        const separator = body.indexOf('\n\n');
+        if (separator >= 0)
+            body = body.slice(separator + 2);
+    }
+    return {
+        title: reply ? exports.notificationText.dailySongReply[preferredLocale(recipient)](senderName) : senderName,
+        body,
+    };
 }
 // Notifications with the same tag replace each other in the drawer, keeping
 // one entry per conversation instead of an unbounded stack.

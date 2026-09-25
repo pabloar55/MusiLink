@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/daily_song_reply.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,51 +24,52 @@ class ChatMessageCache {
       '${_userPrefix(uid)}chat.${Uri.encodeComponent(chatId)}';
   String _indexKey(String uid) => '${_userPrefix(uid)}index';
 
-  CachedChatMessages? read(String uid, String chatId) => _entries.putIfAbsent(
-    (uid, chatId),
-    () {
-      try {
-        final raw = _prefs.getString(_key(uid, chatId));
-        if (raw == null) return null;
-        final entry = jsonDecode(raw) as Map<String, dynamic>;
-        final since = entry['since'] as int?;
-        final cutoff = since == null
-            ? null
-            : DateTime.fromMicrosecondsSinceEpoch(since);
-        final messages = (entry['messages'] as List)
-            .map((value) {
-              final item = value as Map<String, dynamic>;
-              return Message(
-                id: item['id'] as String,
-                senderId: item['senderId'] as String,
-                text: item['text'] as String,
-                timestamp: DateTime.fromMicrosecondsSinceEpoch(
-                  item['timestamp'] as int,
-                ),
-                read: item['read'] as bool,
-                delivered: item['delivered'] as bool? ?? false,
-                type: MessageType.values.byName(item['type'] as String),
-                trackData: item['trackData'] == null
-                    ? null
-                    : Track.fromMap(item['trackData'] as Map<String, dynamic>),
-                reactions: (item['reactions'] as Map<String, dynamic>).map(
-                  (emoji, users) =>
-                      MapEntry(emoji, List<String>.from(users as List)),
-                ),
-              );
-            })
-            .where(
-              (message) => cutoff == null || message.timestamp.isAfter(cutoff),
-            )
-            .toList();
-        return (since: cutoff, messages: List<Message>.unmodifiable(messages));
-      } catch (_) {
-        // Una caché antigua o dañada nunca impide abrir la aplicación.
-        _prefs.remove(_key(uid, chatId)).ignore();
-        return null;
-      }
-    },
-  );
+  CachedChatMessages? read(
+    String uid,
+    String chatId,
+  ) => _entries.putIfAbsent((uid, chatId), () {
+    try {
+      final raw = _prefs.getString(_key(uid, chatId));
+      if (raw == null) return null;
+      final entry = jsonDecode(raw) as Map<String, dynamic>;
+      final since = entry['since'] as int?;
+      final cutoff = since == null
+          ? null
+          : DateTime.fromMicrosecondsSinceEpoch(since);
+      final messages = (entry['messages'] as List)
+          .map((value) {
+            final item = value as Map<String, dynamic>;
+            return Message(
+              id: item['id'] as String,
+              senderId: item['senderId'] as String,
+              text: item['text'] as String,
+              timestamp: DateTime.fromMicrosecondsSinceEpoch(
+                item['timestamp'] as int,
+              ),
+              read: item['read'] as bool,
+              delivered: item['delivered'] as bool? ?? false,
+              dailySongReply: DailySongReply.tryFromMap(item['dailySongReply']),
+              type: MessageType.values.byName(item['type'] as String),
+              trackData: item['trackData'] == null
+                  ? null
+                  : Track.fromMap(item['trackData'] as Map<String, dynamic>),
+              reactions: (item['reactions'] as Map<String, dynamic>).map(
+                (emoji, users) =>
+                    MapEntry(emoji, List<String>.from(users as List)),
+              ),
+            );
+          })
+          .where(
+            (message) => cutoff == null || message.timestamp.isAfter(cutoff),
+          )
+          .toList();
+      return (since: cutoff, messages: List<Message>.unmodifiable(messages));
+    } catch (_) {
+      // Una caché antigua o dañada nunca impide abrir la aplicación.
+      _prefs.remove(_key(uid, chatId)).ignore();
+      return null;
+    }
+  });
 
   void write(String uid, String chatId, CachedChatMessages entry) {
     final visible = entry.messages
@@ -129,6 +131,7 @@ class ChatMessageCache {
               'delivered': message.delivered,
               'type': message.type.name,
               'trackData': message.trackData?.toMap(),
+              'dailySongReply': message.dailySongReply?.toMap(),
               'reactions': message.reactions,
             },
           )

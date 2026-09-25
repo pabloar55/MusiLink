@@ -10,6 +10,7 @@ abstract final class FirestoreCollections {
   static const String termsAcceptances = 'terms_acceptances';
   static const String pushTokens = 'push_tokens';
   static const String recommendations = 'recommendations';
+  static const String dailySongLikes = 'daily_song_likes';
   static const String chats = 'chats';
   static const String messages = 'messages';
   static const String friendRequests = 'friend_requests';

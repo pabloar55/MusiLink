@@ -8,7 +8,9 @@ import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/chat.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/daily_song_reply.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 
@@ -417,7 +419,31 @@ class ChatService with AuthenticatedService {
     await _sendOutgoing(chatId, trimmed);
   }
 
-  Future<void> _sendOutgoing(String chatId, String text, {Track? track}) async {
+  Future<void> sendDailySongReply(AppUser owner, String text) async {
+    final trimmed = text.trim();
+    final song = owner.dailySong;
+    final publishedAt = owner.dailySongUpdatedAt;
+    if (!_isValidMessageText(trimmed)) throw ArgumentError('Invalid message');
+    if (owner.uid == currentUid || song == null || publishedAt == null) {
+      throw StateError('This daily song cannot be replied to.');
+    }
+    final chat = await getOrCreateChat(owner.uid);
+    await _sendOutgoing(
+      chat.id,
+      trimmed,
+      dailySongReply: {
+        'ownerId': owner.uid,
+        'publishedAtMicros': publishedAt.microsecondsSinceEpoch,
+      },
+    );
+  }
+
+  Future<void> _sendOutgoing(
+    String chatId,
+    String text, {
+    Track? track,
+    Map<String, dynamic>? dailySongReply,
+  }) async {
     final uid = currentUid;
     final key = (uid, chatId);
     final messageId = _chatsRef
@@ -433,6 +459,9 @@ class ChatService with AuthenticatedService {
       timestamp: DateTime.now(),
       type: track == null ? MessageType.text : MessageType.track,
       trackData: track,
+      dailySongReply: dailySongReply == null
+          ? null
+          : DailySongReply.tryFromMap({...dailySongReply, 'formatVersion': 2}),
       isPending: true,
     );
     _outgoingChanges.add(key);
@@ -440,8 +469,13 @@ class ChatService with AuthenticatedService {
       await _functions.httpsCallable('sendChatMessage').call<void>({
         'chatId': chatId,
         'messageId': messageId,
-        'type': track == null ? 'text' : 'track',
+        'type': dailySongReply != null
+            ? 'daily_song_reply'
+            : track == null
+            ? 'text'
+            : 'track',
         if (track == null) 'text': text else 'trackData': track.toMap(),
+        'dailySongReply': ?dailySongReply,
       });
       // Se conserva hasta que el listener confirma el mismo ID, incluso si la
       // respuesta de la callable llega antes que el snapshot.

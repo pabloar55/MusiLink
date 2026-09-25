@@ -27,7 +27,7 @@ int _stableNotificationId(String key) {
 int foregroundNotificationId(RemoteMessage message) {
   final type = message.data['type'];
   final relatedUserId = switch (type) {
-    'friend_request' => message.data['senderId'],
+    'friend_request' || 'daily_song_liked' => message.data['senderId'],
     'friend_request_accepted' => message.data['accepterId'],
     _ => null,
   };
@@ -570,12 +570,16 @@ class NotificationService {
     final senderName = data['otherUserName'] as String?;
     final messageText = data['messageText'] as String?;
     if (chatId == null || senderName == null || messageText == null) return;
+    final notificationTitle = data['notificationTitle'] as String?;
+    final notificationText = notificationTitle == null
+        ? messageText
+        : '$notificationTitle\n$messageText';
 
     final messages = await _appendChatMessage(
       prefs: prefs,
       chatId: chatId,
       senderName: senderName,
-      text: messageText,
+      text: notificationText,
     );
     final senderIconBytes = await _notificationAvatarCache.load(
       data['senderPhotoUrl'] as String?,
@@ -613,8 +617,8 @@ class NotificationService {
         .toList();
     await localNotifications.show(
       id: chatId.hashCode,
-      title: senderName,
-      body: messageText,
+      title: notificationTitle ?? senderName,
+      body: notificationText,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,

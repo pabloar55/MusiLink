@@ -198,7 +198,8 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
         if (!senderName)
             return;
         const deliveryToken = await (0, chat_delivery_1.createDeliveryToken)(messageRef);
-        await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), { title: senderName, body: message.text ?? '📎' }, {
+        const notification = (0, notifications_1.chatNotification)(message, senderName, recipientSnap.data());
+        await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), notification, {
             type: 'new_message',
             messageId: messageRef.id,
             deliveryToken,
@@ -206,7 +207,8 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
             chatId,
             otherUserId: senderId,
             otherUserName: senderName,
-            messageText: message.text ?? '📎',
+            messageText: notification.body,
+            ...(message.dailySongReply ? { notificationTitle: notification.title } : {}),
             ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
         }, chatId);
         await messageRef.update({ notificationSent: true });

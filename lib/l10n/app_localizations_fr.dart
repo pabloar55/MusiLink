@@ -475,6 +475,47 @@ class AppLocalizationsFr extends AppLocalizations {
       'Impossible de charger les chansons du jour.';
 
   @override
+  String get dailySongReplyOutgoing => 'Vous avez répondu à sa chanson du jour';
+
+  @override
+  String get dailySongReplyIncoming => 'A répondu à votre chanson du jour';
+
+  @override
+  String get dailySongLikesTitle => 'J’aime';
+
+  @override
+  String get dailySongNoLikes => 'Votre chanson n’a pas encore de J’aime.';
+
+  @override
+  String get dailySongLike => 'J’aime';
+
+  @override
+  String get dailySongUnlike => 'Retirer le J’aime';
+
+  @override
+  String get dailySongReply => 'Répondre';
+
+  @override
+  String get dailySongReplyHint =>
+      'Votre réponse sera envoyée en privé dans votre conversation avec cet ami.';
+
+  @override
+  String get dailySongReplySend => 'Envoyer';
+
+  @override
+  String get dailySongReplySending => 'Envoi…';
+
+  @override
+  String get dailySongReplySent => 'Réponse envoyée dans votre conversation.';
+
+  @override
+  String get dailySongInteractionError =>
+      'Impossible d’enregistrer. Vérifiez que vous êtes toujours amis et que la chanson est encore disponible, puis réessayez.';
+
+  @override
+  String get dailySongReplyTooLong => 'La réponse est trop longue.';
+
+  @override
   String get dailySongRetry => 'Réessayer';
 
   @override

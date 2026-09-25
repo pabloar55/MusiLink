@@ -36,3 +36,21 @@ test('preferredLocale accepts regional locales and falls back to English', () =>
   assert.equal(preferredLocale({ preferredLocale: 'de-DE' }), 'en');
   assert.equal(preferredLocale(undefined), 'en');
 });
+
+const { chatNotification, notificationText } = require('../../lib/notifications.js');
+test('daily song replies notify with the localized context and the plain reply', () => {
+  const reply = { ownerId: 'bob', publishedAtMicros: 123, formatVersion: 2 };
+  assert.deepEqual(chatNotification({ text: 'Me encanta', dailySongReply: reply }, 'Alice', { preferredLocale: 'es' }), {
+    title: 'Alice ha respondido a tu canción', body: 'Me encanta',
+  });
+  assert.deepEqual(chatNotification({ text: '🎵 “Song” — Artist\n\nMe encanta', dailySongReply: { ownerId: 'bob', publishedAtMicros: 123 } }, 'Alice', { preferredLocale: 'es' }), {
+    title: 'Alice ha respondido a tu canción', body: 'Me encanta',
+  });
+  assert.deepEqual(chatNotification({ text: 'Hola' }, 'Alice', { preferredLocale: 'es' }), { title: 'Alice', body: 'Hola' });
+  for (const locale of ['en', 'es', 'fr', 'el']) {
+    assert.match(notificationText.dailySongReply[locale]('Alice'), /Alice/);
+    assert.match(notificationText.dailySongLiked[locale]('Alice'), /Alice/);
+  }
+  assert.equal(notificationText.dailySongLiked.es('Alice'), 'A Alice le ha gustado tu canción del día');
+  assert.equal(notificationPath({ type: 'daily_song_liked' }), '/?tab=daily-song');
+});

@@ -354,3 +354,112 @@ test('las denuncias validan el contexto, conservan el mensaje y se deduplican', 
     (error) => error.code === 'invalid-argument',
   );
 });
+
+const replyTrack = {
+  title: 'Daily song', artist: 'Artist', imageUrl: '',
+  spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+};
+function dailyReply(publishedAt, overrides = {}) {
+  return parseChatMessagePayload({
+    chatId: 'alice_bob', messageId: 'daily_reply_message_01', type: 'daily_song_reply',
+    text: ' Great choice! ',
+    dailySongReply: { ownerId: 'bob', publishedAtMicros: publishedAt.seconds * 1_000_000 + Math.floor(publishedAt.nanoseconds / 1000) },
+    ...overrides,
+  });
+}
+
+test('daily song reply: stores authoritative context, sends once and uses the chat quota', async () => {
+  await seedChat();
+  const publishedAt = new Timestamp(100, 123456000);
+  await db.doc('users/bob').update({ dailySong: replyTrack, dailySongUpdatedAt: publishedAt });
+  const payload = dailyReply(publishedAt);
+  await createChatMessage(db, 'alice', payload, Timestamp.fromMillis(101000));
+  // A retry of an already accepted message stays idempotent after expiry.
+  await createChatMessage(db, 'alice', payload, Timestamp.fromMillis(100000000));
+  const message = (await db.doc('chats/alice_bob/messages/daily_reply_message_01').get()).data();
+  assert.equal(message.text, 'Great choice!');
+  assert.equal(message.dailySongReply.formatVersion, 2);
+  assert.equal(message.type, 'text');
+  assert.equal(message.dailySongReply.publishedAtMicros, 100123456);
+  assert.equal((await db.doc('rate_limits/alice').get()).data().messageCount, 1);
+});
+
+test('daily song reply: rejects expired, replaced, missing and wrong-owner publications', async () => {
+  await seedChat();
+  const publishedAt = Timestamp.fromMillis(100000);
+  const payload = dailyReply(publishedAt);
+  await assert.rejects(createChatMessage(db, 'alice', payload), { code: 'failed-precondition' });
+  await db.doc('users/bob').update({ dailySong: replyTrack, dailySongUpdatedAt: publishedAt });
+  await assert.rejects(createChatMessage(db, 'alice', payload, Timestamp.fromMillis(100000 + 86400000)), { code: 'failed-precondition' });
+  await assert.rejects(createChatMessage(db, 'alice', { ...payload, dailySongReply: { ...payload.dailySongReply, ownerId: 'alice' } }, publishedAt), { code: 'failed-precondition' });
+  await db.doc('users/bob').update({ dailySongUpdatedAt: Timestamp.fromMillis(101000) });
+  await assert.rejects(createChatMessage(db, 'alice', payload, Timestamp.fromMillis(102000)), { code: 'failed-precondition' });
+  assert.equal((await db.collection('chats/alice_bob/messages').get()).size, 0);
+});
+
+test('daily song reply: blocks removed friendships and blocked users', async () => {
+  const now = Timestamp.now();
+  for (const data of [{ friends: [] }, { friends: ['alice'], blockedUsers: ['alice'] }]) {
+    await seedChat();
+    await db.doc('users/bob').update({ dailySong: replyTrack, dailySongUpdatedAt: now });
+    await db.doc('user_private/bob').update(data);
+    await assert.rejects(createChatMessage(db, 'alice', dailyReply(now), now), { code: 'permission-denied' });
+  }
+});
+
+const { notifyDailySongLike } = require('../lib/daily_song_likes.js');
+async function seedDailyLike(now) {
+  await seedChat();
+  await db.doc('users/bob').update({ dailySong: replyTrack, dailySongUpdatedAt: now });
+  await db.doc('user_private/bob').update({ preferredLocale: 'es' });
+  await db.doc('users/alice').update({ displayName: 'Alice' });
+  await db.doc('users/bob/daily_song_likes/alice').set({ senderId: 'alice', publishedAt: now, createdAt: now });
+}
+
+test('daily song likes notify the owner, deduplicate retries and notify a new publication', async () => {
+  const now = Timestamp.now();
+  await seedDailyLike(now);
+  const sent = [];
+  const notify = async (...args) => { sent.push(args); };
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, notify, now), true);
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, notify, now), false);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], 'bob');
+  assert.equal(sent[0][2].body, 'A Alice le ha gustado tu canción del día');
+  assert.equal(sent[0][3].type, 'daily_song_liked');
+  const newer = Timestamp.fromMillis(now.toMillis() + 1000);
+  await db.doc('users/bob').update({ dailySongUpdatedAt: newer });
+  await db.doc('users/bob/daily_song_likes/alice').set({ senderId: 'alice', publishedAt: newer, createdAt: newer }, { merge: true });
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, notify, newer), false);
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', newer, newer, notify, newer), true);
+  assert.equal(sent.length, 2);
+});
+
+test('daily song likes skip removed, expired, blocked or non-friend likes', async () => {
+  const now = Timestamp.now();
+  let sends = 0;
+  const notify = async () => { sends++; };
+  for (const mutate of [
+    () => db.doc('users/bob/daily_song_likes/alice').delete(),
+    () => db.doc('user_private/bob').update({ blockedUsers: ['alice'] }),
+    () => db.doc('user_private/alice').update({ friends: [] }),
+    () => db.doc('users/bob').update({ dailySongUpdatedAt: Timestamp.fromMillis(now.toMillis() + 1) }),
+    () => db.doc('account_deletions/alice').set({ status: 'requested' }),
+  ]) {
+    await seedDailyLike(now);
+    await mutate();
+    assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, notify, now), false);
+  }
+  await db.doc('account_deletions/alice').delete();
+  await seedDailyLike(now);
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, notify, Timestamp.fromMillis(now.toMillis() + 86400000)), false);
+  assert.equal(sends, 0);
+});
+
+test('a failed like notification remains retryable', async () => {
+  const now = Timestamp.now();
+  await seedDailyLike(now);
+  await assert.rejects(notifyDailySongLike(db, 'bob', 'alice', now, now, async () => { throw new Error('FCM unavailable'); }, now), /FCM unavailable/);
+  assert.equal((await db.doc('users/bob/daily_song_likes/alice').get()).data().notificationSentFor, undefined);
+  assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, async () => {}, now), true);
+});

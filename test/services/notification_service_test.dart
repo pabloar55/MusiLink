@@ -448,6 +448,31 @@ void main() {
           expect(message.person!.icon, isNull);
         }
       }
+      foreground.add(
+        const RemoteMessage(
+          data: {
+            'type': 'new_message',
+            'chatId': 'chat',
+            'otherUserId': 'alice',
+            'otherUserName': 'Alice',
+            'messageText': 'Me encanta',
+            'notificationTitle': 'Alice ha respondido a tu canción',
+          },
+        ),
+      );
+      expect(await notifications.moveNext(), isTrue);
+      final replyArgs = notifications.current.namedArguments;
+      expect(replyArgs[#title], 'Alice ha respondido a tu canción');
+      expect(replyArgs[#body], 'Alice ha respondido a tu canción\nMe encanta');
+      final replyStyle =
+          (replyArgs[#notificationDetails] as NotificationDetails)
+                  .android!
+                  .styleInformation!
+              as MessagingStyleInformation;
+      expect(
+        replyStyle.messages!.last.text,
+        'Alice ha respondido a tu canción\nMe encanta',
+      );
     },
   );
 

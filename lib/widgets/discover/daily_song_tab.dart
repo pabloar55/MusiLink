@@ -13,6 +13,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
+import 'package:musi_link/widgets/discover/daily_song_actions.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
@@ -225,6 +226,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
           const SizedBox(height: 12),
           if (dailySong != null) ...[
             DailySongCard(song: dailySong),
+            DailySongActions(owner: currentUser!),
             const SizedBox(height: 8),
             Center(
               child: TextButton.icon(

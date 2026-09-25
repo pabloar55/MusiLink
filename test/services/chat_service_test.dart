@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/track.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
@@ -706,6 +707,85 @@ void main() {
           throwsA(same(exception)),
         );
       });
+    });
+
+    group('sendDailySongReply', () {
+      test(
+        'envía texto y referencia exacta de la publicación a la callable',
+        () async {
+          final publishedAt = DateTime.now();
+          final owner = AppUser(
+            uid: 'other_uid',
+            displayName: 'Friend',
+            dailySong: const Track(
+              title: 'Song',
+              artist: 'Artist',
+              imageUrl: '',
+            ),
+            dailySongUpdatedAt: publishedAt,
+          );
+          final chatRef = MockDocumentReference();
+          final chatSnap = MockDocumentSnapshot();
+          final messages = MockMessagesCollectionRef();
+          final messageRef = MockDocumentReference();
+          final tx = FakeTransaction();
+          mockFirestore.fakeTransaction = tx;
+          tx.getResult = chatSnap;
+          when(() => chatSnap.exists).thenReturn(true);
+          when(() => chatSnap.id).thenReturn('current_uid_other_uid');
+          when(() => chatSnap.data()).thenReturn({
+            'participants': ['current_uid', 'other_uid'],
+          });
+          when(() => mockChatsRef.doc('current_uid_other_uid'))
+              .thenReturn(chatRef);
+          when(() => chatRef.collection('messages')).thenReturn(messages);
+          when(() => messages.doc()).thenReturn(messageRef);
+          when(() => messageRef.id).thenReturn('daily_reply_message_01');
+          await chatService.sendDailySongReply(owner, ' Great song! ');
+          final payload =
+              verify(() => mockSendMessageCallable.call<void>(captureAny()))
+                      .captured
+                      .single
+                  as Map;
+          expect(payload, {
+            'chatId': 'current_uid_other_uid',
+            'messageId': 'daily_reply_message_01',
+            'type': 'daily_song_reply',
+            'text': 'Great song!',
+            'dailySongReply': {
+              'ownerId': 'other_uid',
+              'publishedAtMicros': publishedAt.microsecondsSinceEpoch,
+            },
+          });
+        },
+      );
+
+      test(
+        'rechaza canciones caducadas y respuestas vacías sin abrir un chat',
+        () async {
+          final owner = AppUser(
+            uid: 'other_uid',
+            displayName: 'Friend',
+            dailySong: const Track(
+              title: 'Song',
+              artist: 'Artist',
+              imageUrl: '',
+            ),
+            dailySongUpdatedAt: DateTime.now().subtract(
+              const Duration(hours: 25),
+            ),
+          );
+          await expectLater(
+            chatService.sendDailySongReply(owner, 'Hello'),
+            throwsStateError,
+          );
+          await expectLater(
+            chatService.sendDailySongReply(owner, '  '),
+            throwsArgumentError,
+          );
+          verifyNever(() => mockSendMessageCallable.call<void>(any()));
+        },
+      );
     });
 
     group('sendTrackMessage', () {

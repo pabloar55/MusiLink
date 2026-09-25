@@ -279,6 +279,45 @@ service cloud.firestore {
         && keepsUsernameOrAnonymizes(userId);
       allow delete: if false;
 
+      match /daily_song_likes/{senderId} {
+        function canViewLikes() {
+          return request.auth != null
+            && isActiveUser(userId)
+            && (request.auth.uid == userId
+              || (request.auth.uid == senderId
+                && canUsersInteract(request.auth.uid, userId)
+                && areMutualFriends(request.auth.uid, userId)));
+        }
+
+        function canLike() {
+          return request.auth != null
+            && request.auth.uid == senderId
+            && canUsersInteract(senderId, userId)
+            && areMutualFriends(senderId, userId);
+        }
+
+        function validLike() {
+          let profile = get(/databases/$(database)/documents/users/$(userId)).data;
+          let data = request.resource.data;
+          return data.keys().hasOnly(['senderId', 'publishedAt', 'createdAt', 'notificationSentFor'])
+            && data.keys().hasAll(['senderId', 'publishedAt', 'createdAt'])
+            && data.senderId == senderId
+            && data.createdAt == request.time
+            && profile.dailySong is map
+            && data.publishedAt == profile.dailySongUpdatedAt
+            && data.publishedAt <= request.time
+            && request.time < data.publishedAt + duration.value(24, 'h');
+        }
+
+        allow read: if canViewLikes();
+        allow create: if canLike() && validLike()
+          && !('notificationSentFor' in request.resource.data);
+        allow update: if canLike() && validLike()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['senderId', 'publishedAt', 'createdAt']);
+        allow delete: if canLike();
+      }
+
       match /recommendations/{recommendationId} {
         allow read: if request.auth != null && request.auth.uid == userId;
         allow write: if false;

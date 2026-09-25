@@ -18,6 +18,17 @@ La configuración `hosting` de `firebase.json` publica `build/web` y reescribe
 las rutas sin fichero a `index.html` para que la navegación directa de la SPA
 funcione.
 
+Para desplegar también Cloud Functions, las reglas e índices de Firestore y las
+reglas de Storage, una vez compilada la web:
+
+```bash
+firebase deploy --project musi-link-e7759
+```
+
+El hook `predeploy` compila las funciones automáticamente. Remote Config se
+gestiona desde Firebase Console y está excluido de `firebase.json`; este comando
+no necesita una plantilla local ni modifica sus parámetros.
+
 ## Despliegue desde GitHub
 
 El workflow `.github/workflows/deploy-firebase-hosting.yml` se ejecuta cuando

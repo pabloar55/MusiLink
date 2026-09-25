@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
@@ -108,6 +109,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.message.dailySongReply != null)
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: AppTokens.spaceSM,
+                  left: AppTokens.spaceSM,
+                  right: AppTokens.spaceSM,
+                ),
+                child: Text(
+                  widget.isMe
+                      ? AppLocalizations.of(context)!.dailySongReplyOutgoing
+                      : AppLocalizations.of(context)!.dailySongReplyIncoming,
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.only(top: AppTokens.spaceXS),
               child: CompositedTransformTarget(
@@ -142,7 +157,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        widget.message.text,
+                        widget.message.bodyText,
                         style: tt.bodyMedium?.copyWith(
                           color: widget.isMe ? cs.onPrimary : cs.onSurface,
                         ),

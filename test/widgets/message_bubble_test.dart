@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/daily_song_reply.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
@@ -29,6 +30,7 @@ void main() {
     }) {
       return ProviderScope(
         child: MaterialApp(
+          locale: const Locale('es'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
@@ -44,6 +46,46 @@ void main() {
             ),
           ),
         ),
+      );
+    }
+
+    for (final isMe in [true, false]) {
+      testWidgets(
+        'respuesta muestra contexto fuera de la burbuja, isMe=$isMe',
+        (tester) async {
+          await tester.pumpWidget(
+            buildBubble(
+              message: Message(
+                id: 'reply',
+                senderId: isMe ? 'user1' : 'user2',
+                text: 'Me encanta',
+                timestamp: timestamp,
+                dailySongReply: const DailySongReply(
+                  ownerId: 'user2',
+                  publishedAtMicros: 123,
+                ),
+              ),
+              isMe: isMe,
+            ),
+          );
+          final label = find.text(
+            isMe
+                ? 'Has respondido a su canción del día'
+                : 'Ha respondido a tu canción del día',
+          );
+          final body = find.text('Me encanta');
+          expect(label, findsOneWidget);
+          expect(body, findsOneWidget);
+          expect(
+            tester.getBottomLeft(label).dy,
+            lessThan(tester.getTopLeft(body).dy),
+          );
+          final bubble = find
+              .ancestor(of: body, matching: find.byType(Container))
+              .first;
+          expect(find.descendant(of: bubble, matching: label), findsNothing);
+          expect(find.byType(MessageBubble), findsOneWidget);
+        },
       );
     }
 

@@ -463,6 +463,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dailySongLoadError => 'Couldn\'t load the songs of the day.';
 
   @override
+  String get dailySongReplyOutgoing => 'You replied to their song of the day';
+
+  @override
+  String get dailySongReplyIncoming => 'Replied to your song of the day';
+
+  @override
+  String get dailySongLikesTitle => 'Likes';
+
+  @override
+  String get dailySongNoLikes => 'Your song has no likes yet.';
+
+  @override
+  String get dailySongLike => 'Like';
+
+  @override
+  String get dailySongUnlike => 'Unlike';
+
+  @override
+  String get dailySongReply => 'Reply';
+
+  @override
+  String get dailySongReplyHint =>
+      'Your reply will be sent privately in your chat with this friend.';
+
+  @override
+  String get dailySongReplySend => 'Send';
+
+  @override
+  String get dailySongReplySending => 'Sending…';
+
+  @override
+  String get dailySongReplySent => 'Reply sent to your chat.';
+
+  @override
+  String get dailySongInteractionError =>
+      'Could not save. Check that you are still friends and the song is still available, then try again.';
+
+  @override
+  String get dailySongReplyTooLong => 'The reply is too long.';
+
+  @override
   String get dailySongRetry => 'Try again';
 
   @override

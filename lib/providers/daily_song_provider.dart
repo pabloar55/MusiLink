@@ -2,6 +2,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/services/daily_song_interaction_service.dart';
+
+final dailySongInteractionServiceProvider =
+    Provider<DailySongInteractionService>((ref) {
+      return DailySongInteractionService(
+        firestore: ref.watch(firebaseFirestoreProvider),
+        auth: ref.watch(firebaseAuthProvider),
+      );
+    });
+
+final dailySongLikesProvider = StreamProvider.autoDispose
+    .family<Set<String>, DailySongPublication>((ref, publication) {
+      ref.watch(authStateProvider);
+      return ref
+          .watch(dailySongInteractionServiceProvider)
+          .watchLikes(publication);
+    });
+
+final dailySongMyLikeProvider = StreamProvider.autoDispose
+    .family<bool, DailySongPublication>((ref, publication) {
+      ref.watch(authStateProvider);
+      return ref
+          .watch(dailySongInteractionServiceProvider)
+          .watchMyLike(publication);
+    });
 
 /// Perfiles de amigos actualizados en tiempo real para la pestaña de canciones.
 final friendProfilesStreamProvider = StreamProvider<List<AppUser>>((ref) {

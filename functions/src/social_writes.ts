@@ -33,6 +33,7 @@ interface ChatMessagePayload {
   type: 'text' | 'track';
   text: string;
   trackData?: TrackPayload;
+  dailySongReply?: { ownerId: string; publishedAtMicros: number };
 }
 
 function utf8Length(value: string): number {
@@ -107,9 +108,10 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
     throw new HttpsError('invalid-argument', 'A valid messageId is required.');
   }
 
-  if (value.type === 'text') {
+  if (value.type === 'text' || value.type === 'daily_song_reply') {
+    const isReply = value.type === 'daily_song_reply';
     if (
-      !hasExactKeys(value, ['chatId', 'messageId', 'text', 'type'])
+      !hasExactKeys(value, ['chatId', 'messageId', 'text', 'type', ...(isReply ? ['dailySongReply'] : [])])
       || typeof value.text !== 'string'
     ) {
       throw new HttpsError('invalid-argument', 'Message text is required.');
@@ -118,11 +120,25 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
     if (text.length === 0 || utf8Length(text) > 2000) {
       throw new HttpsError('invalid-argument', 'Message text is invalid.');
     }
+    let dailySongReply: ChatMessagePayload['dailySongReply'];
+    if (isReply) {
+      const reply = value.dailySongReply;
+      if (!isRecord(reply)
+        || !hasExactKeys(reply, ['ownerId', 'publishedAtMicros'])
+        || !validDocumentId(reply.ownerId, 128)
+        || typeof reply.publishedAtMicros !== 'number'
+        || !Number.isSafeInteger(reply.publishedAtMicros)
+        || reply.publishedAtMicros <= 0) {
+        throw new HttpsError('invalid-argument', 'Invalid daily song reference.');
+      }
+      dailySongReply = { ownerId: reply.ownerId, publishedAtMicros: reply.publishedAtMicros };
+    }
     return {
       chatId: value.chatId,
       messageId: value.messageId,
       type: 'text',
       text,
+      ...(dailySongReply ? { dailySongReply } : {}),
     };
   }
 
@@ -337,6 +353,21 @@ export async function createChatMessage(
       return messageRef.id;
     }
 
+    if (payload.dailySongReply) {
+      const profile = recipientPublicSnap.data();
+      const publishedAt = profile?.dailySongUpdatedAt;
+      if (payload.dailySongReply.ownerId !== recipientId
+        || !(publishedAt instanceof Timestamp)
+        || publishedAt.seconds * 1_000_000 + Math.floor(publishedAt.nanoseconds / 1000)
+          !== payload.dailySongReply.publishedAtMicros
+        || publishedAt.toMillis() > now.toMillis()
+        || now.toMillis() >= publishedAt.toMillis() + 24 * 60 * 60 * 1000
+        || !profile?.dailySong) {
+        throw new HttpsError('failed-precondition', 'This daily song is no longer active.');
+      }
+      parseTrack(profile.dailySong);
+    }
+
     const limiterData = limiterSnap.data();
     const next = advanceFixedWindow(
       limiterData?.messageWindowStart,
@@ -357,6 +388,7 @@ export async function createChatMessage(
       delivered: false,
       type: payload.type,
       ...(payload.trackData ? { trackData: payload.trackData } : {}),
+      ...(payload.dailySongReply ? { dailySongReply: { ...payload.dailySongReply, formatVersion: 2 } } : {}),
     });
     tx.set(limiterRef, {
       lastMessageAt: now,

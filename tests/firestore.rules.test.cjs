@@ -758,3 +758,94 @@ for (const delivered of [undefined, false, true]) {
     await assertSucceeds(updateDoc(doc(dbFor('alice'), path), { read: true }));
   });
 }
+
+async function seedDailySong(publishedAt = new Date()) {
+  await seedActiveUser('alice', ['bob']);
+  await seedActiveUser('bob', ['alice']);
+  await seed('users/alice', {
+    displayName: 'Alice', username: 'alice_name', photoUrl: '',
+    dailySong: { title: 'Song', artist: 'Artist', imageUrl: '', spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC' },
+    dailySongUpdatedAt: publishedAt,
+  });
+  return { senderId: 'bob', publishedAt, createdAt: serverTimestamp() };
+}
+
+test('likes: amigos pueden dar y quitar un único like; el titular ve el contador', async () => {
+  const like = await seedDailySong();
+  const bobDb = dbFor('bob');
+  const ref = doc(bobDb, 'users/alice/daily_song_likes/bob');
+  await assertSucceeds(setDoc(ref, like));
+  await assertSucceeds(setDoc(ref, like));
+  const likes = await assertSucceeds(getDocs(query(
+    collection(dbFor('alice'), 'users/alice/daily_song_likes'),
+    where('publishedAt', '==', like.publishedAt),
+  )));
+  assert.equal(likes.size, 1);
+  await assertSucceeds(runTransaction(bobDb, async tx => {
+    await tx.get(ref);
+    tx.delete(ref);
+  }));
+});
+
+test('likes: impide suplantación, autolikes y campos manipulados', async () => {
+  const like = await seedDailySong();
+  await assertFails(setDoc(doc(dbFor('alice'), 'users/alice/daily_song_likes/alice'), { ...like, senderId: 'alice' }));
+  await assertFails(setDoc(doc(dbFor('bob'), 'users/alice/daily_song_likes/charlie'), { ...like, senderId: 'charlie' }));
+  const ref = doc(dbFor('bob'), 'users/alice/daily_song_likes/bob');
+  for (const changes of [{ senderId: 'alice' }, { count: 100 }, { createdAt: new Date(0) }, { publishedAt: new Date(0) }]) {
+    await assertFails(setDoc(ref, { ...like, ...changes }));
+  }
+});
+
+test('likes: solo amigos mutuos activos y sin bloqueos pueden leer y escribir', async () => {
+  const like = await seedDailySong();
+  await seedActiveUser('charlie');
+  await assertFails(getDocs(collection(dbFor('charlie'), 'users/alice/daily_song_likes')));
+  await assertFails(setDoc(doc(dbFor('charlie'), 'users/alice/daily_song_likes/charlie'), { ...like, senderId: 'charlie' }));
+  await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(), 'users/alice/daily_song_likes')));
+  const ref = doc(dbFor('bob'), 'users/alice/daily_song_likes/bob');
+  for (const [path, data] of [
+    ['user_private/alice', { friends: [], blockedUsers: [] }],
+    ['user_private/bob', { friends: [], blockedUsers: [] }],
+    ['user_private/alice', { friends: ['bob'], blockedUsers: ['bob'] }],
+    ['user_private/bob', { friends: ['alice'], blockedUsers: ['alice'] }],
+    ['account_deletions/bob', { status: 'requested' }],
+  ]) {
+    await seedDailySong(like.publishedAt);
+    await seed(path, data);
+    await assertFails(setDoc(ref, like));
+    await assertFails(getDocs(collection(dbFor('bob'), 'users/alice/daily_song_likes')));
+  }
+});
+
+test('likes: caducidad, sustitución y republicación no heredan likes', async () => {
+  const old = await seedDailySong(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const ref = doc(dbFor('bob'), 'users/alice/daily_song_likes/bob');
+  await assertFails(setDoc(ref, old));
+  await seed('users/alice/daily_song_likes/bob', { ...old, createdAt: old.publishedAt });
+  const current = await seedDailySong();
+  await assertFails(setDoc(ref, old));
+  const likes = await assertSucceeds(getDocs(query(collection(dbFor('alice'), 'users/alice/daily_song_likes'), where('publishedAt', '==', current.publishedAt))));
+  assert.equal(likes.size, 0);
+  await assertSucceeds(setDoc(ref, current));
+});
+
+test('likes: el contador y la lista son privados; cada amigo solo lee su propio like', async () => {
+  const like = await seedDailySong();
+  await seed('users/alice/daily_song_likes/bob', { ...like, createdAt: like.publishedAt });
+  await assertSucceeds(getDocs(collection(dbFor('alice'), 'users/alice/daily_song_likes')));
+  await assertSucceeds(getDoc(doc(dbFor('bob'), 'users/alice/daily_song_likes/bob')));
+  await assertFails(getDoc(doc(dbFor('bob'), 'users/alice/daily_song_likes/charlie')));
+  await assertFails(getDocs(collection(dbFor('bob'), 'users/alice/daily_song_likes')));
+  await assertFails(getDocs(query(collection(dbFor('bob'), 'users/alice/daily_song_likes'), where('publishedAt', '==', like.publishedAt))));
+});
+
+test('likes: el cliente conserva pero no manipula la marca de notificación', async () => {
+  const like = await seedDailySong();
+  const ref = doc(dbFor('bob'), 'users/alice/daily_song_likes/bob');
+  await assertFails(setDoc(ref, { ...like, notificationSentFor: like.publishedAt }));
+  await seed('users/alice/daily_song_likes/bob', { ...like, createdAt: like.publishedAt, notificationSentFor: like.publishedAt });
+  await assertSucceeds(setDoc(ref, like, { merge: true }));
+  await assertFails(updateDoc(ref, { notificationSentFor: new Date(0) }));
+  await assertFails(updateDoc(ref, { notificationSentFor: deleteField() }));
+});

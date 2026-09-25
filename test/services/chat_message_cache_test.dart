@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/daily_song_reply.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,6 +54,32 @@ void main() {
       expect(actual.type, MessageType.track);
       expect(actual.trackData!.toMap(), message.trackData!.toMap());
       expect(actual.reactions, message.reactions);
+    },
+  );
+
+  test(
+    'persiste el contexto de respuesta y conserva el cuerpo sin prefijos',
+    () async {
+      final reply = Message(
+        id: 'reply',
+        senderId: 'alice',
+        text: 'Me encanta',
+        timestamp: time,
+        dailySongReply: const DailySongReply(
+          ownerId: 'bob',
+          publishedAtMicros: 123,
+        ),
+      );
+      cache.write('alice', 'chat', (since: null, messages: [reply]));
+      await Future<void>.delayed(Duration.zero);
+      final restored = ChatMessageCache(prefs)
+          .read('alice', 'chat')!
+          .messages
+          .single;
+      expect(restored.dailySongReply!.ownerId, 'bob');
+      expect(restored.dailySongReply!.publishedAtMicros, 123);
+      expect(restored.dailySongReply!.formatVersion, 2);
+      expect(restored.bodyText, 'Me encanta');
     },
   );
 

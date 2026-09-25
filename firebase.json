@@ -12,9 +12,6 @@
       "npm --prefix \"$RESOURCE_DIR\" run build"
     ]
   },
-  "remoteconfig": {
-    "template": "remoteconfig.template.json"
-  },
   "hosting": {
     "public": "build/web",
     "ignore": [

@@ -467,6 +467,48 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν ήταν δυνατή η φόρτωση των τραγουδιών της ημέρας.';
 
   @override
+  String get dailySongReplyOutgoing =>
+      'Απαντήσατε στο τραγούδι της ημέρας του χρήστη';
+
+  @override
+  String get dailySongReplyIncoming => 'Απάντησε στο τραγούδι της ημέρας σας';
+
+  @override
+  String get dailySongLikesTitle => 'Μου αρέσει';
+
+  @override
+  String get dailySongNoLikes => 'Το τραγούδι σας δεν έχει ακόμα «Μου αρέσει».';
+
+  @override
+  String get dailySongLike => 'Μου αρέσει';
+
+  @override
+  String get dailySongUnlike => 'Δεν μου αρέσει πια';
+
+  @override
+  String get dailySongReply => 'Απάντηση';
+
+  @override
+  String get dailySongReplyHint =>
+      'Η απάντησή σας θα σταλεί ιδιωτικά στη συνομιλία με αυτόν τον φίλο.';
+
+  @override
+  String get dailySongReplySend => 'Αποστολή';
+
+  @override
+  String get dailySongReplySending => 'Αποστολή…';
+
+  @override
+  String get dailySongReplySent => 'Η απάντηση στάλθηκε στη συνομιλία.';
+
+  @override
+  String get dailySongInteractionError =>
+      'Δεν ήταν δυνατή η αποθήκευση. Ελέγξτε ότι είστε ακόμα φίλοι και ότι το τραγούδι είναι διαθέσιμο και δοκιμάστε ξανά.';
+
+  @override
+  String get dailySongReplyTooLong => 'Η απάντηση είναι πολύ μεγάλη.';
+
+  @override
   String get dailySongRetry => 'Δοκιμάστε ξανά';
 
   @override
