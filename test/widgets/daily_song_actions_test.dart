@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:musi_link/widgets/chat/chat_input_bar.dart';
+import 'package:musi_link/widgets/discover/daily_song_reply_sheet.dart';
+import 'package:musi_link/widgets/track_artwork.dart';
+import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
@@ -26,6 +31,7 @@ void main() {
   final owner = AppUser(
     uid: 'alice',
     displayName: 'Alice',
+    username: 'alice_music',
     dailySong: const Track(title: 'Song', artist: 'Artist', imageUrl: ''),
     dailySongUpdatedAt: publishedAt,
   );
@@ -93,7 +99,7 @@ void main() {
       await pump(tester);
       expect(find.text('0 · Me gusta'), findsNothing);
       expect(find.text('Quitar me gusta'), findsNothing);
-      expect(tester.widget<IconButton>(find.byType(IconButton)).iconSize, 32);
+      expect(tester.widget<IconButton>(find.byType(IconButton)).iconSize, 28);
       await tester.tap(find.byIcon(Icons.favorite_border));
       await tester.pump();
       await tester.tap(find.byIcon(Icons.favorite_border));
@@ -147,31 +153,93 @@ void main() {
   );
 
   testWidgets(
-    'conserva el borrador tras error y envía la respuesta privada al reintentar',
+    'abre un bottom sheet con usuario, canción y la barra del chat sin compartir canción',
     (tester) async {
-      var attempts = 0;
-      when(() => chat.sendDailySongReply(owner, 'Me encanta'))
-          .thenAnswer((_) async {
-            if (attempts++ == 0) throw StateError('offline');
-          });
       await pump(tester);
       await tester.tap(find.text('Responder'));
       await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(DailySongReplySheet), findsOneWidget);
+      expect(find.byType(ChatInputBar), findsOneWidget);
+      expect(find.byType(UserCircleAvatar), findsOneWidget);
+      expect(find.byType(TrackArtwork), findsOneWidget);
+      expect(find.text('Alice'), findsOneWidget);
+      expect(find.text('@alice_music'), findsOneWidget);
+      expect(find.text('Song'), findsOneWidget);
+      expect(find.text('Artist'), findsOneWidget);
+      expect(find.text('Escribe un mensaje...'), findsOneWidget);
+      expect(find.widgetWithIcon(IconButton, LucideIcons.music), findsNothing);
       expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+            )
+            .onPressed,
         isNull,
       );
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      verifyNever(() => chat.sendDailySongReply(owner, any()));
+    },
+  );
+
+  testWidgets('cierra inmediatamente sin enviando y evita enviar dos veces', (
+    tester,
+  ) async {
+    final pending = Completer<void>();
+    when(() => chat.sendDailySongReply(owner, 'Me encanta'))
+        .thenAnswer((_) => pending.future);
+    await pump(tester);
+    await tester.tap(find.text('Responder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Me encanta');
+    await tester.pump();
+    final send = tester
+        .widget<IconButton>(
+          find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+        )
+        .onPressed!;
+    send();
+    send();
+    await tester.pumpAndSettle();
+    expect(pending.isCompleted, isFalse);
+    expect(find.byType(DailySongReplySheet), findsNothing);
+    expect(find.text('Enviando…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    verify(() => chat.sendDailySongReply(owner, 'Me encanta')).called(1);
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'recupera una respuesta fallida tras cerrar el sheet y permite reintentar',
+    (tester) async {
+      final pending = Completer<void>();
+      when(() => chat.sendDailySongReply(owner, 'Me encanta'))
+          .thenAnswer((_) => pending.future);
+      await pump(tester);
+      await tester.tap(find.text('Responder'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Me encanta');
       await tester.pump();
-      await tester.tap(find.text('Enviar'));
+      await tester.tap(find.byIcon(LucideIcons.sendHorizontal500));
+      await tester.pumpAndSettle();
+      expect(find.byType(DailySongReplySheet), findsNothing);
+      pending.completeError(StateError('offline'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No se pudo guardar'), findsOneWidget);
+      when(() => chat.sendDailySongReply(owner, 'Me encanta'))
+          .thenAnswer((_) async {});
+      await tester.tap(find.byIcon(Icons.error_outline));
       await tester.pumpAndSettle();
       expect(find.text('Me encanta'), findsOneWidget);
-      expect(find.textContaining('No se pudo guardar'), findsOneWidget);
-      await tester.tap(find.text('Enviar'));
+      await tester.tap(find.byIcon(LucideIcons.sendHorizontal500));
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('Respuesta enviada al chat.'), findsOneWidget);
+      expect(find.byType(DailySongReplySheet), findsNothing);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
       verify(() => chat.sendDailySongReply(owner, 'Me encanta')).called(2);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -184,9 +252,32 @@ void main() {
     await tester.enterText(find.byType(TextField), '🎵' * 501);
     await tester.pump();
     expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      tester
+          .widget<IconButton>(
+            find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+          )
+          .onPressed,
       isNull,
     );
     expect(find.text('La respuesta es demasiado larga.'), findsOneWidget);
   });
+
+  testWidgets(
+    'mantiene el compositor visible con teclado en pantalla pequeña',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 640);
+      addTearDown(tester.view.reset);
+      await pump(tester);
+      await tester.tap(find.text('Responder'));
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final field = find.byType(TextField);
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(field).dy, lessThanOrEqualTo(340));
+    },
+  );
 }

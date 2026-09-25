@@ -1,13 +1,12 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/daily_song_provider.dart';
+import 'package:musi_link/providers/daily_song_reply_provider.dart';
+import 'package:musi_link/widgets/discover/daily_song_reply_sheet.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:musi_link/services/daily_song_interaction_service.dart';
@@ -46,6 +45,47 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
     }
   }
 
+  Future<void> _openReply(AppUser owner, {FailedDailySongReply? draft}) async {
+    final song = owner.dailySong;
+    if (song == null) return;
+    final notifier = ref.read(dailySongReplyProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    if (draft != null) messenger.hideCurrentSnackBar();
+    final senderId = ref.read(firebaseAuthProvider).currentUser?.uid;
+    final auth = ref.read(firebaseAuthProvider);
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => DailySongReplySheet(
+        owner: owner,
+        song: song,
+        initialText: draft?.text ?? '',
+      ),
+    );
+    if (text == null || text.isEmpty || auth.currentUser?.uid != senderId) {
+      return;
+    }
+    final failure = await notifier.send(owner, text, retryOf: draft);
+    if (failure != null && messenger.mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.dailySongInteractionError),
+          action: mounted
+              ? SnackBarAction(
+                  label: l10n.dailySongRetry,
+                  onPressed: () {
+                    if (mounted) _openReply(owner, draft: failure);
+                  },
+                )
+              : null,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final owner = widget.owner;
@@ -72,6 +112,10 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
     final likes = ref.watch(dailySongMyLikeProvider(publication));
     final l10n = AppLocalizations.of(context)!;
     final liked = likes.asData?.value ?? false;
+    final failedReplies = ref
+        .watch(dailySongReplyProvider)
+        .where((reply) => reply.matches(owner))
+        .toList();
     return Wrap(
       spacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -104,13 +148,18 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
           ),
         if (!own)
           TextButton.icon(
-            onPressed: () => showDialog<void>(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => _DailySongReplyDialog(owner: owner),
-            ),
+            onPressed: () => _openReply(owner),
             icon: const Icon(Icons.reply, size: 20),
-            label: Text(l10n.dailySongReply, style: const TextStyle(fontSize: 14)),
+            label: Text(
+              l10n.dailySongReply,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        for (final failed in failedReplies)
+          TextButton.icon(
+            onPressed: () => _openReply(owner, draft: failed),
+            icon: const Icon(Icons.error_outline),
+            label: Text(l10n.dailySongRetry),
           ),
       ],
     );
@@ -233,109 +282,6 @@ class _DailySongLikerTile extends ConsumerWidget {
                   ? null
                   : Text('@${profile.username}'),
             ),
-    );
-  }
-}
-
-class _DailySongReplyDialog extends ConsumerStatefulWidget {
-  const _DailySongReplyDialog({required this.owner});
-  final AppUser owner;
-
-  @override
-  ConsumerState<_DailySongReplyDialog> createState() =>
-      _DailySongReplyDialogState();
-}
-
-class _DailySongReplyDialogState extends ConsumerState<_DailySongReplyDialog> {
-  final _controller = TextEditingController();
-  bool _sending = false;
-  bool _failed = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _send() async {
-    if (_sending) return;
-    setState(() {
-      _sending = true;
-      _failed = false;
-    });
-    try {
-      await ref
-          .read(chatServiceProvider)
-          .sendDailySongReply(widget.owner, _controller.text);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.dailySongReplySent),
-        ),
-      );
-      Navigator.of(context).pop();
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _sending = false;
-          _failed = true;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final text = _controller.text.trim();
-    final tooLong = utf8.encode(text).length > ChatService.maxMessageBytes;
-    return PopScope(
-      canPop: !_sending,
-      child: AlertDialog(
-        title: Text(l10n.dailySongReply),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10n.dailySongReplyHint),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _controller,
-                autofocus: true,
-                enabled: !_sending,
-                minLines: 2,
-                maxLines: 5,
-                onChanged: (_) => setState(() => _failed = false),
-                decoration: InputDecoration(
-                  labelText: l10n.dailySongReply,
-                  errorText: tooLong ? l10n.dailySongReplyTooLong : null,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              if (_failed) ...[
-                const SizedBox(height: 12),
-                Text(
-                  l10n.dailySongInteractionError,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _sending ? null : () => Navigator.of(context).pop(),
-            child: Text(l10n.friendsCancel),
-          ),
-          FilledButton(
-            onPressed: _sending || text.isEmpty || tooLong ? null : _send,
-            child: Text(
-              _sending ? l10n.dailySongReplySending : l10n.dailySongReplySend,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

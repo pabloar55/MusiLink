@@ -12,6 +12,14 @@ a tu canción del día» para el receptor; la burbuja contiene solo la respuesta
 La notificación muestra «{usuario} ha respondido a tu canción» y el mensaje.
 Se mantienen las notificaciones, los contadores y el límite de envíos del chat.
 
+El botón Responder abre un bottom sheet con avatar, nombre, usuario, portada,
+título y artista. Reutiliza la barra del chat con «Escribe un mensaje…» y el
+botón de enviar, sin botón de compartir canción. Al enviar, se cierra de inmediato
+sin estado «Enviando…». El servicio del chat realiza el envío en segundo plano;
+si falla, se conserva el texto en un provider de sesión y se ofrece reintentar.
+Los borradores fallidos sobreviven al cierre del panel y a la navegación entre
+pantallas, y se limpian al cambiar de cuenta.
+
 Cada publicación se identifica por `users/{uid}.dailySongUpdatedAt`, incluso
 cuando se vuelve a elegir el mismo tema. Los perfiles antiguos sin esta fecha
 siguen mostrando su canción, pero deben volver a publicarla para habilitar las

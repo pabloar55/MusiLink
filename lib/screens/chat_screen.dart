@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
@@ -14,8 +13,8 @@ import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/app_user.dart';
-import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
+import 'package:musi_link/widgets/chat/chat_input_bar.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
 import 'package:musi_link/widgets/report_reason_dialog.dart';
@@ -583,13 +582,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             if (_isOtherUserDeleted)
               _buildDeletedAccountBar(colorScheme, l10n)
             else if (relationship.isLoading)
-              _buildInputBar(colorScheme, canSend: false)
+              _buildInputBar(canSend: false)
             else if (isBlockedByMe)
               _buildBlockedChatBar(colorScheme, l10n)
             else if (!canInteract)
               _buildNotFriendsChatBar(colorScheme, l10n)
             else
-              _buildInputBar(colorScheme),
+              _buildInputBar(),
           ],
         ),
       ),
@@ -735,61 +734,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildInputBar(ColorScheme colorScheme, {bool canSend = true}) {
-    final l10n = AppLocalizations.of(context)!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(20),
-            blurRadius: 4,
-            offset: const Offset(0, -1),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: canSend ? _showTrackSearch : null,
-              icon: const Icon(LucideIcons.music),
-              tooltip: l10n.chatShareSong,
-            ),
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                textCapitalization: TextCapitalization.sentences,
-                maxLines: 4,
-                minLines: 1,
-                decoration: InputDecoration(
-                  hintText: l10n.chatWriteMessage,
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest,
-                  border: AppTheme.pillInputBorder,
-                  enabledBorder: AppTheme.pillInputBorder,
-                  focusedBorder: AppTheme.pillInputBorder,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-                onSubmitted: canSend ? (_) => _sendMessage() : null,
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: canSend ? _sendMessage : null,
-              icon: const Icon(LucideIcons.sendHorizontal500),
-              style: IconButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-              ),
-            ),
-          ],
-        ),
-      ),
+  Widget _buildInputBar({bool canSend = true}) {
+    return ChatInputBar(
+      controller: _messageController,
+      canSend: canSend,
+      onSend: _sendMessage,
+      onShareSong: _showTrackSearch,
     );
   }
 
