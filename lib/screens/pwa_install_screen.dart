@@ -2,18 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/pwa_environment.dart';
 
 class PwaInstallScreen extends StatelessWidget {
-  const PwaInstallScreen({required this.onContinueInBrowser, super.key});
+  const PwaInstallScreen({
+    required this.onContinueInBrowser,
+    this.useIos27Menu,
+    super.key,
+  });
 
   final VoidCallback onContinueInBrowser;
+  final bool? useIos27Menu;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
+    final firstStep = (useIos27Menu ?? usesIos27PwaInstallMenu)
+        ? l10n.pwaInstallStepMenu
+        : l10n.pwaInstallStepMore;
     final steps = [
-      l10n.pwaInstallStepMore,
+      firstStep,
       l10n.pwaInstallStepShare,
       l10n.pwaInstallStepSeeMore,
       l10n.pwaInstallStepAdd,
@@ -52,9 +61,8 @@ class PwaInstallScreen extends StatelessWidget {
                   Text(
                     l10n.pwaInstallBody,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: AppTokens.spaceXL),
                   for (var index = 0; index < steps.length; index++) ...[

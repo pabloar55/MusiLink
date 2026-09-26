@@ -1386,6 +1386,12 @@ abstract class AppLocalizations {
   /// **'Tap More (···) in the bottom-right corner.'**
   String get pwaInstallStepMore;
 
+  /// No description provided for @pwaInstallStepMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the Menu button (three lines) in the bottom-left corner.'**
+  String get pwaInstallStepMenu;
+
   /// No description provided for @pwaInstallStepShare.
   ///
   /// In en, this message translates to:

@@ -1,4 +1,5 @@
 import 'package:web/web.dart' as web;
+import 'package:musi_link/utils/pwa_user_agent.dart';
 
 /// Whether the page is running from an installed PWA window.
 ///
@@ -12,3 +13,7 @@ bool get isIosWebPlatform {
   return RegExp(r'iPhone|iPad|iPod').hasMatch(userAgent) ||
       (navigator.platform == 'MacIntel' && navigator.maxTouchPoints > 1);
 }
+
+bool get usesIos27PwaInstallMenu =>
+    isIosWebPlatform &&
+    safariMajorVersionFromUserAgent(web.window.navigator.userAgent) >= 27;

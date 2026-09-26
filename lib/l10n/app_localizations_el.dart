@@ -724,6 +724,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get pwaInstallStepMore => 'Πατήστε Περισσότερα (···), κάτω δεξιά.';
 
   @override
+  String get pwaInstallStepMenu =>
+      'Πατήστε το κουμπί Μενού (τρεις γραμμές), κάτω αριστερά.';
+
+  @override
   String get pwaInstallStepShare => 'Πατήστε Κοινή χρήση.';
 
   @override

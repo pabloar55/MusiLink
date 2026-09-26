@@ -280,6 +280,7 @@
   "pwaInstallTitle": "Install MusiLink on your iPhone",
   "pwaInstallBody": "To receive notifications and enjoy the complete experience:",
   "pwaInstallStepMore": "Tap More (···) in the bottom-right corner.",
+  "pwaInstallStepMenu": "Tap the Menu button (three lines) in the bottom-left corner.",
   "pwaInstallStepShare": "Tap Share.",
   "pwaInstallStepSeeMore": "Tap “More”.",
   "pwaInstallStepAdd": "Choose “Add to Home Screen”.",

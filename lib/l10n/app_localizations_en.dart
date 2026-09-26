@@ -717,6 +717,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pwaInstallStepMore => 'Tap More (···) in the bottom-right corner.';
 
   @override
+  String get pwaInstallStepMenu =>
+      'Tap the Menu button (three lines) in the bottom-left corner.';
+
+  @override
   String get pwaInstallStepShare => 'Tap Share.';
 
   @override
