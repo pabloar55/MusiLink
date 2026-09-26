@@ -6,6 +6,7 @@ import {
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { db } from './firebase';
+import { maxGroupParticipants, validateGroupSender } from './group_chats';
 import { advanceFixedWindow } from './rate_limits';
 import { chatParticipants, stringList } from './firestore_values';
 
@@ -294,56 +295,65 @@ export async function createChatMessage(
     if (!chatSnap.exists) {
       throw new HttpsError('not-found', 'Chat not found.');
     }
-    const participants = chatParticipants(chatSnap.data());
+    const chatData = chatSnap.data()!;
+    const isGroup = chatData.type === 'group';
+    const participants = chatParticipants(chatData);
     if (
-      participants.length !== 2
-      || new Set(participants).size !== 2
+      (isGroup ? participants.length < 1 || participants.length > maxGroupParticipants : participants.length !== 2)
+      || new Set(participants).size !== participants.length
       || !participants.includes(senderId)
     ) {
       throw new HttpsError('permission-denied', 'The sender is not a chat participant.');
     }
-    const recipientId = participants.find((uid) => uid !== senderId)!;
-    const senderPublicRef = firestore.doc(`users/${senderId}`);
-    const recipientPublicRef = firestore.doc(`users/${recipientId}`);
-    const senderPrivateRef = firestore.doc(`user_private/${senderId}`);
-    const recipientPrivateRef = firestore.doc(`user_private/${recipientId}`);
-    const senderDeletionRef = firestore.doc(`account_deletions/${senderId}`);
-    const recipientDeletionRef = firestore.doc(`account_deletions/${recipientId}`);
+    const [messageSnap, limiterSnap] = await Promise.all([tx.get(messageRef), tx.get(limiterRef)]);
+    let recipientProfile: DocumentData | undefined;
+    let directRecipientId: string | undefined;
+    if (isGroup) {
+      if (payload.dailySongReply) throw new HttpsError('invalid-argument', 'Daily song replies require a direct chat.');
+      await validateGroupSender(firestore, tx, chatData, senderId);
+    } else {
+      const recipientId = participants.find((uid) => uid !== senderId)!;
+      const senderPublicRef = firestore.doc(`users/${senderId}`);
+      const recipientPublicRef = firestore.doc(`users/${recipientId}`);
+      const senderPrivateRef = firestore.doc(`user_private/${senderId}`);
+      const recipientPrivateRef = firestore.doc(`user_private/${recipientId}`);
+      const senderDeletionRef = firestore.doc(`account_deletions/${senderId}`);
+      const recipientDeletionRef = firestore.doc(`account_deletions/${recipientId}`);
 
-    const [
-      messageSnap,
-      senderPublicSnap,
-      recipientPublicSnap,
-      senderPrivateSnap,
-      recipientPrivateSnap,
-      senderDeletionSnap,
-      recipientDeletionSnap,
-      limiterSnap,
-    ] = await Promise.all([
-      tx.get(messageRef),
-      tx.get(senderPublicRef),
-      tx.get(recipientPublicRef),
-      tx.get(senderPrivateRef),
-      tx.get(recipientPrivateRef),
-      tx.get(senderDeletionRef),
-      tx.get(recipientDeletionRef),
-      tx.get(limiterRef),
-    ]);
+      const [
+        senderPublicSnap,
+        recipientPublicSnap,
+        senderPrivateSnap,
+        recipientPrivateSnap,
+        senderDeletionSnap,
+        recipientDeletionSnap,
+      ] = await Promise.all([
+        tx.get(senderPublicRef),
+        tx.get(recipientPublicRef),
+        tx.get(senderPrivateRef),
+        tx.get(recipientPrivateRef),
+        tx.get(senderDeletionRef),
+        tx.get(recipientDeletionRef),
+      ]);
 
-    if (
-      !isActiveUser(senderPublicSnap.data(), senderDeletionSnap.exists)
-      || !isActiveUser(recipientPublicSnap.data(), recipientDeletionSnap.exists)
-    ) {
-      throw new HttpsError('failed-precondition', 'Both users must be active.');
-    }
-    const senderPrivate = senderPrivateSnap.data();
-    const recipientPrivate = recipientPrivateSnap.data();
-    if (
-      !usersCanInteract(senderPrivate, senderId, recipientPrivate, recipientId)
-      || !stringList(senderPrivate?.friends).includes(recipientId)
-      || !stringList(recipientPrivate?.friends).includes(senderId)
-    ) {
-      throw new HttpsError('permission-denied', 'The users cannot interact in chat.');
+      if (
+        !isActiveUser(senderPublicSnap.data(), senderDeletionSnap.exists)
+        || !isActiveUser(recipientPublicSnap.data(), recipientDeletionSnap.exists)
+      ) {
+        throw new HttpsError('failed-precondition', 'Both users must be active.');
+      }
+      const senderPrivate = senderPrivateSnap.data();
+      const recipientPrivate = recipientPrivateSnap.data();
+      if (
+        !usersCanInteract(senderPrivate, senderId, recipientPrivate, recipientId)
+        || !stringList(senderPrivate?.friends).includes(recipientId)
+        || !stringList(recipientPrivate?.friends).includes(senderId)
+      ) {
+        throw new HttpsError('permission-denied', 'The users cannot interact in chat.');
+      }
+
+      recipientProfile = recipientPublicSnap.data();
+      directRecipientId = recipientId;
     }
 
     if (messageSnap.exists) {
@@ -354,9 +364,9 @@ export async function createChatMessage(
     }
 
     if (payload.dailySongReply) {
-      const profile = recipientPublicSnap.data();
+      const profile = recipientProfile;
       const publishedAt = profile?.dailySongUpdatedAt;
-      if (payload.dailySongReply.ownerId !== recipientId
+      if (payload.dailySongReply.ownerId !== directRecipientId
         || !(publishedAt instanceof Timestamp)
         || publishedAt.seconds * 1_000_000 + Math.floor(publishedAt.nanoseconds / 1000)
           !== payload.dailySongReply.publishedAtMicros
@@ -382,6 +392,7 @@ export async function createChatMessage(
 
     tx.create(messageRef, {
       senderId,
+      ...(isGroup ? { groupMessage: true } : {}),
       text: payload.text,
       timestamp: now,
       read: false,

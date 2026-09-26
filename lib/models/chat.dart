@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Modelo que representa una conversación entre dos usuarios.
+/// Modelo que representa una conversación individual o grupal.
 class Chat {
   final String id;
+  final bool isGroup;
+  final String name;
+  final String? createdBy;
   final List<String> participants;
   final String lastMessage;
   final DateTime lastMessageTime;
@@ -19,6 +22,9 @@ class Chat {
 
   const Chat({
     required this.id,
+    this.isGroup = false,
+    this.name = '',
+    this.createdBy,
     required this.participants,
     this.lastMessage = '',
     required this.lastMessageTime,
@@ -33,12 +39,14 @@ class Chat {
     final rawDeletedAt = data['deletedAt'] as Map<String, dynamic>? ?? {};
     return Chat(
       id: doc.id,
+      isGroup: data['type'] == 'group',
+      name: (data['name'] ?? '').toString(),
+      createdBy: data['createdBy'] as String?,
       participants: List<String>.from(data['participants'] ?? []),
       lastMessage: (data['lastMessage'] ?? '').toString(),
       lastMessageTime:
           (data['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      createdAt:
-          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       unreadCounts: rawCounts.map((k, v) => MapEntry(k, (v as num).toInt())),
       deletedAt: {
         for (final e in rawDeletedAt.entries)
@@ -49,6 +57,7 @@ class Chat {
 
   Map<String, dynamic> toFirestore() {
     return {
+      if (isGroup) ...{'type': 'group', 'name': name, 'createdBy': createdBy},
       'participants': participants,
       'lastMessage': lastMessage,
       'lastMessageTime': Timestamp.fromDate(lastMessageTime),
@@ -58,12 +67,12 @@ class Chat {
     };
   }
 
-  Chat copyWith({
-    String? lastMessage,
-    DateTime? lastMessageTime,
-  }) {
+  Chat copyWith({String? lastMessage, DateTime? lastMessageTime}) {
     return Chat(
       id: id,
+      isGroup: isGroup,
+      name: name,
+      createdBy: createdBy,
       participants: participants,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,

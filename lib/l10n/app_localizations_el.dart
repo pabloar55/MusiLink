@@ -805,4 +805,39 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get updateStoreOpenError =>
       'Δεν ήταν δυνατό το άνοιγμα του καταστήματος. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get groupChatNew => 'Νέα ομάδα';
+
+  @override
+  String get groupChatName => 'Όνομα ομάδας';
+
+  @override
+  String groupChatMembers(int count) {
+    return '$count μέλη';
+  }
+
+  @override
+  String get groupChatCreate => 'Δημιουργία ομάδας';
+
+  @override
+  String get groupChatNeedFriends =>
+      'Πρόσθεσε τουλάχιστον δύο φίλους για να δημιουργήσεις μια ομάδα.';
+
+  @override
+  String get groupChatCreateError =>
+      'Δεν ήταν δυνατή η δημιουργία της ομάδας. Έλεγξε ότι οι επιλεγμένοι φίλοι είναι ακόμη διαθέσιμοι και ότι δεν υπάρχουν αποκλεισμοί μεταξύ των μελών.';
+
+  @override
+  String get groupChatUnavailable => 'Αυτή η ομάδα δεν είναι διαθέσιμη.';
+
+  @override
+  String get groupChatCannotSend =>
+      'Δεν μπορείς να στείλεις μηνύματα σε αυτή την ομάδα. Έλεγξε τη συμμετοχή σου και τους αποκλεισμούς μεταξύ των μελών.';
+
+  @override
+  String get groupChatSearchFriends => 'Αναζήτηση φίλων…';
+
+  @override
+  String get groupChatYou => 'Εσύ';
 }

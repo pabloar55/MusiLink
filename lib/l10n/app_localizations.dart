@@ -1529,6 +1529,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'We couldn\'t open the store. Check your connection and try again.'**
   String get updateStoreOpenError;
+
+  /// No description provided for @groupChatNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get groupChatNew;
+
+  /// No description provided for @groupChatName.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get groupChatName;
+
+  /// No description provided for @groupChatMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} members'**
+  String groupChatMembers(int count);
+
+  /// No description provided for @groupChatCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create group'**
+  String get groupChatCreate;
+
+  /// No description provided for @groupChatNeedFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least two friends to start a group.'**
+  String get groupChatNeedFriends;
+
+  /// No description provided for @groupChatCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the group. Check that the selected friends are still available and that no members have blocked each other.'**
+  String get groupChatCreateError;
+
+  /// No description provided for @groupChatUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This group is not available.'**
+  String get groupChatUnavailable;
+
+  /// No description provided for @groupChatCannotSend.
+  ///
+  /// In en, this message translates to:
+  /// **'You cannot send messages to this group. Check your membership and any blocks between members.'**
+  String get groupChatCannotSend;
+
+  /// No description provided for @groupChatSearchFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Search friends…'**
+  String get groupChatSearchFriends;
+
+  /// No description provided for @groupChatYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get groupChatYou;
 }
 
 class _AppLocalizationsDelegate

@@ -52,6 +52,9 @@ export function notifChannelId(sound: boolean, vibration: boolean): string {
 }
 
 export function notificationPath(data: Record<string, string>): string {
+  if (data.type === 'new_message' && data.chatId && data.chatType === 'group') {
+    return `/group-chat/${encodeURIComponent(data.chatId)}`;
+  }
   if (data.type === 'new_message' && data.chatId && data.otherUserId) {
     const query = new URLSearchParams({
       chatId: data.chatId,

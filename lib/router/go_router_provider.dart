@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
+import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
@@ -12,6 +13,8 @@ import 'package:musi_link/screens/blocked_users_screen.dart';
 import 'package:musi_link/screens/auth_screen.dart';
 import 'package:musi_link/screens/terms_acceptance_screen.dart';
 import 'package:musi_link/screens/chat_screen.dart';
+import 'package:musi_link/screens/group_chat_screen.dart';
+import 'package:musi_link/screens/create_group_chat_screen.dart';
 import 'package:musi_link/screens/main_screen.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
@@ -152,6 +155,31 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: '/profile/:uid', builder: buildUserProfileRoute),
+      GoRoute(
+        path: '/new-group-chat',
+        builder: (context, state) => const CreateGroupChatScreen(),
+        routes: [
+          GoRoute(
+            path: 'name',
+            redirect: (context, state) {
+              final participants = state.extra;
+              return participants is List<String> &&
+                      participants.toSet().length >= 2 &&
+                      participants.length < ChatService.maxGroupParticipants
+                  ? null
+                  : '/new-group-chat';
+            },
+            builder: (context, state) => NameGroupChatScreen(
+              participantIds: state.extra! as List<String>,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/group-chat/:chatId',
+        builder: (context, state) =>
+            GroupChatScreen(chatId: state.pathParameters['chatId']!),
+      ),
       GoRoute(
         path: '/chat',
         redirect: (context, state) {

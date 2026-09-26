@@ -27,3 +27,5 @@ export { onDailySongLiked } from './daily_song_likes';
 export { submitModerationReport } from './moderation_reports';
 
 export { acknowledgeChatDelivery } from './chat_delivery';
+
+export { createGroupChat } from './group_chats';

@@ -25,7 +25,7 @@ function messageSummary(data) {
 }
 function allParticipantsDeletedBefore(data) {
     const participants = (0, firestore_values_1.chatParticipants)(data);
-    if (participants.length !== 2)
+    if (data?.type === 'group' ? participants.length < 1 : participants.length !== 2)
         return undefined;
     const deletedAt = data?.deletedAt;
     if (!deletedAt)
@@ -40,7 +40,9 @@ function allParticipantsDeletedBefore(data) {
 function shouldIncrementUnreadCount(chatData, recipientId, messageTime) {
     const deletedAt = chatData.deletedAt;
     const recipientDeletedAt = (0, firestore_values_1.timestampValue)(deletedAt?.[recipientId]);
-    return !recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis();
+    const readAt = (0, firestore_values_1.timestampValue)(chatData.lastReadAt?.[recipientId]);
+    return (!recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis())
+        && (!readAt || messageTime.toMillis() > readAt.toMillis());
 }
 async function pruneMessagesDeletedForAllParticipants(chatRef, chatData) {
     const pruneBefore = allParticipantsDeletedBefore(chatData);
@@ -154,11 +156,11 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
                 return undefined;
             }
             const participants = (0, firestore_values_1.chatParticipants)(chatData);
-            if (participants.length !== 2 || !participants.includes(senderId))
+            if (!participants.includes(senderId))
                 return undefined;
-            const recipientId = participants.find((uid) => uid !== senderId);
+            const recipientIds = participants.filter((uid) => uid !== senderId);
             const messageTime = (0, firestore_values_1.timestampValue)(currentMessage.timestamp);
-            if (!recipientId || !messageTime)
+            if (!messageTime)
                 return undefined;
             if (currentMessage.summaryApplied !== true) {
                 const updates = {};
@@ -171,46 +173,57 @@ exports.onNewMessage = (0, firestore_2.onDocumentCreated)({
                 }
                 // A delayed trigger must not restore unread messages that the recipient
                 // already hid by deleting the conversation.
-                if (currentMessage.read !== true &&
-                    shouldIncrementUnreadCount(chatData, recipientId, messageTime)) {
-                    updates[`unreadCounts.${recipientId}`] = firestore_1.FieldValue.increment(1);
+                for (const recipientId of recipientIds) {
+                    if (currentMessage.read !== true &&
+                        shouldIncrementUnreadCount(chatData, recipientId, messageTime)) {
+                        updates[`unreadCounts.${recipientId}`] = firestore_1.FieldValue.increment(1);
+                    }
                 }
                 if (Object.keys(updates).length > 0)
                     tx.update(chatRef, updates);
                 tx.update(messageRef, { summaryApplied: true });
             }
             return {
-                recipientId,
+                recipientIds,
+                groupName: chatData.type === 'group' ? String(chatData.name ?? '') : undefined,
+                notifiedRecipients: currentMessage.notifiedRecipients ?? [],
                 shouldSendNotification: currentMessage.notificationSent !== true,
             };
         });
         if (!summaryResult)
             return;
-        const { recipientId, shouldSendNotification } = summaryResult;
+        const { recipientIds, groupName, notifiedRecipients, shouldSendNotification } = summaryResult;
         if (!shouldSendNotification)
             return;
-        const [recipientSnap, senderSnap] = await Promise.all([
-            firebase_1.db.doc(`${userPrivateCollection}/${recipientId}`).get(),
-            firebase_1.db.doc(`users/${senderId}`).get(),
-        ]);
-        const senderName = senderSnap.data()?.displayName;
-        const senderPhotoUrl = senderSnap.data()?.photoUrl;
+        const sender = (await firebase_1.db.doc(`users/${senderId}`).get()).data();
+        const senderName = sender?.displayName;
+        const senderPhotoUrl = sender?.photoUrl;
         if (!senderName)
             return;
-        const deliveryToken = await (0, chat_delivery_1.createDeliveryToken)(messageRef);
-        const notification = (0, notifications_1.chatNotification)(message, senderName, recipientSnap.data());
-        await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), notification, {
-            type: 'new_message',
-            messageId: messageRef.id,
-            deliveryToken,
-            recipientId,
-            chatId,
-            otherUserId: senderId,
-            otherUserName: senderName,
-            messageText: notification.body,
-            ...(message.dailySongReply ? { notificationTitle: notification.title } : {}),
-            ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
-        }, chatId);
+        // Track each recipient so retries after a partial fan-out skip completed sends.
+        for (const recipientId of recipientIds) {
+            if (notifiedRecipients.includes(recipientId))
+                continue;
+            const recipientSnap = await firebase_1.db.doc(`${userPrivateCollection}/${recipientId}`).get();
+            if (!recipientSnap.exists)
+                continue;
+            const deliveryToken = groupName === undefined ? await (0, chat_delivery_1.createDeliveryToken)(messageRef) : undefined;
+            const notification = (0, notifications_1.chatNotification)(message, senderName, recipientSnap.data());
+            if (groupName !== undefined) {
+                notification.title = groupName;
+                notification.body = `${senderName}: ${notification.body}`;
+            }
+            await (0, notifications_1.sendNotification)(recipientId, recipientSnap.data(), notification, {
+                type: 'new_message', messageId: messageRef.id,
+                ...(deliveryToken ? { deliveryToken } : {}),
+                recipientId, chatId, otherUserId: senderId, otherUserName: senderName,
+                messageText: notification.body,
+                ...(groupName !== undefined ? { chatType: 'group', notificationTitle: groupName } : {}),
+                ...(message.dailySongReply ? { notificationTitle: notification.title } : {}),
+                ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
+            }, chatId);
+            await messageRef.update({ notifiedRecipients: firestore_1.FieldValue.arrayUnion(recipientId) });
+        }
         await messageRef.update({ notificationSent: true });
     }
     catch (error) {

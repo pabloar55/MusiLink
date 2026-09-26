@@ -18,6 +18,7 @@ class TrackBubble extends ConsumerStatefulWidget {
   final String chatId;
   final ChatService chatService;
   final bool reactionsEnabled;
+  final bool showReceipts;
   final VoidCallback? onReport;
 
   const TrackBubble({
@@ -29,6 +30,7 @@ class TrackBubble extends ConsumerStatefulWidget {
     required this.chatId,
     required this.chatService,
     this.reactionsEnabled = true,
+    this.showReceipts = true,
     this.onReport,
   });
 
@@ -219,7 +221,7 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
                                           ),
                                   ),
                                 ),
-                                if (widget.isMe) ...[
+                                if (widget.isMe && widget.showReceipts) ...[
                                   const SizedBox(width: AppTokens.spaceXS),
                                   Icon(
                                     (widget.message.read ||

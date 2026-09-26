@@ -12,6 +12,9 @@ import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/chat.dart';
+import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
@@ -22,15 +25,17 @@ import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';
 
-/// Pantalla de conversación individual.
+/// Conversación individual o grupal con historial compartido.
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
+  final Chat? group;
   final String otherUserName;
   final String otherUserId;
 
   const ChatScreen({
     super.key,
     required this.chatId,
+    this.group,
     required this.otherUserName,
     required this.otherUserId,
   });
@@ -40,7 +45,11 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen>
-    with WidgetsBindingObserver, RouteAware {
+    with WidgetsBindingObserver, RouteAware, UserFutureCache {
+  @override
+  UserService get userService => ref.read(userServiceProvider);
+
+  bool get _isGroup => widget.group != null;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController(keepScrollOffset: false);
   StreamSubscription<List<Message>>? _messagesSubscription;
@@ -75,12 +84,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
 
   bool get _canInteractInChat =>
-      ref
-          .read(relationshipProvider(widget.otherUserId))
-          .asData
-          ?.value
-          .canInteractInChat ??
-      false;
+      _isGroup ||
+      (ref
+              .read(relationshipProvider(widget.otherUserId))
+              .asData
+              ?.value
+              .canInteractInChat ??
+          false);
 
   bool get _canMarkMessagesRead => _isRouteVisible && _isAppResumed;
 
@@ -97,9 +107,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .read(notificationServiceProvider)
           .cancelChatNotifications(widget.chatId),
     );
-    _otherUserFuture = ref
-        .read(userServiceProvider)
-        .getUser(widget.otherUserId);
+    _otherUserFuture = _isGroup
+        ? Future.value(null)
+        : ref.read(userServiceProvider).getUser(widget.otherUserId);
     _otherUserFuture.then((user) {
       if (!mounted) return;
       setState(() => _isOtherUserDeleted = user?.isDeleted ?? false);
@@ -278,7 +288,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _markMessagesAsRead() {
-    unawaited(ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId));
+    final service = ref.read(chatServiceProvider);
+    if (_isGroup) {
+      final latest = _allMessages
+          .where((message) => !message.isPending)
+          .lastOrNull;
+      if (latest != null) {
+        unawaited(
+          service.markGroupMessagesAsRead(widget.chatId, latest.timestamp),
+        );
+      }
+    } else {
+      unawaited(service.markMessagesAsRead(widget.chatId));
+    }
   }
 
   @override
@@ -406,7 +428,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _showWriteError(FirebaseException? error) {
     final l10n = AppLocalizations.of(context)!;
     final message = switch (error?.code) {
-      'permission-denied' => l10n.chatNotFriendsCannotSend,
+      'permission-denied' =>
+        _isGroup ? l10n.groupChatCannotSend : l10n.chatNotFriendsCannotSend,
       'resource-exhausted' => l10n.authErrorTooManyRequests,
       _ => l10n.genericError,
     };
@@ -492,6 +515,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  void _showGroupMembers() {
+    final group = widget.group!;
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        children: [
+          ListTile(
+            title: Text(group.name),
+            subtitle: Text(
+              AppLocalizations.of(context)!
+                  .groupChatMembers(group.participants.length),
+            ),
+          ),
+          for (final uid in group.participants)
+            FutureBuilder<AppUser?>(
+              future: getUserFuture(uid),
+              builder: (context, snapshot) {
+                final user = snapshot.data;
+                return ListTile(
+                  leading: UserCircleAvatar(
+                    photoUrl: user?.photoUrl ?? '',
+                    name: user?.displayName ?? '',
+                    radius: 20,
+                  ),
+                  title: Text(
+                    user?.displayName ??
+                        AppLocalizations.of(context)!.socialUser,
+                  ),
+                  onTap: user == null || user.isDeleted
+                      ? null
+                      : () {
+                          Navigator.of(context).pop();
+                          this.context.push(
+                            userProfileLocation(uid, fromChat: true),
+                            extra: user,
+                          );
+                        },
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openOtherUserProfile() async {
     final nav = GoRouter.of(context);
     final user = await _otherUserFuture;
@@ -513,24 +583,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(relationshipProvider(widget.otherUserId), (previous, next) {
-      final couldInteract = previous?.asData?.value.canInteractInChat ?? false;
-      final canInteractNow = next.asData?.value.canInteractInChat ?? false;
-      if (!couldInteract &&
-          canInteractNow &&
-          _canMarkMessagesRead &&
-          _allMessages.isNotEmpty) {
-        _markMessagesAsRead();
-      }
-    });
+    if (!_isGroup) {
+      ref.listen(relationshipProvider(widget.otherUserId), (previous, next) {
+        final couldInteract =
+            previous?.asData?.value.canInteractInChat ?? false;
+        final canInteractNow = next.asData?.value.canInteractInChat ?? false;
+        if (!couldInteract &&
+            canInteractNow &&
+            _canMarkMessagesRead &&
+            _allMessages.isNotEmpty) {
+          _markMessagesAsRead();
+        }
+      });
+    }
 
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    final relationship = ref.watch(relationshipProvider(widget.otherUserId));
-    final relationshipResult = relationship.asData?.value;
+    final relationship = _isGroup
+        ? null
+        : ref.watch(relationshipProvider(widget.otherUserId));
+    final relationshipResult = relationship?.asData?.value;
     final isBlockedByMe =
         relationshipResult?.status == RelationshipStatus.blocked;
-    final canInteract = relationshipResult?.canInteractInChat ?? false;
+    final canInteract =
+        _isGroup || (relationshipResult?.canInteractInChat ?? false);
     final canPop = GoRouter.of(context).canPop();
 
     return PopScope(
@@ -543,35 +619,65 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           preferredSize: const Size.fromHeight(kToolbarHeight),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _openOtherUserProfile,
+            onTap: _isGroup ? _showGroupMembers : _openOtherUserProfile,
             child: AppBar(
               backgroundColor: colorScheme.surfaceContainerLow,
               leading: canPop ? null : BackButton(onPressed: _leaveChat),
               centerTitle: false,
               titleSpacing: 0,
-              title: FutureBuilder<AppUser?>(
-                future: _otherUserFuture,
-                builder: (context, snapshot) {
-                  final user = snapshot.data;
-                  final name = user?.displayName ?? widget.otherUserName;
-                  final photoUrl = user?.photoUrl ?? '';
+              title: _isGroup
+                  ? Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 16,
+                          child: Icon(Icons.group, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.group!.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                l10n.groupChatMembers(
+                                  widget.group!.participants.length,
+                                ),
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : FutureBuilder<AppUser?>(
+                      future: _otherUserFuture,
+                      builder: (context, snapshot) {
+                        final user = snapshot.data;
+                        final name = user?.displayName ?? widget.otherUserName;
+                        final photoUrl = user?.photoUrl ?? '';
 
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      UserCircleAvatar(
-                        photoUrl: photoUrl,
-                        name: name,
-                        radius: 16,
-                      ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Text(name, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            UserCircleAvatar(
+                              photoUrl: photoUrl,
+                              name: name,
+                              radius: 16,
+                            ),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
             ),
           ),
         ),
@@ -581,7 +687,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             Expanded(child: _buildMessageList(colorScheme, l10n, canInteract)),
             if (_isOtherUserDeleted)
               _buildDeletedAccountBar(colorScheme, l10n)
-            else if (relationship.isLoading)
+            else if (relationship?.isLoading ?? false)
               _buildInputBar(canSend: false)
             else if (isBlockedByMe)
               _buildBlockedChatBar(colorScheme, l10n)
@@ -649,6 +755,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       currentUid: _currentUid,
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
+                      showReceipts: !_isGroup,
                       reactionsEnabled: canInteract && !msg.isPending,
                       onReport: !isMe && !msg.isPending
                           ? () => _reportMessage(msg)
@@ -661,6 +768,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       currentUid: _currentUid,
                       chatId: widget.chatId,
                       chatService: ref.read(chatServiceProvider),
+                      showReceipts: !_isGroup,
                       reactionsEnabled: canInteract && !msg.isPending,
                       onReport: !isMe && !msg.isPending
                           ? () => _reportMessage(msg)
@@ -673,6 +781,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 children: [
                   if (showDateSeparator)
                     _buildDateSeparator(context, msg.timestamp, colorScheme),
+                  if (_isGroup && !isMe)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 8),
+                      child: FutureBuilder<AppUser?>(
+                        future: getUserFuture(msg.senderId),
+                        builder: (context, snapshot) => Text(
+                          snapshot.data?.displayName ?? l10n.socialUser,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colorScheme.primary),
+                        ),
+                      ),
+                    ),
                   messageBubble,
                 ],
               );

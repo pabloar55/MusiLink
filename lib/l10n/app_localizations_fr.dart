@@ -810,4 +810,39 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get updateStoreOpenError =>
       'Impossible d\'ouvrir la boutique. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get groupChatNew => 'Nouveau groupe';
+
+  @override
+  String get groupChatName => 'Nom du groupe';
+
+  @override
+  String groupChatMembers(int count) {
+    return '$count membres';
+  }
+
+  @override
+  String get groupChatCreate => 'Créer le groupe';
+
+  @override
+  String get groupChatNeedFriends =>
+      'Ajoutez au moins deux amis pour créer un groupe.';
+
+  @override
+  String get groupChatCreateError =>
+      'Impossible de créer le groupe. Vérifiez que les amis sélectionnés sont toujours disponibles et qu’aucun membre n’en a bloqué un autre.';
+
+  @override
+  String get groupChatUnavailable => 'Ce groupe n’est pas disponible.';
+
+  @override
+  String get groupChatCannotSend =>
+      'Vous ne pouvez pas envoyer de messages à ce groupe. Vérifiez votre adhésion et les blocages entre membres.';
+
+  @override
+  String get groupChatSearchFriends => 'Rechercher des amis…';
+
+  @override
+  String get groupChatYou => 'Vous';
 }

@@ -7,6 +7,7 @@ exports.createChatMessage = createChatMessage;
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const firebase_1 = require("./firebase");
+const group_chats_1 = require("./group_chats");
 const rate_limits_1 = require("./rate_limits");
 const firestore_values_1 = require("./firestore_values");
 const callableOptions = {
@@ -205,39 +206,51 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
         if (!chatSnap.exists) {
             throw new https_1.HttpsError('not-found', 'Chat not found.');
         }
-        const participants = (0, firestore_values_1.chatParticipants)(chatSnap.data());
-        if (participants.length !== 2
-            || new Set(participants).size !== 2
+        const chatData = chatSnap.data();
+        const isGroup = chatData.type === 'group';
+        const participants = (0, firestore_values_1.chatParticipants)(chatData);
+        if ((isGroup ? participants.length < 1 || participants.length > group_chats_1.maxGroupParticipants : participants.length !== 2)
+            || new Set(participants).size !== participants.length
             || !participants.includes(senderId)) {
             throw new https_1.HttpsError('permission-denied', 'The sender is not a chat participant.');
         }
-        const recipientId = participants.find((uid) => uid !== senderId);
-        const senderPublicRef = firestore.doc(`users/${senderId}`);
-        const recipientPublicRef = firestore.doc(`users/${recipientId}`);
-        const senderPrivateRef = firestore.doc(`user_private/${senderId}`);
-        const recipientPrivateRef = firestore.doc(`user_private/${recipientId}`);
-        const senderDeletionRef = firestore.doc(`account_deletions/${senderId}`);
-        const recipientDeletionRef = firestore.doc(`account_deletions/${recipientId}`);
-        const [messageSnap, senderPublicSnap, recipientPublicSnap, senderPrivateSnap, recipientPrivateSnap, senderDeletionSnap, recipientDeletionSnap, limiterSnap,] = await Promise.all([
-            tx.get(messageRef),
-            tx.get(senderPublicRef),
-            tx.get(recipientPublicRef),
-            tx.get(senderPrivateRef),
-            tx.get(recipientPrivateRef),
-            tx.get(senderDeletionRef),
-            tx.get(recipientDeletionRef),
-            tx.get(limiterRef),
-        ]);
-        if (!isActiveUser(senderPublicSnap.data(), senderDeletionSnap.exists)
-            || !isActiveUser(recipientPublicSnap.data(), recipientDeletionSnap.exists)) {
-            throw new https_1.HttpsError('failed-precondition', 'Both users must be active.');
+        const [messageSnap, limiterSnap] = await Promise.all([tx.get(messageRef), tx.get(limiterRef)]);
+        let recipientProfile;
+        let directRecipientId;
+        if (isGroup) {
+            if (payload.dailySongReply)
+                throw new https_1.HttpsError('invalid-argument', 'Daily song replies require a direct chat.');
+            await (0, group_chats_1.validateGroupSender)(firestore, tx, chatData, senderId);
         }
-        const senderPrivate = senderPrivateSnap.data();
-        const recipientPrivate = recipientPrivateSnap.data();
-        if (!usersCanInteract(senderPrivate, senderId, recipientPrivate, recipientId)
-            || !(0, firestore_values_1.stringList)(senderPrivate?.friends).includes(recipientId)
-            || !(0, firestore_values_1.stringList)(recipientPrivate?.friends).includes(senderId)) {
-            throw new https_1.HttpsError('permission-denied', 'The users cannot interact in chat.');
+        else {
+            const recipientId = participants.find((uid) => uid !== senderId);
+            const senderPublicRef = firestore.doc(`users/${senderId}`);
+            const recipientPublicRef = firestore.doc(`users/${recipientId}`);
+            const senderPrivateRef = firestore.doc(`user_private/${senderId}`);
+            const recipientPrivateRef = firestore.doc(`user_private/${recipientId}`);
+            const senderDeletionRef = firestore.doc(`account_deletions/${senderId}`);
+            const recipientDeletionRef = firestore.doc(`account_deletions/${recipientId}`);
+            const [senderPublicSnap, recipientPublicSnap, senderPrivateSnap, recipientPrivateSnap, senderDeletionSnap, recipientDeletionSnap,] = await Promise.all([
+                tx.get(senderPublicRef),
+                tx.get(recipientPublicRef),
+                tx.get(senderPrivateRef),
+                tx.get(recipientPrivateRef),
+                tx.get(senderDeletionRef),
+                tx.get(recipientDeletionRef),
+            ]);
+            if (!isActiveUser(senderPublicSnap.data(), senderDeletionSnap.exists)
+                || !isActiveUser(recipientPublicSnap.data(), recipientDeletionSnap.exists)) {
+                throw new https_1.HttpsError('failed-precondition', 'Both users must be active.');
+            }
+            const senderPrivate = senderPrivateSnap.data();
+            const recipientPrivate = recipientPrivateSnap.data();
+            if (!usersCanInteract(senderPrivate, senderId, recipientPrivate, recipientId)
+                || !(0, firestore_values_1.stringList)(senderPrivate?.friends).includes(recipientId)
+                || !(0, firestore_values_1.stringList)(recipientPrivate?.friends).includes(senderId)) {
+                throw new https_1.HttpsError('permission-denied', 'The users cannot interact in chat.');
+            }
+            recipientProfile = recipientPublicSnap.data();
+            directRecipientId = recipientId;
         }
         if (messageSnap.exists) {
             if (messageSnap.data()?.senderId !== senderId) {
@@ -246,9 +259,9 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
             return messageRef.id;
         }
         if (payload.dailySongReply) {
-            const profile = recipientPublicSnap.data();
+            const profile = recipientProfile;
             const publishedAt = profile?.dailySongUpdatedAt;
-            if (payload.dailySongReply.ownerId !== recipientId
+            if (payload.dailySongReply.ownerId !== directRecipientId
                 || !(publishedAt instanceof firestore_1.Timestamp)
                 || publishedAt.seconds * 1_000_000 + Math.floor(publishedAt.nanoseconds / 1000)
                     !== payload.dailySongReply.publishedAtMicros
@@ -266,6 +279,7 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
         }
         tx.create(messageRef, {
             senderId,
+            ...(isGroup ? { groupMessage: true } : {}),
             text: payload.text,
             timestamp: now,
             read: false,

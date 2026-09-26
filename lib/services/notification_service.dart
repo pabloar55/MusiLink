@@ -571,7 +571,8 @@ class NotificationService {
     final messageText = data['messageText'] as String?;
     if (chatId == null || senderName == null || messageText == null) return;
     final notificationTitle = data['notificationTitle'] as String?;
-    final notificationText = notificationTitle == null
+    final isGroup = data['chatType'] == 'group';
+    final notificationText = notificationTitle == null || isGroup
         ? messageText
         : '$notificationTitle\n$messageText';
 
@@ -579,7 +580,10 @@ class NotificationService {
       prefs: prefs,
       chatId: chatId,
       senderName: senderName,
-      text: notificationText,
+      senderId: senderId,
+      text: isGroup && messageText.startsWith('$senderName: ')
+          ? messageText.substring(senderName.length + 2)
+          : notificationText,
     );
     final senderIconBytes = await _notificationAvatarCache.load(
       data['senderPhotoUrl'] as String?,
@@ -608,8 +612,10 @@ class NotificationService {
             DateTime.fromMillisecondsSinceEpoch(message['timestamp']! as int),
             Person(
               name: message['senderName']! as String,
-              key: senderId,
-              icon: senderIcon,
+              key: message['senderId'] as String? ?? senderId,
+              icon: !isGroup || message['senderId'] == senderId
+                  ? senderIcon
+                  : null,
               important: true,
             ),
           ),
@@ -630,12 +636,13 @@ class NotificationService {
           groupKey: chatId,
           // One-to-one MessagingStyle layouts can hide the sender beside the
           // message. Keep their name in the notification header as well.
-          subText: senderName,
+          subText: isGroup ? notificationTitle : senderName,
           styleInformation: MessagingStyleInformation(
             const Person(name: 'Tú'),
             // Android reserves conversation titles for group chats; direct
             // chats derive their title from the sender Person instead.
-            groupConversation: false,
+            groupConversation: isGroup,
+            conversationTitle: isGroup ? notificationTitle : null,
             messages: styleMessages,
           ),
         ),
@@ -648,6 +655,7 @@ class NotificationService {
     required SharedPreferences prefs,
     required String chatId,
     required String senderName,
+    String? senderId,
     required String text,
   }) async {
     final rawHistory = prefs.getString(_chatHistoryKey);
@@ -659,6 +667,7 @@ class NotificationService {
         .toList();
     messages.add({
       'senderName': senderName,
+      'senderId': ?senderId,
       'text': text,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });

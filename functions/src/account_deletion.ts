@@ -342,6 +342,11 @@ async function processChats(uid: string, cursor?: string): Promise<PhaseResult> 
   const batch = getFirestore().batch();
   for (const { chat, latest } of latestMessages) {
     if (!latest) {
+      if (chat.data().type === 'group') {
+        batch.update(chat.ref, new FieldPath('unreadCounts', uid), FieldValue.delete(),
+          new FieldPath('deletedAt', uid), FieldValue.delete());
+        continue;
+      }
       batch.delete(chat.ref);
       continue;
     }

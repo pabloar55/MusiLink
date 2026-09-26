@@ -427,7 +427,7 @@ service cloud.firestore {
     function validReactions(reactions, participants) {
       return reactions is map
         && reactions.keys().hasOnly(['❤️', '🔥', '👏', '😍', '💀'])
-        && reactions.size() <= 2
+        && reactions.size() <= participants.size()
         && validReactionUsers(reactions, participants, '❤️')
         && validReactionUsers(reactions, participants, '🔥')
         && validReactionUsers(reactions, participants, '👏')
@@ -443,21 +443,25 @@ service cloud.firestore {
       return participants[0] == userId ? participants[1] : participants[0];
     }
 
-    function otherReactionUnchanged(before, after, otherId, emoji) {
-      return before.get(emoji, []).hasAny([otherId])
-        == after.get(emoji, []).hasAny([otherId]);
+    function otherReactionsUnchanged(before, after, emoji) {
+      return before.get(emoji, []).toSet().difference([request.auth.uid].toSet())
+        == after.get(emoji, []).toSet().difference([request.auth.uid].toSet());
     }
 
     function validReactionMutation(participants) {
       let before = resource.data.get('reactions', {});
       let after = request.resource.data.get('reactions', {});
-      let otherId = otherParticipant(participants, request.auth.uid);
       return validReactions(after, participants)
-        && otherReactionUnchanged(before, after, otherId, '❤️')
-        && otherReactionUnchanged(before, after, otherId, '🔥')
-        && otherReactionUnchanged(before, after, otherId, '👏')
-        && otherReactionUnchanged(before, after, otherId, '😍')
-        && otherReactionUnchanged(before, after, otherId, '💀');
+        && ((after.get('❤️', []).hasAny([request.auth.uid]) ? 1 : 0)
+          + (after.get('🔥', []).hasAny([request.auth.uid]) ? 1 : 0)
+          + (after.get('👏', []).hasAny([request.auth.uid]) ? 1 : 0)
+          + (after.get('😍', []).hasAny([request.auth.uid]) ? 1 : 0)
+          + (after.get('💀', []).hasAny([request.auth.uid]) ? 1 : 0)) <= 1
+        && otherReactionsUnchanged(before, after, '❤️')
+        && otherReactionsUnchanged(before, after, '🔥')
+        && otherReactionsUnchanged(before, after, '👏')
+        && otherReactionsUnchanged(before, after, '😍')
+        && otherReactionsUnchanged(before, after, '💀');
     }
 
     function validUnreadCounts(counts, participants) {
@@ -493,6 +497,20 @@ service cloud.firestore {
     // consultan únicamente desde backend/Firebase Console, nunca desde clientes.
     match /moderation_reports/{reportId} {
       allow read, write: if false;
+    }
+
+    function canUpdateChatMessages(chat) {
+      return chat.get('type', 'direct') == 'group'
+        ? isActiveUser(request.auth.uid)
+          && (request.auth.uid == resource.data.senderId
+            || canUsersInteract(request.auth.uid, resource.data.senderId))
+        : canUsersInteract(chat.participants[0], chat.participants[1])
+          && areMutualFriends(chat.participants[0], chat.participants[1]);
+    }
+
+    function validGroupCounterReset(before, after) {
+      return after.unreadCounts.diff(before.unreadCounts).affectedKeys().hasOnly([request.auth.uid])
+        && after.unreadCounts[request.auth.uid] == 0;
     }
 
     match /chats/{chatId} {
@@ -555,13 +573,27 @@ service cloud.firestore {
         && (
           // Caso 1: el usuario solo puede poner a cero su propio contador.
           (
-            canUsersInteract(resource.data.participants[0], resource.data.participants[1])
+            resource.data.get('type', 'direct') != 'group'
+            && canUsersInteract(resource.data.participants[0], resource.data.participants[1])
             && areMutualFriends(resource.data.participants[0], resource.data.participants[1])
             && validReadCounterReset(
               resource.data,
               request.resource.data,
               resource.data.participants
             )
+          )
+          ||
+          // Grupos: cada miembro mantiene únicamente su propia lectura.
+          (
+            resource.data.get('type', 'direct') == 'group'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadAt', 'unreadCounts'])
+            && request.resource.data.lastReadAt.diff(resource.data.get('lastReadAt', {}))
+              .affectedKeys().hasOnly([request.auth.uid])
+            && request.resource.data.lastReadAt[request.auth.uid] is timestamp
+            && request.resource.data.lastReadAt[request.auth.uid] <= request.time
+            && request.resource.data.lastReadAt[request.auth.uid]
+              >= resource.data.get('lastReadAt', {}).get(request.auth.uid, resource.data.createdAt)
+            && validGroupCounterReset(resource.data, request.resource.data)
           )
           ||
           // Caso 2: borrado suave — cambia deletedAt[request.auth.uid] y deja
@@ -577,11 +609,9 @@ service cloud.firestore {
                  .affectedKeys()
                  .hasOnly([request.auth.uid])
             && request.resource.data.deletedAt[request.auth.uid] == request.time
-            && validOwnUnreadCounterReset(
-              resource.data,
-              request.resource.data,
-              resource.data.participants
-            )
+            && (resource.data.get('type', 'direct') == 'group'
+              ? validGroupCounterReset(resource.data, request.resource.data)
+              : validOwnUnreadCounterReset(resource.data, request.resource.data, resource.data.participants))
           )
         );
 
@@ -601,24 +631,19 @@ service cloud.firestore {
         // reacción, cada participante solo puede cambiar su propia pertenencia.
         allow update: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
-          && canUsersInteract(
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-          )
-          && areMutualFriends(
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-          )
+          && canUpdateChatMessages(get(/databases/$(database)/documents/chats/$(chatId)).data)
           && (
             (
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+              get(/databases/$(database)/documents/chats/$(chatId)).data.get('type', 'direct') != 'group'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
               && request.auth.uid != resource.data.senderId
               && resource.data.read == false
               && request.resource.data.read == true
             )
             ||
             (
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivered'])
+              get(/databases/$(database)/documents/chats/$(chatId)).data.get('type', 'direct') != 'group'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivered'])
               && request.auth.uid != resource.data.senderId
               && request.resource.data.delivered == true
             )
@@ -626,19 +651,7 @@ service cloud.firestore {
             (
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
               && request.resource.data.diff(resource.data).affectedKeys().hasAll(['reactions'])
-              && areMutualFriends(
-                get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-                get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-              )
-              && (
-                canUsersInteract(
-                  get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
-                  get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
-                )
-                && validReactionMutation(
-                  get(/databases/$(database)/documents/chats/$(chatId)).data.participants
-                )
-              )
+              && validReactionMutation(get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
             )
           );
 

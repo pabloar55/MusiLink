@@ -258,3 +258,10 @@ final unreadChatsCountProvider = Provider<int>((ref) {
         orElse: () => 0,
       );
 });
+
+final groupChatProvider = StreamProvider.autoDispose.family<Chat?, String>((
+  ref,
+  chatId,
+) {
+  return ref.watch(chatServiceProvider).watchChat(chatId);
+});

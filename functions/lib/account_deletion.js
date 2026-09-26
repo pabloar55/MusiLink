@@ -278,6 +278,10 @@ async function processChats(uid, cursor) {
     const batch = (0, firestore_1.getFirestore)().batch();
     for (const { chat, latest } of latestMessages) {
         if (!latest) {
+            if (chat.data().type === 'group') {
+                batch.update(chat.ref, new firestore_1.FieldPath('unreadCounts', uid), firestore_1.FieldValue.delete(), new firestore_1.FieldPath('deletedAt', uid), firestore_1.FieldValue.delete());
+                continue;
+            }
             batch.delete(chat.ref);
             continue;
         }

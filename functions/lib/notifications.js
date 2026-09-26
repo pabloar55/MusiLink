@@ -54,6 +54,9 @@ function notifChannelId(sound, vibration) {
     return 'musilink_high_silent';
 }
 function notificationPath(data) {
+    if (data.type === 'new_message' && data.chatId && data.chatType === 'group') {
+        return `/group-chat/${encodeURIComponent(data.chatId)}`;
+    }
     if (data.type === 'new_message' && data.chatId && data.otherUserId) {
         const query = new URLSearchParams({
             chatId: data.chatId,

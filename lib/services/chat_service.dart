@@ -176,8 +176,59 @@ class ChatService with AuthenticatedService {
     }
   }
 
+  static const maxGroupParticipants = 20;
+
+  String newGroupChatId() => _chatsRef.doc().id;
+
+  Future<Chat> createGroupChat({
+    required String chatId,
+    required String name,
+    required List<String> participantIds,
+  }) async {
+    try {
+      await _functions.httpsCallable('createGroupChat').call<void>({
+        'chatId': chatId,
+        'name': name.trim(),
+        'participantIds': participantIds,
+      });
+      return Chat.fromFirestore(await _chatsRef.doc(chatId).get());
+    } catch (error, stack) {
+      await reportError(error, stack);
+      rethrow;
+    }
+  }
+
+  Stream<Chat?> watchChat(String chatId) => _chatsRef
+      .doc(chatId)
+      .snapshots()
+      .map((doc) => doc.exists ? Chat.fromFirestore(doc) : null);
+
+  /// The boundary comes from confirmed messages actually displayed on screen.
+  /// A concurrent newer summary is left unread until the next message snapshot.
+  Future<void> markGroupMessagesAsRead(String chatId, DateTime through) async {
+    final uid = currentUid;
+    final readAt = Timestamp.fromDate(through);
+    try {
+      final chatRef = _chatsRef.doc(chatId);
+      await _firestore.runTransaction((tx) async {
+        final doc = await tx.get(chatRef);
+        final data = doc.data();
+        if (data == null || data['type'] != 'group') return;
+        final latest = data['lastMessageTime'] as Timestamp?;
+        final previous = (data['lastReadAt'] as Map?)?[uid] as Timestamp?;
+        if ((latest != null && latest.compareTo(readAt) > 0) ||
+            (previous != null && previous.compareTo(readAt) >= 0)) {
+          return;
+        }
+        tx.update(chatRef, {'lastReadAt.$uid': readAt, 'unreadCounts.$uid': 0});
+      });
+    } catch (error, stack) {
+      await reportError(error, stack);
+    }
+  }
+
   /// Stream de los chats del usuario actual, ordenados por último mensaje.
-  /// Los chats sin mensajes y los borrados suavemente
+  /// Los chats individuales sin mensajes y los borrados suavemente
   /// (deletedAt[uid] >= lastMessageTime) quedan ocultos.
   Stream<List<Chat>> getChats() {
     final uid = currentUid;
@@ -190,14 +241,14 @@ class ChatService with AuthenticatedService {
           final chats = snapshot.docs.map(Chat.fromFirestore).where((chat) {
             final dt = chat.deletedAt[uid];
             _checkDeletedSince(uid, chat.id, dt);
-            if (chat.lastMessage.isEmpty) return false;
+            if (!chat.isGroup && chat.lastMessage.isEmpty) return false;
             return dt == null || chat.lastMessageTime.isAfter(dt);
           }).toList();
           // MainScreen escucha esta lista para el contador de pendientes:
           // adelantar la carga incluso antes de entrar en la pestaña de chats.
           if (_auth.currentUser?.uid == uid) {
             for (final chat in chats) {
-              if ((chat.unreadCounts[uid] ?? 0) > 0) {
+              if (!chat.isGroup && (chat.unreadCounts[uid] ?? 0) > 0) {
                 unawaited(markMessagesAsDelivered(chat.id));
               }
             }
@@ -316,7 +367,7 @@ class ChatService with AuthenticatedService {
       }
       final chat = Chat.fromFirestore(doc);
       if (!chat.participants.contains(uid)) return;
-      await markMessagesAsDelivered(chatId);
+      if (!chat.isGroup) await markMessagesAsDelivered(chatId);
       await prefetchMessages(
         chat,
         refresh: true,
@@ -595,7 +646,8 @@ class ChatService with AuthenticatedService {
     if (_auth.currentUser?.uid != uid) return;
     final incoming = docs.where((doc) {
       final data = doc.data();
-      return data['senderId'] != uid &&
+      return data['groupMessage'] != true &&
+          data['senderId'] != uid &&
           data['delivered'] != true &&
           data['read'] != true;
     }).toList();

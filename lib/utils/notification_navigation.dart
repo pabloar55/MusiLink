@@ -6,6 +6,9 @@ String? notificationLocationFromData(Map<String, dynamic> data) {
   switch (type) {
     case 'new_message':
       final chatId = data['chatId']?.toString();
+      if (chatId != null && data['chatType'] == 'group') {
+        return '/group-chat/${Uri.encodeComponent(chatId)}';
+      }
       final otherUserId = data['otherUserId']?.toString();
       final otherUserName = data['otherUserName']?.toString();
       if (chatId == null || otherUserId == null) return '/?tab=messages';
@@ -41,7 +44,7 @@ void handleNotificationNavigation(
   // markNeedsBuild during build, so wait until the current frame is complete.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!context.mounted) return;
-    if (location.startsWith('/chat')) {
+    if (location.startsWith('/chat') || location.startsWith('/group-chat/')) {
       context.push(location);
     } else {
       context.go(location);

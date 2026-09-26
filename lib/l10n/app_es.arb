@@ -295,5 +295,22 @@
   },
   "updateNowButton": "Actualizar ahora",
   "updateRetryButton": "Comprobar de nuevo",
-  "updateStoreOpenError": "No hemos podido abrir la tienda. Comprueba tu conexión e inténtalo de nuevo."
+  "updateStoreOpenError": "No hemos podido abrir la tienda. Comprueba tu conexión e inténtalo de nuevo.",
+  "groupChatNew": "Nuevo grupo",
+  "groupChatName": "Nombre del grupo",
+  "groupChatMembers": "{count} miembros",
+  "groupChatCreate": "Crear grupo",
+  "groupChatNeedFriends": "Añade al menos dos amigos para crear un grupo.",
+  "groupChatCreateError": "No se pudo crear el grupo. Comprueba que los amigos seleccionados siguen disponibles y que no hay bloqueos entre miembros.",
+  "groupChatUnavailable": "Este grupo no está disponible.",
+  "@groupChatMembers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupChatCannotSend": "No puedes enviar mensajes a este grupo. Comprueba tu pertenencia y los bloqueos entre miembros.",
+  "groupChatSearchFriends": "Buscar amigos…",
+  "groupChatYou": "Tú"
 }

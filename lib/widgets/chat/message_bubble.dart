@@ -16,6 +16,7 @@ class MessageBubble extends ConsumerStatefulWidget {
   final String chatId;
   final ChatService chatService;
   final bool reactionsEnabled;
+  final bool showReceipts;
   final VoidCallback? onReport;
 
   const MessageBubble({
@@ -27,6 +28,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     required this.chatId,
     required this.chatService,
     this.reactionsEnabled = true,
+    this.showReceipts = true,
     this.onReport,
   });
 
@@ -177,7 +179,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                                   : cs.onSurface.withAlpha(AppTokens.alphaLow),
                             ),
                           ),
-                          if (widget.isMe) ...[
+                          if (widget.isMe && widget.showReceipts) ...[
                             const SizedBox(width: AppTokens.spaceXS),
                             Icon(
                               (widget.message.read || widget.message.delivered)

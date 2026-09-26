@@ -158,188 +158,215 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
 
-    return ref
-        .watch(chatsProvider)
-        .when(
-          loading: () => SkeletonShimmer(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: List.generate(6, (_) => const SkeletonChatListTile()),
-            ),
-          ),
-          error: (error, _) {
-            reportError(error, StackTrace.current);
-            return Center(
-              child: Text(
-                l10n.socialErrorLoading,
-                style: TextStyle(color: colorScheme.onSurface.withAlpha(150)),
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'new-group-chat',
+        tooltip: l10n.groupChatNew,
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+        onPressed: () => context.push('/new-group-chat'),
+        child: const Icon(LucideIcons.messageSquarePlus, size: 24),
+      ),
+      body: ref
+          .watch(chatsProvider)
+          .when(
+            loading: () => SkeletonShimmer(
+              child: ListView(
+                padding: const EdgeInsets.only(top: 8, bottom: 88),
+                children: List.generate(6, (_) => const SkeletonChatListTile()),
               ),
-            );
-          },
-          data: (chats) {
-            final chatList = chats.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.messageCircle,
-                          size: 64,
-                          color: colorScheme.onSurface.withAlpha(100),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          l10n.socialNoChats,
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withAlpha(150),
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          l10n.socialNoChatsHint,
-                          style: TextStyle(
+            ),
+            error: (error, _) {
+              reportError(error, StackTrace.current);
+              return Center(
+                child: Text(
+                  l10n.socialErrorLoading,
+                  style: TextStyle(color: colorScheme.onSurface.withAlpha(150)),
+                ),
+              );
+            },
+            data: (chats) {
+              final chatList = chats.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.messageCircle,
+                            size: 64,
                             color: colorScheme.onSurface.withAlpha(100),
-                            fontSize: 14,
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: chats.length,
-                    separatorBuilder: (_, _) => Divider(
-                      height: 1,
-                      indent: 72,
-                      color: colorScheme.onSurface.withAlpha(30),
-                    ),
-                    itemBuilder: (context, index) {
-                      final chat = chats[index];
-                      unawaited(
-                        ref.read(chatServiceProvider).prefetchMessages(chat),
-                      );
-                      final otherUid = _otherUid(chat);
-
-                      return FutureBuilder<AppUser?>(
-                        future: getUserFuture(otherUid),
-                        builder: (context, userSnap) {
-                          final isLoading =
-                              userSnap.connectionState ==
-                                  ConnectionState.waiting &&
-                              !userSnap.hasData;
-                          if (isLoading) {
-                            return const SkeletonShimmer(
-                              child: SkeletonChatListTile(),
-                            );
-                          }
-
-                          final otherUser = userSnap.data;
-                          final name =
-                              otherUser?.displayName ?? l10n.socialUser;
-                          final photoUrl = otherUser?.photoUrl ?? '';
-
-                          final unread = chat.unreadCounts[_currentUid] ?? 0;
-                          return ListTile(
-                            leading: UserCircleAvatar(
-                              photoUrl: photoUrl,
-                              name: name,
-                              radius: 24,
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.socialNoChats,
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withAlpha(150),
+                              fontSize: 16,
                             ),
-                            title: Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: unread > 0
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                              ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.socialNoChatsHint,
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withAlpha(100),
+                              fontSize: 14,
                             ),
-                            subtitle: Text(
-                              chat.lastMessage,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: colorScheme.onSurface.withAlpha(
-                                  unread > 0 ? 200 : 150,
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(top: 8, bottom: 88),
+                      itemCount: chats.length,
+                      separatorBuilder: (_, _) => Divider(
+                        height: 1,
+                        indent: 72,
+                        color: colorScheme.onSurface.withAlpha(30),
+                      ),
+                      itemBuilder: (context, index) {
+                        final chat = chats[index];
+                        unawaited(
+                          ref.read(chatServiceProvider).prefetchMessages(chat),
+                        );
+                        final otherUid = chat.isGroup ? '' : _otherUid(chat);
+
+                        return FutureBuilder<AppUser?>(
+                          future: getUserFuture(otherUid),
+                          builder: (context, userSnap) {
+                            final isLoading =
+                                !chat.isGroup &&
+                                userSnap.connectionState ==
+                                    ConnectionState.waiting &&
+                                !userSnap.hasData;
+                            if (isLoading) {
+                              return const SkeletonShimmer(
+                                child: SkeletonChatListTile(),
+                              );
+                            }
+
+                            final otherUser = userSnap.data;
+                            final name = chat.isGroup
+                                ? chat.name
+                                : otherUser?.displayName ?? l10n.socialUser;
+                            final photoUrl = otherUser?.photoUrl ?? '';
+
+                            final unread = chat.unreadCounts[_currentUid] ?? 0;
+                            return ListTile(
+                              leading: chat.isGroup
+                                  ? const CircleAvatar(
+                                      radius: 24,
+                                      child: Icon(Icons.group_outlined),
+                                    )
+                                  : UserCircleAvatar(
+                                      photoUrl: photoUrl,
+                                      name: name,
+                                      radius: 24,
+                                    ),
+                              title: Text(
+                                name,
+                                style: TextStyle(
+                                  fontWeight: unread > 0
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
                                 ),
-                                fontWeight: unread > 0
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
                               ),
-                            ),
-                            trailing: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  _formatTime(chat.lastMessageTime, l10n),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: unread > 0
-                                        ? colorScheme.primary
-                                        : colorScheme.onSurface.withAlpha(120),
-                                    fontWeight: unread > 0
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
+                              subtitle: Text(
+                                chat.lastMessage.isEmpty && chat.isGroup
+                                    ? l10n.chatSendFirst
+                                    : chat.lastMessage,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: colorScheme.onSurface.withAlpha(
+                                    unread > 0 ? 200 : 150,
                                   ),
+                                  fontWeight: unread > 0
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                 ),
-                                if (unread > 0) ...[
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
+                              ),
+                              trailing: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    _formatTime(chat.lastMessageTime, l10n),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: unread > 0
+                                          ? colorScheme.primary
+                                          : colorScheme.onSurface.withAlpha(
+                                              120,
+                                            ),
+                                      fontWeight: unread > 0
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      unread > 99 ? '99+' : '$unread',
-                                      style: TextStyle(
-                                        color: colorScheme.onPrimary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+                                  ),
+                                  if (unread > 0) ...[
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        unread > 99 ? '99+' : '$unread',
+                                        style: TextStyle(
+                                          color: colorScheme.onPrimary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                            onTap: () {
-                              context.push(
-                                Uri(
-                                  path: '/chat',
-                                  queryParameters: {
-                                    'chatId': chat.id,
-                                    'otherUserName': name,
-                                    'otherUserId': otherUid,
-                                  },
-                                ).toString(),
-                              );
-                            },
-                            onLongPress: () =>
-                                _confirmDeleteChat(context, chat.id, l10n),
-                          );
-                        },
-                      );
-                    },
-                  );
+                              ),
+                              onTap: () {
+                                if (chat.isGroup) {
+                                  context.push(
+                                    '/group-chat/${Uri.encodeComponent(chat.id)}',
+                                  );
+                                  return;
+                                }
+                                context.push(
+                                  Uri(
+                                    path: '/chat',
+                                    queryParameters: {
+                                      'chatId': chat.id,
+                                      'otherUserName': name,
+                                      'otherUserId': otherUid,
+                                    },
+                                  ).toString(),
+                                );
+                              },
+                              onLongPress: () =>
+                                  _confirmDeleteChat(context, chat.id, l10n),
+                            );
+                          },
+                        );
+                      },
+                    );
 
-            return Column(
-              children: [
-                if (_showWebPushCard)
-                  _WebPushCard(
-                    state: _webPushState,
-                    requiresInstallation: _webPushRequiresInstallation,
-                    requesting: _requestingWebPush,
-                    onEnable: _requestWebPushPermission,
-                  ),
-                Expanded(child: chatList),
-              ],
-            );
-          },
-        );
+              return Column(
+                children: [
+                  if (_showWebPushCard)
+                    _WebPushCard(
+                      state: _webPushState,
+                      requiresInstallation: _webPushRequiresInstallation,
+                      requesting: _requestingWebPush,
+                      onEnable: _requestWebPushPermission,
+                    ),
+                  Expanded(child: chatList),
+                ],
+              );
+            },
+          ),
+    );
   }
 }
 

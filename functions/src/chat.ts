@@ -35,7 +35,7 @@ export function allParticipantsDeletedBefore(
   data: DocumentData | undefined,
 ): Timestamp | undefined {
   const participants = chatParticipants(data);
-  if (participants.length !== 2) return undefined;
+  if (data?.type === 'group' ? participants.length < 1 : participants.length !== 2) return undefined;
 
   const deletedAt = data?.deletedAt as Record<string, unknown> | undefined;
   if (!deletedAt) return undefined;
@@ -57,7 +57,9 @@ export function shouldIncrementUnreadCount(
 ): boolean {
   const deletedAt = chatData.deletedAt as Record<string, unknown> | undefined;
   const recipientDeletedAt = timestampValue(deletedAt?.[recipientId]);
-  return !recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis();
+  const readAt = timestampValue(chatData.lastReadAt?.[recipientId]);
+  return (!recipientDeletedAt || messageTime.toMillis() > recipientDeletedAt.toMillis())
+    && (!readAt || messageTime.toMillis() > readAt.toMillis());
 }
 
 async function pruneMessagesDeletedForAllParticipants(
@@ -191,10 +193,10 @@ export const onNewMessage = onDocumentCreated(
         }
 
         const participants = chatParticipants(chatData);
-        if (participants.length !== 2 || !participants.includes(senderId)) return undefined;
-        const recipientId = participants.find((uid) => uid !== senderId);
+        if (!participants.includes(senderId)) return undefined;
+        const recipientIds = participants.filter((uid) => uid !== senderId);
         const messageTime = timestampValue(currentMessage.timestamp);
-        if (!recipientId || !messageTime) return undefined;
+        if (!messageTime) return undefined;
 
         if (currentMessage.summaryApplied !== true) {
           const updates: UpdateData<DocumentData> = {};
@@ -209,11 +211,13 @@ export const onNewMessage = onDocumentCreated(
           }
           // A delayed trigger must not restore unread messages that the recipient
           // already hid by deleting the conversation.
-          if (
-            currentMessage.read !== true &&
-            shouldIncrementUnreadCount(chatData, recipientId, messageTime)
-          ) {
-            updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
+          for (const recipientId of recipientIds) {
+            if (
+              currentMessage.read !== true &&
+              shouldIncrementUnreadCount(chatData, recipientId, messageTime)
+            ) {
+              updates[`unreadCounts.${recipientId}`] = FieldValue.increment(1);
+            }
           }
 
           if (Object.keys(updates).length > 0) tx.update(chatRef, updates);
@@ -221,42 +225,41 @@ export const onNewMessage = onDocumentCreated(
         }
 
         return {
-          recipientId,
+          recipientIds,
+          groupName: chatData.type === 'group' ? String(chatData.name ?? '') : undefined,
+          notifiedRecipients: currentMessage.notifiedRecipients ?? [],
           shouldSendNotification: currentMessage.notificationSent !== true,
         };
       });
       if (!summaryResult) return;
-      const { recipientId, shouldSendNotification } = summaryResult;
+      const { recipientIds, groupName, notifiedRecipients, shouldSendNotification } = summaryResult;
       if (!shouldSendNotification) return;
-
-      const [recipientSnap, senderSnap] = await Promise.all([
-        db.doc(`${userPrivateCollection}/${recipientId}`).get(),
-        db.doc(`users/${senderId}`).get(),
-      ]);
-      const senderName = senderSnap.data()?.displayName as string | undefined;
-      const senderPhotoUrl = senderSnap.data()?.photoUrl as string | undefined;
+      const sender = (await db.doc(`users/${senderId}`).get()).data();
+      const senderName = sender?.displayName as string | undefined;
+      const senderPhotoUrl = sender?.photoUrl as string | undefined;
       if (!senderName) return;
-
-      const deliveryToken = await createDeliveryToken(messageRef);
-      const notification = chatNotification(message, senderName, recipientSnap.data());
-      await sendNotification(
-        recipientId,
-        recipientSnap.data(),
-        notification,
-        {
-          type: 'new_message',
-          messageId: messageRef.id,
-          deliveryToken,
-          recipientId,
-          chatId,
-          otherUserId: senderId,
-          otherUserName: senderName,
+      // Track each recipient so retries after a partial fan-out skip completed sends.
+      for (const recipientId of recipientIds) {
+        if (notifiedRecipients.includes(recipientId)) continue;
+        const recipientSnap = await db.doc(`${userPrivateCollection}/${recipientId}`).get();
+        if (!recipientSnap.exists) continue;
+        const deliveryToken = groupName === undefined ? await createDeliveryToken(messageRef) : undefined;
+        const notification = chatNotification(message, senderName, recipientSnap.data());
+        if (groupName !== undefined) {
+          notification.title = groupName;
+          notification.body = `${senderName}: ${notification.body}`;
+        }
+        await sendNotification(recipientId, recipientSnap.data(), notification, {
+          type: 'new_message', messageId: messageRef.id,
+          ...(deliveryToken ? { deliveryToken } : {}),
+          recipientId, chatId, otherUserId: senderId, otherUserName: senderName,
           messageText: notification.body,
+          ...(groupName !== undefined ? { chatType: 'group', notificationTitle: groupName } : {}),
           ...(message.dailySongReply ? { notificationTitle: notification.title } : {}),
           ...(senderPhotoUrl ? { senderPhotoUrl } : {}),
-        },
-        chatId,
-      );
+        }, chatId);
+        await messageRef.update({ notifiedRecipients: FieldValue.arrayUnion(recipientId) });
+      }
       await messageRef.update({ notificationSent: true });
     } catch (error) {
       logger.error('onNewMessage: unhandled error', {

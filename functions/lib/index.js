@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -40,4 +40,6 @@ var moderation_reports_1 = require("./moderation_reports");
 Object.defineProperty(exports, "submitModerationReport", { enumerable: true, get: function () { return moderation_reports_1.submitModerationReport; } });
 var chat_delivery_1 = require("./chat_delivery");
 Object.defineProperty(exports, "acknowledgeChatDelivery", { enumerable: true, get: function () { return chat_delivery_1.acknowledgeChatDelivery; } });
+var group_chats_1 = require("./group_chats");
+Object.defineProperty(exports, "createGroupChat", { enumerable: true, get: function () { return group_chats_1.createGroupChat; } });
 //# sourceMappingURL=index.js.map
