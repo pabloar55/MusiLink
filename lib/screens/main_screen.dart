@@ -183,6 +183,10 @@ class _MainScreenState extends ConsumerState<MainScreen>
           );
 
     return Scaffold(
+      // Text fields shown by modal routes manage their own keyboard insets.
+      // Keeping this scaffold fixed prevents the page behind a sheet from
+      // changing its scroll metrics when the keyboard opens or closes.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.surface,
         title: Image.asset('assets/images/logo.png', width: 150),
