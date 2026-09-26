@@ -161,6 +161,10 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(DailySongReplySheet), findsOneWidget);
       expect(find.byType(ChatInputBar), findsOneWidget);
+      expect(
+        tester.widget<ChatInputBar>(find.byType(ChatInputBar)).backgroundColor,
+        Colors.transparent,
+      );
       expect(find.byType(UserCircleAvatar), findsOneWidget);
       expect(find.byType(TrackArtwork), findsOneWidget);
       expect(find.text('Alice'), findsOneWidget);

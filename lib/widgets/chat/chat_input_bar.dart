@@ -14,6 +14,7 @@ class ChatInputBar extends StatelessWidget {
     this.autofocus = false,
     this.errorText,
     this.onChanged,
+    this.backgroundColor,
   });
 
   final TextEditingController controller;
@@ -23,6 +24,7 @@ class ChatInputBar extends StatelessWidget {
   final bool autofocus;
   final String? errorText;
   final ValueChanged<String>? onChanged;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +33,7 @@ class ChatInputBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: backgroundColor ?? colorScheme.surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(20),

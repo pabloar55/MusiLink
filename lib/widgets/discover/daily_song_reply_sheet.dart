@@ -94,12 +94,6 @@ class _DailySongReplySheetState extends State<DailySongReplySheet> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    tooltip: MaterialLocalizations.of(context)
-                        .closeButtonTooltip,
-                    icon: const Icon(Icons.close),
-                  ),
                 ],
               ),
             ),
@@ -148,6 +142,7 @@ class _DailySongReplySheetState extends State<DailySongReplySheet> {
             ChatInputBar(
               controller: _controller,
               autofocus: true,
+              backgroundColor: Colors.transparent,
               canSend: text.isNotEmpty && !tooLong,
               errorText: tooLong ? l10n.dailySongReplyTooLong : null,
               onChanged: (_) => setState(() {}),
