@@ -720,7 +720,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pwaInstallStepMenu =>
-      'Pulsa el botón Menú (tres líneas), abajo a la izquierda.';
+      'Pulsa el botón Menú (☰), abajo a la izquierda.';
 
   @override
   String get pwaInstallStepShare => 'Toca Compartir.';
