@@ -10,6 +10,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -51,14 +52,14 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
     super.dispose();
   }
 
-  Future<void> _continue(List<String> selectedIds) async {
-    if (_openingName || selectedIds.length < 2) return;
+  Future<void> _continue(List<AppUser> selectedUsers) async {
+    if (_openingName || selectedUsers.length < 2) return;
     FocusScope.of(context).unfocus();
     setState(() => _openingName = true);
     try {
       await context.push<void>(
         '/new-group-chat/name',
-        extra: List<String>.unmodifiable(selectedIds),
+        extra: List<AppUser>.unmodifiable(selectedUsers),
       );
     } finally {
       if (mounted) setState(() => _openingName = false);
@@ -81,22 +82,21 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
         setState(() => _selected.retainAll(availableIds));
       }
     });
-    final selectedIds =
+    final selectedUsers =
         friends.asData?.value
             .where((user) => !user.isDeleted && _selected.contains(user.uid))
-            .map((user) => user.uid)
             .toList() ??
-        <String>[];
+        <AppUser>[];
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.groupChatNew)),
-      floatingActionButton: selectedIds.length >= 2
+      floatingActionButton: selectedUsers.length >= 2
           ? FloatingActionButton(
               heroTag: 'group-chat-next',
               tooltip: l10n.onboardingNext,
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
-              onPressed: _openingName ? null : () => _continue(selectedIds),
+              onPressed: _openingName ? null : () => _continue(selectedUsers),
               child: const Icon(LucideIcons.arrowRight),
             )
           : null,
@@ -126,11 +126,11 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
                 onChanged: (_) => setState(() {}),
               ),
             ),
-            if (selectedIds.isNotEmpty)
+            if (selectedUsers.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  l10n.groupChatMembers(selectedIds.length + 1),
+                  l10n.groupChatMembers(selectedUsers.length + 1),
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ),
@@ -208,8 +208,8 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
 }
 
 class NameGroupChatScreen extends ConsumerStatefulWidget {
-  const NameGroupChatScreen({super.key, required this.participantIds});
-  final List<String> participantIds;
+  const NameGroupChatScreen({super.key, required this.participants});
+  final List<AppUser> participants;
 
   @override
   ConsumerState<NameGroupChatScreen> createState() =>
@@ -219,12 +219,6 @@ class NameGroupChatScreen extends ConsumerStatefulWidget {
 class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
   final _name = TextEditingController();
   late final String _chatId = ref.read(chatServiceProvider).newGroupChatId();
-  late final Future<List<AppUser>> _memberProfiles = ref
-      .read(userServiceProvider)
-      .getUsersByIds([
-        ?ref.read(firebaseAuthProvider).currentUser?.uid,
-        ...widget.participantIds,
-      ]);
   bool _saving = false;
   String? _error;
 
@@ -247,7 +241,9 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
           .createGroupChat(
             chatId: _chatId,
             name: _name.text,
-            participantIds: widget.participantIds,
+            participantIds: widget.participants
+                .map((user) => user.uid)
+                .toList(),
           );
       if (mounted) context.go('/group-chat/${Uri.encodeComponent(chat.id)}');
     } catch (error) {
@@ -270,6 +266,7 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final currentUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final currentUser = ref.watch(currentUserProvider).asData?.value;
     return PopScope(
       canPop: !_saving,
       child: Scaffold(
@@ -319,51 +316,37 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
                         vertical: 8,
                       ),
                       child: Text(
-                        l10n.groupChatMembers(widget.participantIds.length + 1),
+                        l10n.groupChatMembers(widget.participants.length + 1),
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                     ),
-                    FutureBuilder<List<AppUser>>(
-                      future: _memberProfiles,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(l10n.socialErrorLoading),
-                          );
-                        }
-                        if (!snapshot.hasData) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        return Column(
-                          children: [
-                            for (final user in snapshot.data!)
-                              ListTile(
-                                key: ValueKey(user.uid),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                leading: UserCircleAvatar(
-                                  photoUrl: user.photoUrl,
-                                  name: user.displayName,
-                                  radius: 20,
-                                ),
-                                title: Text(
-                                  user.uid == currentUid
-                                      ? l10n.groupChatYou
-                                      : user.displayName,
-                                ),
-                                subtitle: user.uid == currentUid
-                                    ? null
-                                    : Text('@${user.username}'),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+                    if (currentUid != null)
+                      ListTile(
+                        key: ValueKey(currentUid),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
+                        leading: UserCircleAvatar(
+                          photoUrl: currentUser?.photoUrl ?? '',
+                          name: currentUser?.displayName ?? l10n.groupChatYou,
+                          radius: 20,
+                        ),
+                        title: Text(l10n.groupChatYou),
+                      ),
+                    for (final user in widget.participants)
+                      ListTile(
+                        key: ValueKey(user.uid),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
+                        leading: UserCircleAvatar(
+                          photoUrl: user.photoUrl,
+                          name: user.displayName,
+                          radius: 20,
+                        ),
+                        title: Text(user.displayName),
+                        subtitle: Text('@${user.username}'),
+                      ),
                     if (_error != null)
                       Padding(
                         padding: const EdgeInsets.all(4),

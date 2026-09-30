@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
@@ -163,14 +164,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: 'name',
             redirect: (context, state) {
               final participants = state.extra;
-              return participants is List<String> &&
-                      participants.toSet().length >= 2 &&
+              return participants is List<AppUser> &&
+                      participants.map((user) => user.uid).toSet().length >=
+                          2 &&
                       participants.length < ChatService.maxGroupParticipants
                   ? null
                   : '/new-group-chat';
             },
             builder: (context, state) => NameGroupChatScreen(
-              participantIds: state.extra! as List<String>,
+              participants: state.extra! as List<AppUser>,
             ),
           ),
         ],
