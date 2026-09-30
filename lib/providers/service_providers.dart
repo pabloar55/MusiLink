@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:musi_link/models/chat.dart';
@@ -10,7 +9,6 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/account_deletion_service.dart';
 import 'package:musi_link/services/chat_service.dart';
-import 'package:musi_link/services/authenticated_callable_client.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
@@ -93,21 +91,10 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
 });
 
 final chatServiceProvider = Provider<ChatService>((ref) {
-  final auth = ref.watch(firebaseAuthProvider);
-  final functions = ref.watch(firebaseFunctionsProvider);
   return ChatService(
     firestore: ref.watch(firebaseFirestoreProvider),
-    auth: auth,
-    functions: functions,
-    callableClient: kIsWeb
-        ? AuthenticatedCallableClient(
-            projectId: functions.app.options.projectId,
-            region: firebaseFunctionsRegion,
-            getIdToken: () async => auth.currentUser?.getIdToken(),
-            getAppCheckToken: () =>
-                ref.read(firebaseAppCheckProvider).getToken(),
-          )
-        : null,
+    auth: ref.watch(firebaseAuthProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
     messageCache: ChatMessageCache(ref.watch(sharedPreferencesProvider)),
   );
 });

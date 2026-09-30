@@ -8,7 +8,6 @@ import 'package:musi_link/models/track.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/services/chat_service.dart';
-import 'package:musi_link/services/authenticated_callable_client.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,9 +16,6 @@ import '../helpers/mocks.dart';
 /// Mock para CollectionReference de subcollection (messages)
 class MockMessagesCollectionRef extends Mock
     implements CollectionReference<Map<String, dynamic>> {}
-
-class MockAuthenticatedCallableClient extends Mock
-    implements AuthenticatedCallableClient {}
 
 void main() {
   late MockFirebaseFirestore mockFirestore;
@@ -76,97 +72,6 @@ void main() {
   });
 
   group('ChatService', () {
-    group('createGroupChat', () {
-      late MockAuthenticatedCallableClient client;
-      late MockDocumentReference chatRef;
-      late MockDocumentSnapshot snapshot;
-      final data = {
-        'chatId': 'group-1',
-        'name': 'Music friends',
-        'participantIds': ['friend-1', 'friend-2'],
-      };
-
-      setUp(() {
-        client = MockAuthenticatedCallableClient();
-        chatRef = MockDocumentReference();
-        snapshot = MockDocumentSnapshot();
-        when(() => mockChatsRef.doc('group-1')).thenReturn(chatRef);
-        when(() => chatRef.get()).thenAnswer((_) async => snapshot);
-        when(() => snapshot.id).thenReturn('group-1');
-        when(() => snapshot.data()).thenReturn({
-          'type': 'group',
-          'name': 'Music friends',
-          'createdBy': 'current_uid',
-          'participants': ['current_uid', 'friend-1', 'friend-2'],
-          'createdAt': Timestamp.fromDate(DateTime(2026)),
-          'lastMessageTime': Timestamp.fromDate(DateTime(2026)),
-        });
-        chatService = ChatService(
-          firestore: mockFirestore,
-          auth: mockAuth,
-          functions: mockFunctions,
-          callableClient: client,
-        );
-      });
-
-      test(
-        'web creation uses the authenticated client and reuses its ID',
-        () async {
-          when(() => client.call('createGroupChat', data))
-              .thenAnswer((_) async {});
-          for (var attempt = 0; attempt < 2; attempt++) {
-            final chat = await chatService.createGroupChat(
-              chatId: 'group-1',
-              name: ' Music friends ',
-              participantIds: ['friend-1', 'friend-2'],
-            );
-            expect(chat.id, 'group-1');
-            expect(chat.isGroup, isTrue);
-          }
-          verify(() => client.call('createGroupChat', data)).called(2);
-          verifyNever(() => mockFunctions.httpsCallable('createGroupChat'));
-        },
-      );
-
-      test(
-        'surfaces callable failures without waiting for a Firestore read',
-        () async {
-          final error = Exception('Failed to create group');
-          when(() => client.call('createGroupChat', data)).thenThrow(error);
-          await expectLater(
-            chatService.createGroupChat(
-              chatId: 'group-1',
-              name: 'Music friends',
-              participantIds: ['friend-1', 'friend-2'],
-            ),
-            throwsA(same(error)),
-          );
-          verifyNever(() => chatRef.get());
-        },
-      );
-
-      test('native creation keeps using the Firebase SDK', () async {
-        final callable = MockHttpsCallable();
-        when(() => mockFunctions.httpsCallable('createGroupChat'))
-            .thenReturn(callable);
-        when(() => callable.call<void>(data))
-            .thenAnswer((_) async => MockHttpsCallableResult<void>());
-        final nativeService = ChatService(
-          firestore: mockFirestore,
-          auth: mockAuth,
-          functions: mockFunctions,
-        );
-        final chat = await nativeService.createGroupChat(
-          chatId: 'group-1',
-          name: ' Music friends ',
-          participantIds: ['friend-1', 'friend-2'],
-        );
-        expect(chat.id, 'group-1');
-        verify(() => callable.call<void>(data)).called(1);
-        verifyNever(() => client.call('createGroupChat', data));
-      });
-    });
-
     group('prefetchMessages', () {
       late MockDocumentReference chatRef;
       late MockQuery ordered;

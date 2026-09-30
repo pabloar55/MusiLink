@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
-import 'package:musi_link/services/authenticated_callable_client.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/chat.dart';
@@ -22,13 +21,11 @@ class ChatService with AuthenticatedService {
     required this._auth,
     required this._functions,
     this._messageCache,
-    this._callableClient,
   });
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final FirebaseFunctions _functions;
-  final AuthenticatedCallableClient? _callableClient;
   final ChatMessageCache? _messageCache;
 
   @override
@@ -194,14 +191,10 @@ class ChatService with AuthenticatedService {
         'name': name.trim(),
         'participantIds': participantIds,
       };
-      if (_callableClient case final client?) {
-        await client.call('createGroupChat', data);
-      } else {
-        await _functions
-            .httpsCallable('createGroupChat')
-            .call<void>(data)
-            .timeout(const Duration(seconds: 30));
-      }
+      await _functions
+          .httpsCallable('createGroupChat')
+          .call<void>(data)
+          .timeout(const Duration(seconds: 30));
       return Chat.fromFirestore(
         await _chatsRef.doc(chatId).get().timeout(const Duration(seconds: 10)),
       );
