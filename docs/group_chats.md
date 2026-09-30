@@ -42,6 +42,22 @@ Quedan para siguientes iteraciones: añadir o expulsar miembros, salir del grupo
 roles de administrador, editar nombre/foto y recibos de lectura por miembro.
 Ocultar una conversación no equivale a abandonar el grupo.
 
-No se han creado tests para esta entrega. Las comprobaciones usan las suites
-existentes; queda pendiente verificar el flujo grupal completo con varias cuentas
-y las notificaciones en dispositivos reales tras desplegar el backend.
+Las pruebas de `ChatService` y `AuthenticatedCallableClient` cubren el transporte
+de creación, sus errores, el timeout y la reutilización del ID al reintentar.
+Queda pendiente verificar el flujo grupal completo con varias cuentas y las
+notificaciones en dispositivos reales tras desplegar el backend.
+
+## Creación desde Safari y la PWA
+
+En el simulador iOS, el token FCM puede quedarse pendiente aun con el permiso de
+notificaciones concedido. El SDK web de Functions espera ese token opcional antes
+de enviar la petición y de iniciar su timeout. En la creación web se usa el
+[protocolo callable de Firebase](https://firebase.google.com/docs/functions/callable-reference)
+con los tokens de Auth y App Check, sin solicitar FCM. Las comprobaciones del
+backend y las reglas conservan los mismos permisos.
+
+La petición, incluida la obtención de tokens, tiene un límite de 30 segundos.
+La lectura posterior del grupo tiene un límite de 10 segundos. Si se agota la
+espera, se muestra un error de conexión y se permite reintentar con el mismo ID;
+el backend mantiene la creación idempotente. Esta corrección requiere publicar
+el cliente web; no modifica las funciones, las reglas ni el esquema.

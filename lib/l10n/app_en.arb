@@ -317,6 +317,7 @@
   "groupChatCreate": "Create group",
   "groupChatNeedFriends": "Add at least two friends to start a group.",
   "groupChatCreateError": "Could not create the group. Check that the selected friends are still available and that no members have blocked each other.",
+  "groupChatConnectionError": "Could not confirm group creation. Check your connection and try again.",
   "groupChatUnavailable": "This group is not available.",
   "@groupChatMembers": {
     "placeholders": {

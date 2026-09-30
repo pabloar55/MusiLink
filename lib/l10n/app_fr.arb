@@ -302,6 +302,7 @@
   "groupChatCreate": "Créer le groupe",
   "groupChatNeedFriends": "Ajoutez au moins deux amis pour créer un groupe.",
   "groupChatCreateError": "Impossible de créer le groupe. Vérifiez que les amis sélectionnés sont toujours disponibles et qu’aucun membre n’en a bloqué un autre.",
+  "groupChatConnectionError": "Impossible de confirmer la création du groupe. Vérifiez votre connexion et réessayez.",
   "groupChatUnavailable": "Ce groupe n’est pas disponible.",
   "@groupChatMembers": {
     "placeholders": {

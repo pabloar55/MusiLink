@@ -1566,6 +1566,12 @@ abstract class AppLocalizations {
   /// **'Could not create the group. Check that the selected friends are still available and that no members have blocked each other.'**
   String get groupChatCreateError;
 
+  /// No description provided for @groupChatConnectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not confirm group creation. Check your connection and try again.'**
+  String get groupChatConnectionError;
+
   /// No description provided for @groupChatUnavailable.
   ///
   /// In en, this message translates to:

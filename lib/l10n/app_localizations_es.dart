@@ -823,6 +823,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo crear el grupo. Comprueba que los amigos seleccionados siguen disponibles y que no hay bloqueos entre miembros.';
 
   @override
+  String get groupChatConnectionError =>
+      'No se pudo confirmar la creación del grupo. Comprueba tu conexión y vuelve a intentarlo.';
+
+  @override
   String get groupChatUnavailable => 'Este grupo no está disponible.';
 
   @override

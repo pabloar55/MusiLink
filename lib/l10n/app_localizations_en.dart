@@ -820,6 +820,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not create the group. Check that the selected friends are still available and that no members have blocked each other.';
 
   @override
+  String get groupChatConnectionError =>
+      'Could not confirm group creation. Check your connection and try again.';
+
+  @override
   String get groupChatUnavailable => 'This group is not available.';
 
   @override

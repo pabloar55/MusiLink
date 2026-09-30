@@ -829,6 +829,10 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν ήταν δυνατή η δημιουργία της ομάδας. Έλεγξε ότι οι επιλεγμένοι φίλοι είναι ακόμη διαθέσιμοι και ότι δεν υπάρχουν αποκλεισμοί μεταξύ των μελών.';
 
   @override
+  String get groupChatConnectionError =>
+      'Δεν ήταν δυνατή η επιβεβαίωση της δημιουργίας της ομάδας. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.';
+
+  @override
   String get groupChatUnavailable => 'Αυτή η ομάδα δεν είναι διαθέσιμη.';
 
   @override

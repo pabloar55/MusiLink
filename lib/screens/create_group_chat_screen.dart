@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 
 InputDecoration _groupInputDecoration(
@@ -250,9 +253,10 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error =
-            error is FirebaseFunctionsException &&
-                error.code == 'resource-exhausted'
+        _error = error is TimeoutException || isNetworkError(error)
+            ? l10n.groupChatConnectionError
+            : error is FirebaseFunctionsException &&
+                  error.code == 'resource-exhausted'
             ? l10n.authErrorTooManyRequests
             : l10n.groupChatCreateError;
       });
@@ -270,13 +274,29 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
       canPop: !_saving,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n.groupChatName)),
+        floatingActionButton: FloatingActionButton(
+          heroTag: 'group-chat-create',
+          tooltip: l10n.groupChatCreate,
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+          onPressed: _saving || _name.text.trim().isEmpty ? null : _create,
+          child: _saving
+              ? SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.onPrimary,
+                  ),
+                )
+              : const Icon(LucideIcons.check),
+        ),
         body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
                   children: [
                     TextField(
                       controller: _name,
@@ -353,21 +373,6 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
                         ),
                       ),
                   ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                  onPressed: _saving || _name.text.trim().isEmpty
-                      ? null
-                      : _create,
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(LucideIcons.check),
-                  label: Text(l10n.groupChatCreate),
                 ),
               ),
             ],
