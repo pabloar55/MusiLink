@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,8 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
+import 'package:musi_link/widgets/group_circle_avatar.dart';
+import 'package:musi_link/widgets/image_source_picker.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 
 InputDecoration _groupInputDecoration(
@@ -219,6 +223,8 @@ class NameGroupChatScreen extends ConsumerStatefulWidget {
 class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
   final _name = TextEditingController();
   late final String _chatId = ref.read(chatServiceProvider).newGroupChatId();
+  XFile? _photo;
+  Uint8List? _photoBytes;
   bool _saving = false;
   String? _error;
 
@@ -228,9 +234,31 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
     super.dispose();
   }
 
+  Future<void> _pickPhoto() async {
+    final source = await showImageSourcePicker(context);
+    if (source == null || !mounted) return;
+
+    final image = await ref
+        .read(imagePickerProvider)
+        .pickImage(
+          source: source,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 85,
+        );
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _photo = image;
+      _photoBytes = bytes;
+    });
+  }
+
   Future<void> _create() async {
     if (_saving || _name.text.trim().isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _saving = true;
       _error = null;
@@ -245,9 +273,24 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
                 .map((user) => user.uid)
                 .toList(),
           );
-      if (mounted) {
-        context.go('/group-chat/${Uri.encodeComponent(chat.id)}', extra: chat);
+      // Storage solo admite la foto de un grupo existente. Si falla, el grupo
+      // ya está creado y la foto puede añadirse después desde sus datos.
+      final photo = _photo;
+      var photoFailed = false;
+      if (photo != null) {
+        try {
+          await ref.read(groupPhotoUploaderProvider)(chat.id, photo);
+        } catch (_) {
+          photoFailed = true;
+        }
       }
+      if (!mounted) return;
+      if (photoFailed) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.groupChatPhotoError)),
+        );
+      }
+      context.go('/group-chat/${Uri.encodeComponent(chat.id)}', extra: chat);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -302,6 +345,18 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 16),
+                      child: Center(
+                        child: GroupPhotoButton(
+                          localBytes: _photoBytes,
+                          tooltip: _photo == null
+                              ? l10n.groupChatAddPhoto
+                              : l10n.groupChatChangePhoto,
+                          onTap: _saving ? null : _pickPhoto,
+                        ),
+                      ),
+                    ),
                     TextField(
                       controller: _name,
                       autofocus: true,

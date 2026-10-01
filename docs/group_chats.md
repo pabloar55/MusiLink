@@ -2,9 +2,11 @@
 
 Desde el botón flotante de Mensajes se eligen entre 2 y 19 amigos en una
 primera pantalla con buscador. La flecha flotante permite pasar, al seleccionar
-al menos dos amigos, a una segunda pantalla para poner el nombre y crear el grupo.
+al menos dos amigos, a una segunda pantalla para poner el nombre, elegir
+opcionalmente una foto y crear el grupo.
 El creador también es miembro; el máximo total es 20. Los grupos vacíos aparecen
-en la lista desde su creación. La cabecera abre la lista de miembros.
+en la lista desde su creación. La cabecera abre los datos del grupo: foto,
+miembros y la opción de salir.
 Se reutilizan el historial paginado, los mensajes de texto, las canciones,
 las reacciones, las denuncias y el borrado suave personal.
 
@@ -12,7 +14,7 @@ las reacciones, las denuncias y el borrado suave personal.
 
 - Los chats individuales existentes conservan su esquema y sus IDs deterministas.
 - Los grupos usan un ID aleatorio de Firestore, `type: group`, `name`,
-  `createdBy`, `participants` y `lastReadAt` por UID.
+  `createdBy`, `participants`, `lastReadAt` por UID y, opcionalmente, `photoUrl`.
 - `createGroupChat` exige autenticación y App Check. Valida en una transacción
   que todos estén activos, que sean amigos mutuos del creador y que no haya
   bloqueos entre miembros. Permite cinco creaciones por hora y usuario.
@@ -31,15 +33,40 @@ las reacciones, las denuncias y el borrado suave personal.
 - La eliminación de una cuenta conserva el grupo, incluso sin mensajes, y
   mantiene la referencia anonimizada como en los chats individuales.
 
+## Foto del grupo
+
+- La foto se guarda en Storage como `group_photos/{chatId}` (JPEG, menos de
+  5 MB). Solo los miembros pueden leerla o reemplazarla; las reglas de Storage
+  consultan el grupo y la baja en curso, sus dos documentos permitidos.
+- Cualquier miembro puede cambiarla. El cliente publica la URL de descarga en
+  `photoUrl` y las reglas de Firestore solo aceptan la ruta de ese mismo grupo.
+- Storage exige que el grupo exista, así que al crearlo la foto se sube después
+  de `createGroupChat`. Si la subida falla, el grupo queda creado sin foto y se
+  avisa al usuario, que puede añadirla desde los datos del grupo.
+
+## Salir del grupo
+
+- `leaveGroupChat` exige autenticación y App Check. En una transacción retira
+  al usuario de `participants` y elimina sus entradas de `unreadCounts`,
+  `deletedAt` y `lastReadAt`. Después limpia sus reacciones en los mensajes del
+  grupo, porque las reglas validan las reacciones contra los participantes.
+- Los mensajes enviados se conservan. Quien sale deja de leer el grupo y de
+  recibir sus notificaciones, y no puede volver a entrar por su cuenta.
+- Al salir el último miembro se eliminan el grupo, sus mensajes y su foto.
+- La llamada es idempotente: un reintento tras una respuesta perdida repite
+  las limpiezas pendientes sin alterar el grupo.
+- El cliente vuelve a la lista de chats al confirmar, sin esperar al backend;
+  si la llamada falla, lo indica y el grupo sigue en la lista.
+
 ## Activación y alcance pendiente
 
-Requiere desplegar las funciones modificadas, incluida `createGroupChat`, y las
-reglas de Firestore antes de publicar el cliente. No requiere migrar chats
-existentes, nuevos índices ni cambios de Storage. El procedimiento general está
-en [firebase_hosting.md](firebase_hosting.md).
+Requiere desplegar las funciones modificadas, incluidas `createGroupChat` y
+`leaveGroupChat`, y las reglas de Firestore y de Storage antes de publicar el
+cliente. No requiere migrar chats existentes ni nuevos índices. El procedimiento
+general está en [firebase_hosting.md](firebase_hosting.md).
 
-Quedan para siguientes iteraciones: añadir o expulsar miembros, salir del grupo,
-roles de administrador, editar nombre/foto y recibos de lectura por miembro.
+Quedan para siguientes iteraciones: añadir o expulsar miembros, roles de
+administrador, editar el nombre, quitar la foto y recibos de lectura por miembro.
 Ocultar una conversación no equivale a abandonar el grupo.
 
 Queda pendiente verificar el flujo grupal completo con varias cuentas y las

@@ -44,5 +44,29 @@ void main() {
         isEmpty,
       );
     });
+
+    test('acepta la foto de un grupo solo en su ruta de Storage', () {
+      const bucket =
+          'https://firebasestorage.googleapis.com/v0/b/'
+          'musi-link-e7759.firebasestorage.app/o/';
+      const valid =
+          '${bucket}group_photos%2FGroupChat00000000001'
+          '?alt=media&token=test-token';
+
+      expect(trustedProfilePhotoUrl(valid), valid);
+      expect(
+        trustedProfilePhotoUrl(
+          '${bucket}group_photos%2Fshort?alt=media&token=test-token',
+        ),
+        isEmpty,
+      );
+      expect(
+        trustedProfilePhotoUrl(
+          '${bucket}other_photos%2FGroupChat00000000001'
+          '?alt=media&token=test-token',
+        ),
+        isEmpty,
+      );
+    });
   });
 }

@@ -319,5 +319,12 @@
   },
   "groupChatCannotSend": "Vous ne pouvez pas envoyer de messages à ce groupe. Vérifiez votre adhésion et les blocages entre membres.",
   "groupChatSearchFriends": "Rechercher des amis…",
-  "groupChatYou": "Vous"
+  "groupChatYou": "Vous",
+  "groupChatAddPhoto": "Ajouter une photo de groupe",
+  "groupChatChangePhoto": "Changer la photo du groupe",
+  "groupChatPhotoError": "Impossible d’enregistrer la photo du groupe. Veuillez réessayer.",
+  "groupChatLeave": "Quitter le groupe",
+  "groupChatLeaveTitle": "Quitter ce groupe ?",
+  "groupChatLeaveBody": "Vous ne verrez plus ses messages et vous ne pourrez pas le rejoindre.",
+  "groupChatLeaveError": "Impossible de quitter le groupe. Veuillez réessayer."
 }

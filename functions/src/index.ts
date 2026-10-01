@@ -29,4 +29,4 @@ export { submitModerationReport } from './moderation_reports';
 
 export { acknowledgeChatDelivery } from './chat_delivery';
 
-export { createGroupChat } from './group_chats';
+export { createGroupChat, leaveGroupChat } from './group_chats';

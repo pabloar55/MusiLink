@@ -12,6 +12,11 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/user_private/$(uid));
     }
 
+    function isGroupMember(chatId) {
+      let chat = firestore.get(/databases/(default)/documents/chats/$(chatId)).data;
+      return chat.type == 'group' && request.auth.uid in chat.participants;
+    }
+
     match /profile_photos/{uid} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null &&
@@ -20,6 +25,21 @@ service firebase.storage {
                             request.resource.size < 5 * 1024 * 1024 &&
                             request.resource.contentType == 'image/jpeg';
       allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Cualquier miembro puede ver y cambiar la foto del grupo. El grupo y la
+    // baja en curso agotan los dos documentos de Firestore permitidos; ser
+    // miembro ya implica haber completado el alta. El backend borra el objeto
+    // junto con el grupo.
+    match /group_photos/{chatId} {
+      allow read: if request.auth != null && isGroupMember(chatId);
+      allow create, update: if request.auth != null &&
+                            isGroupMember(chatId) &&
+                            !firestore.exists(
+                              /databases/(default)/documents/account_deletions/$(request.auth.uid)
+                            ) &&
+                            request.resource.size < 5 * 1024 * 1024 &&
+                            request.resource.contentType == 'image/jpeg';
     }
   }
 }

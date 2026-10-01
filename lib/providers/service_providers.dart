@@ -270,3 +270,19 @@ final groupChatProvider = StreamProvider.autoDispose.family<Chat?, String>((
 ) {
   return ref.watch(chatServiceProvider).watchChat(chatId);
 });
+
+/// Sube la foto y publica su URL en el grupo. El límite evita que una subida
+/// sin conexión bloquee indefinidamente la pantalla que la espera.
+final groupPhotoUploaderProvider =
+    Provider<Future<void> Function(String chatId, XFile image)>((ref) {
+      final storage = ref.watch(storageServiceProvider);
+      final chats = ref.watch(chatServiceProvider);
+      Future<void> upload(String chatId, XFile image) async {
+        final url = await storage.uploadGroupPhoto(chatId, image);
+        if (url == null) throw StateError('Group photo upload returned no URL');
+        await chats.updateGroupPhoto(chatId, url);
+      }
+
+      return (chatId, image) =>
+          upload(chatId, image).timeout(const Duration(seconds: 30));
+    });

@@ -204,6 +204,32 @@ class ChatService with AuthenticatedService {
     }
   }
 
+  /// La pertenencia solo la modifica el backend, que además limpia los datos
+  /// por miembro y elimina el grupo cuando se queda vacío.
+  Future<void> leaveGroupChat(String chatId) async {
+    final uid = currentUid;
+    try {
+      await _functions
+          .httpsCallable('leaveGroupChat')
+          .call<void>({'chatId': chatId})
+          .timeout(const Duration(seconds: 30));
+      _invalidateMessages(uid, chatId);
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+      rethrow;
+    }
+  }
+
+  /// [photoUrl] debe ser la URL de descarga de la foto subida para el grupo.
+  Future<void> updateGroupPhoto(String chatId, String photoUrl) async {
+    try {
+      await _chatsRef.doc(chatId).update({'photoUrl': photoUrl});
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+      rethrow;
+    }
+  }
+
   Stream<Chat?> watchChat(String chatId) => _chatsRef
       .doc(chatId)
       .snapshots()

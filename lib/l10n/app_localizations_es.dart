@@ -860,4 +860,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get groupChatYou => 'Tú';
+
+  @override
+  String get groupChatAddPhoto => 'Añadir foto del grupo';
+
+  @override
+  String get groupChatChangePhoto => 'Cambiar foto del grupo';
+
+  @override
+  String get groupChatPhotoError =>
+      'No se pudo guardar la foto del grupo. Inténtalo de nuevo.';
+
+  @override
+  String get groupChatLeave => 'Salir del grupo';
+
+  @override
+  String get groupChatLeaveTitle => '¿Salir del grupo?';
+
+  @override
+  String get groupChatLeaveBody =>
+      'Dejarás de ver sus mensajes y no podrás volver a unirte.';
+
+  @override
+  String get groupChatLeaveError =>
+      'No se pudo salir del grupo. Inténtalo de nuevo.';
 }

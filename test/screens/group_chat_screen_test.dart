@@ -33,7 +33,7 @@ Chat _group({
   createdAt: DateTime(2026),
 );
 
-Future<void> _openGroup(
+Future<_MockChatService> _openGroup(
   WidgetTester tester,
   Stream<Chat?> groups, {
   Chat? initialGroup,
@@ -42,6 +42,8 @@ Future<void> _openGroup(
   final auth = MockFirebaseAuth();
   final user = MockUser();
   final notifications = MockNotificationService();
+  final users = MockUserService();
+  when(() => users.getUser(any())).thenAnswer((_) async => null);
   when(() => auth.currentUser).thenReturn(user);
   when(() => user.uid).thenReturn('current-user');
   when(() => service.watchChat('group-1')).thenAnswer((_) => groups);
@@ -56,6 +58,7 @@ Future<void> _openGroup(
   final router = GoRouter(
     initialLocation: '/group-chat/group-1',
     routes: [
+      GoRoute(path: '/', builder: (_, _) => const Text('Messages')),
       GoRoute(
         path: '/group-chat/:chatId',
         builder: (_, state) => GroupChatScreen(
@@ -72,7 +75,7 @@ Future<void> _openGroup(
         firebaseAuthProvider.overrideWithValue(auth),
         chatServiceProvider.overrideWithValue(service),
         notificationServiceProvider.overrideWithValue(notifications),
-        userServiceProvider.overrideWithValue(MockUserService()),
+        userServiceProvider.overrideWithValue(users),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -82,6 +85,7 @@ Future<void> _openGroup(
       ),
     ),
   );
+  return service;
 }
 
 void main() {
@@ -103,6 +107,30 @@ void main() {
     expect(find.text('Updated group'), findsOneWidget);
     expect(find.text('Music friends'), findsNothing);
     expect(find.text('My draft'), findsOneWidget);
+  });
+
+  testWidgets('leaving requires confirmation and returns to the chat list', (
+    tester,
+  ) async {
+    final service = await _openGroup(
+      tester,
+      groups.stream,
+      initialGroup: _group(),
+    );
+    when(() => service.leaveGroupChat('group-1')).thenAnswer((_) async {});
+
+    await tester.tap(find.text('Music friends'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Leave group'));
+    await tester.pumpAndSettle();
+    expect(find.text('Leave this group?'), findsOneWidget);
+    verifyNever(() => service.leaveGroupChat(any()));
+
+    await tester.tap(find.text('Leave group'));
+    await tester.pumpAndSettle();
+    verify(() => service.leaveGroupChat('group-1')).called(1);
+    expect(find.byType(ChatScreen), findsNothing);
+    expect(find.text('Messages'), findsOneWidget);
   });
 
   testWidgets('a direct link waits for verified group data', (tester) async {

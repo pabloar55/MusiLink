@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.leaveGroupChat = exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -44,4 +44,5 @@ var chat_delivery_1 = require("./chat_delivery");
 Object.defineProperty(exports, "acknowledgeChatDelivery", { enumerable: true, get: function () { return chat_delivery_1.acknowledgeChatDelivery; } });
 var group_chats_1 = require("./group_chats");
 Object.defineProperty(exports, "createGroupChat", { enumerable: true, get: function () { return group_chats_1.createGroupChat; } });
+Object.defineProperty(exports, "leaveGroupChat", { enumerable: true, get: function () { return group_chats_1.leaveGroupChat; } });
 //# sourceMappingURL=index.js.map

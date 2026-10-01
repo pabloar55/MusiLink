@@ -1631,6 +1631,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You'**
   String get groupChatYou;
+
+  /// No description provided for @groupChatAddPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Add group photo'**
+  String get groupChatAddPhoto;
+
+  /// No description provided for @groupChatChangePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Change group photo'**
+  String get groupChatChangePhoto;
+
+  /// No description provided for @groupChatPhotoError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the group photo. Please try again.'**
+  String get groupChatPhotoError;
+
+  /// No description provided for @groupChatLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave group'**
+  String get groupChatLeave;
+
+  /// No description provided for @groupChatLeaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave this group?'**
+  String get groupChatLeaveTitle;
+
+  /// No description provided for @groupChatLeaveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer see its messages and you will not be able to rejoin.'**
+  String get groupChatLeaveBody;
+
+  /// No description provided for @groupChatLeaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not leave the group. Please try again.'**
+  String get groupChatLeaveError;
 }
 
 class _AppLocalizationsDelegate

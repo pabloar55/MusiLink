@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.processAccountDeletion = exports.requestAccountDeletion = void 0;
+exports.processAccountDeletion = exports.requestAccountDeletion = exports.reactionEmojis = void 0;
 exports.scrubUserReactions = scrubUserReactions;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("firebase-admin/auth");
@@ -24,7 +24,7 @@ const deletedProfile = {
     username: 'deleted_user',
     photoUrl: '',
 };
-const reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'];
+exports.reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'];
 const phases = [
     'freeze',
     'push_tokens',
@@ -356,8 +356,8 @@ async function verifyCleanup(uid) {
     if ((await db.doc(`recommendation_sync_state/${uid}`).get()).exists) {
         return 'recommendation_sync_state';
     }
-    for (let index = 0; index < reactionEmojis.length; index += 1) {
-        const emoji = reactionEmojis[index];
+    for (let index = 0; index < exports.reactionEmojis.length; index += 1) {
+        const emoji = exports.reactionEmojis[index];
         const snapshot = await db
             .collectionGroup('messages')
             .where(new firestore_1.FieldPath('reactions', emoji), 'array-contains', uid)
@@ -433,7 +433,7 @@ async function processPhase(uid, job) {
         case 'reactions_love':
         case 'reactions_skull': {
             const reactionIndex = phases.indexOf(job.phase) - phases.indexOf('reactions_heart');
-            const count = await scrubReactionBatch(uid, reactionEmojis[reactionIndex]);
+            const count = await scrubReactionBatch(uid, exports.reactionEmojis[reactionIndex]);
             const nextPhase = count === batchSize
                 ? job.phase
                 : phases[phases.indexOf(job.phase) + 1];

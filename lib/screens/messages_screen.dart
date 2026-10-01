@@ -12,6 +12,7 @@ import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -253,9 +254,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                             final unread = chat.unreadCounts[_currentUid] ?? 0;
                             return ListTile(
                               leading: chat.isGroup
-                                  ? const CircleAvatar(
+                                  ? GroupCircleAvatar(
+                                      photoUrl: chat.photoUrl,
                                       radius: 24,
-                                      child: Icon(Icons.group_outlined),
                                     )
                                   : UserCircleAvatar(
                                       photoUrl: photoUrl,

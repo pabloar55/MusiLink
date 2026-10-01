@@ -21,6 +21,7 @@ const {
   maxCatalogSearchesPerWindow,
 } = require('../lib/rate_limits.js');
 const { createModerationReport } = require('../lib/moderation_reports.js');
+const { leaveGroup } = require('../lib/group_chats.js');
 
 before(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -586,4 +587,86 @@ test('expiring a song claims the daily reminder so the digest cannot follow it',
   // Without the claim the same user would receive the digest.
   await db.doc('user_private/alice').update({ engagementPushAt: FieldValue.delete() });
   assert.equal((await sendFriendDigests(db, now, notify)).sent, 1);
+});
+
+async function seedGroup(chatId, participants) {
+  const members = Object.fromEntries(participants.map((uid) => [uid, 0]));
+  await db.doc(`chats/${chatId}`).set({
+    type: 'group',
+    name: 'Grupo',
+    createdBy: participants[0],
+    participants,
+    createdAt: Timestamp.fromMillis(1),
+    lastMessage: 'hola',
+    lastMessageTime: Timestamp.fromMillis(2),
+    unreadCounts: members,
+    deletedAt: Object.fromEntries(participants.map((uid) => [uid, Timestamp.fromMillis(1)])),
+    lastReadAt: Object.fromEntries(participants.map((uid) => [uid, Timestamp.fromMillis(1)])),
+  });
+  await db.doc(`chats/${chatId}/messages/message-1`).set({
+    senderId: participants[0],
+    text: 'hola',
+    timestamp: Timestamp.fromMillis(2),
+    groupMessage: true,
+    reactions: { '❤️': participants, '🔥': [participants[0]] },
+  });
+}
+
+test('leaveGroupChat retira al miembro, sus datos y sus reacciones solo de ese grupo', async () => {
+  const chatId = 'GroupChat00000000001';
+  const otherChatId = 'GroupChat00000000002';
+  await seedGroup(chatId, ['alice', 'bob', 'carol']);
+  await seedGroup(otherChatId, ['alice', 'bob', 'carol']);
+
+  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
+
+  const chat = (await db.doc(`chats/${chatId}`).get()).data();
+  assert.deepEqual(chat.participants, ['bob', 'carol']);
+  for (const field of ['unreadCounts', 'deletedAt', 'lastReadAt']) {
+    assert.deepEqual(Object.keys(chat[field]).sort(), ['bob', 'carol']);
+  }
+  assert.deepEqual(
+    (await db.doc(`chats/${chatId}/messages/message-1`).get()).data().reactions,
+    { '❤️': ['bob', 'carol'] },
+  );
+  assert.deepEqual(
+    (await db.doc(`chats/${otherChatId}/messages/message-1`).get()).data().reactions,
+    { '❤️': ['alice', 'bob', 'carol'], '🔥': ['alice'] },
+  );
+  assert.deepEqual(
+    (await db.doc(`chats/${otherChatId}`).get()).data().participants,
+    ['alice', 'bob', 'carol'],
+  );
+
+  // Un reintento, o una llamada de quien no es miembro, no altera el grupo.
+  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
+  assert.equal(await leaveGroup(db, chatId, 'mallory'), true);
+  assert.deepEqual(
+    (await db.doc(`chats/${chatId}`).get()).data().participants,
+    ['bob', 'carol'],
+  );
+});
+
+test('leaveGroupChat elimina el grupo y sus mensajes cuando sale el último miembro', async () => {
+  const chatId = 'GroupChat00000000001';
+  await seedGroup(chatId, ['alice', 'bob']);
+
+  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
+  assert.equal(await leaveGroup(db, chatId, 'bob'), false);
+  assert.equal((await db.doc(`chats/${chatId}`).get()).exists, false);
+  assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, true);
+  assert.equal(await leaveGroup(db, chatId, 'bob'), false);
+});
+
+test('leaveGroupChat no modifica los chats individuales', async () => {
+  await db.doc('chats/DirectChat0000000001').set({ participants: ['alice', 'bob'] });
+
+  await assert.rejects(
+    leaveGroup(db, 'DirectChat0000000001', 'alice'),
+    { code: 'failed-precondition' },
+  );
+  assert.deepEqual(
+    (await db.doc('chats/DirectChat0000000001').get()).data().participants,
+    ['alice', 'bob'],
+  );
 });

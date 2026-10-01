@@ -5,6 +5,9 @@ class Chat {
   final String id;
   final bool isGroup;
   final String name;
+
+  /// Foto del grupo en Storage; vacía si no tiene o en chats individuales.
+  final String photoUrl;
   final String? createdBy;
   final List<String> participants;
   final String lastMessage;
@@ -24,6 +27,7 @@ class Chat {
     required this.id,
     this.isGroup = false,
     this.name = '',
+    this.photoUrl = '',
     this.createdBy,
     required this.participants,
     this.lastMessage = '',
@@ -41,6 +45,7 @@ class Chat {
       id: doc.id,
       isGroup: data['type'] == 'group',
       name: (data['name'] ?? '').toString(),
+      photoUrl: (data['photoUrl'] ?? '').toString(),
       createdBy: data['createdBy'] as String?,
       participants: List<String>.from(data['participants'] ?? []),
       lastMessage: (data['lastMessage'] ?? '').toString(),
@@ -58,6 +63,7 @@ class Chat {
   Map<String, dynamic> toFirestore() {
     return {
       if (isGroup) ...{'type': 'group', 'name': name, 'createdBy': createdBy},
+      if (photoUrl.isNotEmpty) 'photoUrl': photoUrl,
       'participants': participants,
       'lastMessage': lastMessage,
       'lastMessageTime': Timestamp.fromDate(lastMessageTime),
@@ -72,6 +78,7 @@ class Chat {
       id: id,
       isGroup: isGroup,
       name: name,
+      photoUrl: photoUrl,
       createdBy: createdBy,
       participants: participants,
       lastMessage: lastMessage ?? this.lastMessage,

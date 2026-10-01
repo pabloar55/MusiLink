@@ -60,6 +60,18 @@ service cloud.firestore {
         );
     }
 
+    function validGroupPhotoUrl(chatId, value) {
+      return value is string
+        && value.toUtf8().size() <= 2048
+        && chatId.matches('^[A-Za-z0-9]{20}$')
+        && value.matches(
+          '^https://firebasestorage[.]googleapis[.]com/v0/b/'
+          + 'musi-link-e7759[.]firebasestorage[.]app/o/'
+          + 'group_photos%2F' + chatId
+          + '[?]alt=media&token=[A-Za-z0-9_-]{1,256}$'
+        );
+    }
+
     function validSpotifyTrackUrl(value) {
       // searchSpotifyTracks emite esta URL canónica a partir del ID de Spotify.
       // No se aceptan hosts parecidos, credenciales en la URL, parámetros ni
@@ -573,8 +585,9 @@ service cloud.firestore {
         && chatId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1];
 
       // Los resúmenes y los incrementos de contadores los actualiza únicamente
-      // onNewMessage con Admin SDK. El cliente solo puede limpiar su contador o
-      // escribir su propia marca de borrado suave mientras limpia ese contador.
+      // onNewMessage con Admin SDK. El cliente solo puede limpiar su contador,
+      // escribir su propia marca de borrado suave mientras limpia ese contador
+      // o cambiar la foto de un grupo. La pertenencia la gestiona el backend.
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participants
         && isActiveUser(request.auth.uid)
@@ -602,6 +615,14 @@ service cloud.firestore {
             && request.resource.data.lastReadAt[request.auth.uid]
               >= resource.data.get('lastReadAt', {}).get(request.auth.uid, resource.data.createdAt)
             && validGroupCounterReset(resource.data, request.resource.data)
+          )
+          ||
+          // Grupos: cualquier miembro puede cambiar la foto, que debe ser el
+          // objeto de Storage asociado a este mismo grupo.
+          (
+            resource.data.get('type', 'direct') == 'group'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoUrl'])
+            && validGroupPhotoUrl(chatId, request.resource.data.photoUrl)
           )
           ||
           // Caso 2: borrado suave — cambia deletedAt[request.auth.uid] y deja

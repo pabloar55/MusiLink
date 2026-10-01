@@ -7,9 +7,16 @@ class StorageService {
 
   final FirebaseStorage _storage;
 
-  Future<String?> uploadProfilePhoto(String uid, XFile imageFile) async {
+  Future<String?> uploadProfilePhoto(String uid, XFile imageFile) =>
+      _uploadPhoto('profile_photos/$uid', imageFile);
+
+  /// Solo los miembros pueden escribir en la ruta de su grupo.
+  Future<String?> uploadGroupPhoto(String chatId, XFile imageFile) =>
+      _uploadPhoto('group_photos/$chatId', imageFile);
+
+  Future<String?> _uploadPhoto(String path, XFile imageFile) async {
     try {
-      final ref = _storage.ref('profile_photos/$uid');
+      final ref = _storage.ref(path);
       final bytes = await imageFile.readAsBytes();
       await ref.putData(
         bytes,

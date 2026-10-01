@@ -30,7 +30,7 @@ const deletedProfile = {
   username: 'deleted_user',
   photoUrl: '',
 };
-const reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'] as const;
+export const reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'] as const;
 
 const phases = [
   'freeze',

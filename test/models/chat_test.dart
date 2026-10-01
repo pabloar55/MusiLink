@@ -107,6 +107,21 @@ void main() {
         expect(copy.lastMessage, original.lastMessage);
         expect(copy.lastMessageTime, original.lastMessageTime);
       });
+
+      test('conserva la foto del grupo', () {
+        final group = Chat(
+          id: 'group1',
+          isGroup: true,
+          name: 'Grupo',
+          photoUrl: 'https://example.com/group.jpg',
+          participants: ['user1', 'user2', 'user3'],
+          lastMessageTime: now,
+          createdAt: now,
+        );
+
+        expect(group.copyWith(lastMessage: 'Hola').photoUrl, group.photoUrl);
+        expect(group.toFirestore()['photoUrl'], group.photoUrl);
+      });
     });
   });
 }

@@ -336,5 +336,12 @@
   },
   "groupChatCannotSend": "You cannot send messages to this group. Check your membership and any blocks between members.",
   "groupChatSearchFriends": "Search friends…",
-  "groupChatYou": "You"
+  "groupChatYou": "You",
+  "groupChatAddPhoto": "Add group photo",
+  "groupChatChangePhoto": "Change group photo",
+  "groupChatPhotoError": "Could not save the group photo. Please try again.",
+  "groupChatLeave": "Leave group",
+  "groupChatLeaveTitle": "Leave this group?",
+  "groupChatLeaveBody": "You will no longer see its messages and you will not be able to rejoin.",
+  "groupChatLeaveError": "Could not leave the group. Please try again."
 }

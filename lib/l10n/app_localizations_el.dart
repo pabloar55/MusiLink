@@ -866,4 +866,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get groupChatYou => 'Εσύ';
+
+  @override
+  String get groupChatAddPhoto => 'Προσθήκη φωτογραφίας ομάδας';
+
+  @override
+  String get groupChatChangePhoto => 'Αλλαγή φωτογραφίας ομάδας';
+
+  @override
+  String get groupChatPhotoError =>
+      'Δεν ήταν δυνατή η αποθήκευση της φωτογραφίας της ομάδας. Δοκίμασε ξανά.';
+
+  @override
+  String get groupChatLeave => 'Αποχώρηση από την ομάδα';
+
+  @override
+  String get groupChatLeaveTitle => 'Αποχώρηση από την ομάδα;';
+
+  @override
+  String get groupChatLeaveBody =>
+      'Δεν θα βλέπεις πλέον τα μηνύματά της και δεν θα μπορείς να συμμετάσχεις ξανά.';
+
+  @override
+  String get groupChatLeaveError =>
+      'Δεν ήταν δυνατή η αποχώρηση από την ομάδα. Δοκίμασε ξανά.';
 }

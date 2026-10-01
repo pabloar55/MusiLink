@@ -506,6 +506,53 @@ test('el borrado suave limpia atomicamente solo el contador propio', async () =>
   }));
 });
 
+test('un miembro solo puede cambiar la foto del grupo por la de su ruta en Storage', async () => {
+  const chatId = 'GroupChat00000000001';
+  const chatPath = `chats/${chatId}`;
+  for (const uid of ['alice', 'bob', 'carol', 'mallory']) await seedActiveUser(uid);
+  await seed(chatPath, {
+    type: 'group',
+    name: 'Grupo',
+    createdBy: 'alice',
+    participants: ['alice', 'bob', 'carol'],
+    lastMessage: '',
+    lastMessageTime: new Date(),
+    createdAt: new Date(),
+    unreadCounts: { alice: 0, bob: 0, carol: 0 },
+    lastReadAt: {},
+  });
+  const baseUrl =
+    'https://firebasestorage.googleapis.com/v0/b/' +
+    'musi-link-e7759.firebasestorage.app/o/';
+  const query = '?alt=media&token=12345678-abcd-1234-abcd-123456789abc';
+  const photoUrl = `${baseUrl}group_photos%2F${chatId}${query}`;
+
+  await assertSucceeds(updateDoc(doc(dbFor('bob'), chatPath), { photoUrl }));
+  await assertFails(updateDoc(doc(dbFor('mallory'), chatPath), { photoUrl }));
+  await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
+    photoUrl: `${baseUrl}group_photos%2FGroupChat00000000002${query}`,
+  }));
+  await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
+    photoUrl: `${baseUrl}profile_photos%2Fbob${query}`,
+  }));
+  await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
+    photoUrl: 'https://tracking.example/group.jpg',
+  }));
+  await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
+    photoUrl,
+    name: 'Otro nombre',
+  }));
+  // La pertenencia solo cambia mediante leaveGroupChat.
+  await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
+    participants: ['alice', 'carol'],
+  }));
+
+  await seedChat();
+  await assertFails(updateDoc(doc(dbFor('alice'), 'chats/alice_bob'), {
+    photoUrl: `${baseUrl}group_photos%2Falice_bob${query}`,
+  }));
+});
+
 test('el borrado suave con pendientes no puede conservar el contador', async () => {
   await seedChat();
 
