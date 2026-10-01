@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
@@ -179,8 +180,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/group-chat/:chatId',
-        builder: (context, state) =>
-            GroupChatScreen(chatId: state.pathParameters['chatId']!),
+        builder: (context, state) => GroupChatScreen(
+          chatId: state.pathParameters['chatId']!,
+          initialGroup: state.extra is Chat ? state.extra! as Chat : null,
+        ),
       ),
       GoRoute(
         path: '/chat',

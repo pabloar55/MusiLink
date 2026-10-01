@@ -245,7 +245,9 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
                 .map((user) => user.uid)
                 .toList(),
           );
-      if (mounted) context.go('/group-chat/${Uri.encodeComponent(chat.id)}');
+      if (mounted) {
+        context.go('/group-chat/${Uri.encodeComponent(chat.id)}', extra: chat);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {

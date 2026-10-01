@@ -330,6 +330,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                 if (chat.isGroup) {
                                   context.push(
                                     '/group-chat/${Uri.encodeComponent(chat.id)}',
+                                    extra: chat,
                                   );
                                   return;
                                 }
