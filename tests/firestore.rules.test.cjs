@@ -223,6 +223,23 @@ test('el propietario puede guardar griego como idioma preferido', async () => {
   }));
 });
 
+test('el propietario configura el resumen de amigos pero no su marca de envío', async () => {
+  await seedActiveUser('alice');
+  const own = doc(dbFor('alice'), 'user_private/alice');
+
+  await assertSucceeds(updateDoc(own, {
+    utcOffsetMinutes: 120,
+    notifFriendDigest: false,
+  }));
+  await assertSucceeds(updateDoc(own, { utcOffsetMinutes: -720 }));
+  for (const utcOffsetMinutes of [841, -721, 90.5, '120']) {
+    await assertFails(updateDoc(own, { utcOffsetMinutes }));
+  }
+  await assertFails(updateDoc(own, { notifFriendDigest: 'no' }));
+  // Solo el backend registra el último recordatorio enviado.
+  await assertFails(updateDoc(own, { engagementPushAt: serverTimestamp() }));
+});
+
 test('cada usuario solo puede gestionar sus propios tokens push válidos', async () => {
   await seedActiveUser('alice');
   await seedActiveUser('bob');

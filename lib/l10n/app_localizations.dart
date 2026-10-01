@@ -1356,6 +1356,12 @@ abstract class AppLocalizations {
   /// **'Sound'**
   String get settingsSound;
 
+  /// No description provided for @settingsFriendDigest.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily friends recap'**
+  String get settingsFriendDigest;
+
   /// No description provided for @pushNotificationsTitle.
   ///
   /// In en, this message translates to:

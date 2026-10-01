@@ -702,6 +702,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsSound => 'Sonido';
 
   @override
+  String get settingsFriendDigest => 'Resumen diario de amigos';
+
+  @override
   String get pushNotificationsTitle => 'No te pierdas ningún mensaje';
 
   @override

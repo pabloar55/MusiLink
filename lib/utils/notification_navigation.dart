@@ -27,6 +27,7 @@ String? notificationLocationFromData(Map<String, dynamic> data) {
       return '/?tab=friends';
     case 'daily_song_expired':
     case 'daily_song_liked':
+    case 'friend_digest':
       return '/?tab=daily-song';
   }
   return null;

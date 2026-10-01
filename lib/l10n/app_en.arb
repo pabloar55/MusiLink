@@ -277,6 +277,7 @@
   "settingsNotifications": "Notifications",
   "settingsVibration": "Vibration",
   "settingsSound": "Sound",
+  "settingsFriendDigest": "Daily friends recap",
   "pushNotificationsTitle": "Don't miss a message",
   "pushNotificationsBody": "Enable notifications to receive messages and friend requests even when MusiLink is closed.",
   "pushNotificationsEnable": "Enable notifications",

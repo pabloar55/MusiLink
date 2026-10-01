@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notificationText = void 0;
+exports.engagementPushField = exports.quietChannelId = exports.notificationText = void 0;
 exports.notifChannelId = notifChannelId;
 exports.notificationPath = notificationPath;
 exports.preferredLocale = preferredLocale;
@@ -43,6 +43,24 @@ exports.notificationText = {
         es: (name) => `A ${name} le ha gustado tu canción del día`,
         fr: (name) => `${name} a aimé votre chanson du jour`,
     },
+    friendDigestOne: {
+        el: (name) => `Ο χρήστης ${name} μοιράστηκε το τραγούδι της ημέρας του. Μοιραστείτε το δικό σας!`,
+        en: (name) => `${name} shared their song of the day. Share yours!`,
+        es: (name) => `${name} ha publicado su canción del día. ¡Publica la tuya!`,
+        fr: (name) => `${name} a partagé sa chanson du jour. Partagez la vôtre !`,
+    },
+    friendDigest: {
+        el: (friends) => `Οι φίλοι σας ${friends} μοιράστηκαν το τραγούδι της ημέρας τους. Μοιραστείτε το δικό σας!`,
+        en: (friends) => `${friends} shared their song of the day. Share yours!`,
+        es: (friends) => `${friends} han publicado su canción del día. ¡Publica la tuya!`,
+        fr: (friends) => `${friends} ont partagé leur chanson du jour. Partagez la vôtre !`,
+    },
+    friendDigestOthers: {
+        el: (count) => `${count} ακόμη`,
+        en: (count) => `${count} others`,
+        es: (count) => `${count} más`,
+        fr: (count) => `${count} autres`,
+    },
 };
 function notifChannelId(sound, vibration) {
     if (sound && vibration)
@@ -53,6 +71,11 @@ function notifChannelId(sound, vibration) {
         return 'musilink_high_no_sound';
     return 'musilink_high_silent';
 }
+// Low-importance Android channel for reminders that must not interrupt.
+exports.quietChannelId = 'musilink_digest';
+// Written to user_private whenever a reminder to publish is sent, so the
+// different reminders share a budget of one per local day.
+exports.engagementPushField = 'engagementPushAt';
 function notificationPath(data) {
     if (data.type === 'new_message' && data.chatId && data.chatType === 'group') {
         return `/group-chat/${encodeURIComponent(data.chatId)}`;
@@ -68,8 +91,11 @@ function notificationPath(data) {
     if (data.type === 'friend_request' || data.type === 'friend_request_accepted') {
         return '/?tab=friends';
     }
-    if (data.type === 'daily_song_expired' || data.type === 'daily_song_liked')
+    if (data.type === 'daily_song_expired' ||
+        data.type === 'daily_song_liked' ||
+        data.type === 'friend_digest') {
         return '/?tab=daily-song';
+    }
     return '/';
 }
 function preferredLocale(data) {
@@ -95,11 +121,13 @@ function chatNotification(message, senderName, recipient) {
     };
 }
 // Notifications with the same tag replace each other in the drawer, keeping
-// one entry per conversation instead of an unbounded stack.
-async function sendNotification(recipientUid, recipientPrivateData, notification, data, tag) {
-    const sound = recipientPrivateData?.notifSound !== false;
+// one entry per conversation instead of an unbounded stack. A quiet
+// notification is delivered without sound, vibration or heads-up display.
+async function sendNotification(recipientUid, recipientPrivateData, notification, data, tag, options = {}) {
+    const quiet = options.quiet === true;
+    const sound = !quiet && recipientPrivateData?.notifSound !== false;
     const vibration = recipientPrivateData?.notifVibration !== false;
-    const channelId = notifChannelId(sound, vibration);
+    const channelId = quiet ? exports.quietChannelId : notifChannelId(sound, vibration);
     const isChatMessage = data.type === 'new_message';
     const privateUserRef = firebase_1.db.doc(`${userPrivateCollection}/${recipientUid}`);
     const pushTokensSnapshot = await privateUserRef
@@ -123,7 +151,7 @@ async function sendNotification(recipientUid, recipientPrivateData, notification
                 ...(!isChatMessage ? { notification } : {}),
                 data,
                 android: {
-                    priority: 'high',
+                    priority: quiet ? 'normal' : 'high',
                     ...(!isChatMessage
                         ? { notification: { channelId, ...(tag ? { tag } : {}) } }
                         : {}),

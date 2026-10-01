@@ -72,6 +72,12 @@ exports.expireDailySongs = (0, scheduler_1.onSchedule)({
                 title: 'MusiLink',
                 body: notifications_1.notificationText.dailySongExpired[locale](),
             }, { type: 'daily_song_expired' }, 'daily_song_expired');
+            // The friend digest skips anyone already reminded to publish today.
+            if (privateProfile.exists) {
+                await privateProfile.ref.update({
+                    [notifications_1.engagementPushField]: firestore_1.FieldValue.serverTimestamp(),
+                });
+            }
         }));
     }
     v2_1.logger.info('expireDailySongs: expiry cycle completed', {

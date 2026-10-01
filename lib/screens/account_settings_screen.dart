@@ -276,6 +276,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     final themeMode = ref.watch(themeModeProvider);
     final vibrationEnabled = ref.watch(vibrationEnabledProvider);
     final soundEnabled = ref.watch(soundEnabledProvider);
+    final friendDigestEnabled = ref.watch(friendDigestEnabledProvider);
     final photoUpload = ref.watch(profilePhotoUploadProvider);
     final cs = Theme.of(context).colorScheme;
 
@@ -351,6 +352,13 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
                     value: vibrationEnabled,
                     onChanged: (_) =>
                         ref.read(vibrationEnabledProvider.notifier).toggle(),
+                  ),
+                  _SwitchTile(
+                    icon: LucideIcons.users,
+                    label: l10n.settingsFriendDigest,
+                    value: friendDigestEnabled,
+                    onChanged: (_) =>
+                        ref.read(friendDigestEnabledProvider.notifier).toggle(),
                   ),
                 ],
               ),

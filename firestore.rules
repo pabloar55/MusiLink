@@ -196,7 +196,13 @@ service cloud.firestore {
         && (!('preferredLocale' in data)
           || validPreferredLocale(data.preferredLocale))
         && (!('notifSound' in data) || data.notifSound is bool)
-        && (!('notifVibration' in data) || data.notifVibration is bool);
+        && (!('notifVibration' in data) || data.notifVibration is bool)
+        && (!('notifFriendDigest' in data) || data.notifFriendDigest is bool)
+        // Desfases reales: de UTC-12:00 a UTC+14:00.
+        && (!('utcOffsetMinutes' in data)
+          || data.utcOffsetMinutes is int
+            && data.utcOffsetMinutes >= -720
+            && data.utcOffsetMinutes <= 840);
     }
 
     function validPushToken(data) {
@@ -342,6 +348,8 @@ service cloud.firestore {
             'deletedAt',
             'notifSound',
             'notifVibration',
+            'notifFriendDigest',
+            'utcOffsetMinutes',
             'setupProfile',
           ])
           && (

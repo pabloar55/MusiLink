@@ -713,6 +713,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsSound => 'Son';
 
   @override
+  String get settingsFriendDigest => 'Résumé quotidien des amis';
+
+  @override
   String get pushNotificationsTitle => 'Ne manquez aucun message';
 
   @override

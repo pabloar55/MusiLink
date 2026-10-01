@@ -105,6 +105,8 @@ class NotificationService {
   static const _channelNoSoundName = 'MusiLink Notifications (no sound)';
   static const _channelSilentId = 'musilink_high_silent';
   static const _channelSilentName = 'MusiLink Notifications (silent)';
+  static const _channelDigestId = 'musilink_digest';
+  static const _channelDigestName = 'MusiLink Daily Summary';
   static const _supportedPreferredLocales = {'el', 'en', 'es', 'fr'};
   static const _pendingClearUidKey = 'pending_fcm_clear_uid';
   static const _pendingClearUidsKey = 'pending_fcm_clear_uids';
@@ -273,6 +275,8 @@ class NotificationService {
       final batch = _firestore.batch();
       batch.set(privateUserRef, {
         'preferredLocale': _preferredLocale(),
+        // The backend schedules the daily friend digest in local time.
+        'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
       }, SetOptions(merge: true));
       batch.set(tokenRef, {
         'token': token,
@@ -481,6 +485,10 @@ class NotificationService {
       }
       return;
     }
+
+    // The digest invites the user to open the app, so it adds nothing while
+    // the app is already in use.
+    if (message.data['type'] == 'friend_digest') return;
 
     final n = message.notification;
     if (n == null) return;
@@ -712,6 +720,14 @@ class NotificationService {
         _channelSilentId,
         _channelSilentName,
         importance: Importance.high,
+        playSound: false,
+        enableVibration: false,
+      ),
+      // The backend sends the daily friend digest here so it never interrupts.
+      AndroidNotificationChannel(
+        _channelDigestId,
+        _channelDigestName,
+        importance: Importance.low,
         playSound: false,
         enableVibration: false,
       ),

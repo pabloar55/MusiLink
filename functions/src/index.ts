@@ -24,6 +24,7 @@ export {
 export { sendChatMessage, sendFriendRequest } from './social_writes';
 export { expireDailySongs } from './daily_song';
 export { onDailySongLiked } from './daily_song_likes';
+export { sendDailyFriendDigests } from './friend_digest';
 export { submitModerationReport } from './moderation_reports';
 
 export { acknowledgeChatDelivery } from './chat_delivery';

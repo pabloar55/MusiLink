@@ -26,6 +26,13 @@ void main() {
       );
     });
 
+    test('routes the friend digest to the daily-song tab', () {
+      expect(
+        notificationLocationFromData(const {'type': 'friend_digest'}),
+        '/?tab=daily-song',
+      );
+    });
+
     test('builds a chat location from a message notification', () {
       expect(
         notificationLocationFromData(const {

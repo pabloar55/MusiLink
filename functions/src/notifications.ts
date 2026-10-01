@@ -42,6 +42,24 @@ export const notificationText = {
     es: (name: string) => `A ${name} le ha gustado tu canción del día`,
     fr: (name: string) => `${name} a aimé votre chanson du jour`,
   },
+  friendDigestOne: {
+    el: (name: string) => `Ο χρήστης ${name} μοιράστηκε το τραγούδι της ημέρας του. Μοιραστείτε το δικό σας!`,
+    en: (name: string) => `${name} shared their song of the day. Share yours!`,
+    es: (name: string) => `${name} ha publicado su canción del día. ¡Publica la tuya!`,
+    fr: (name: string) => `${name} a partagé sa chanson du jour. Partagez la vôtre !`,
+  },
+  friendDigest: {
+    el: (friends: string) => `Οι φίλοι σας ${friends} μοιράστηκαν το τραγούδι της ημέρας τους. Μοιραστείτε το δικό σας!`,
+    en: (friends: string) => `${friends} shared their song of the day. Share yours!`,
+    es: (friends: string) => `${friends} han publicado su canción del día. ¡Publica la tuya!`,
+    fr: (friends: string) => `${friends} ont partagé leur chanson du jour. Partagez la vôtre !`,
+  },
+  friendDigestOthers: {
+    el: (count: string) => `${count} ακόμη`,
+    en: (count: string) => `${count} others`,
+    es: (count: string) => `${count} más`,
+    fr: (count: string) => `${count} autres`,
+  },
 } satisfies Record<string, Record<SupportedLocale, (name: string) => string>>;
 
 export function notifChannelId(sound: boolean, vibration: boolean): string {
@@ -50,6 +68,13 @@ export function notifChannelId(sound: boolean, vibration: boolean): string {
   if (!sound && vibration) return 'musilink_high_no_sound';
   return 'musilink_high_silent';
 }
+
+// Low-importance Android channel for reminders that must not interrupt.
+export const quietChannelId = 'musilink_digest';
+
+// Written to user_private whenever a reminder to publish is sent, so the
+// different reminders share a budget of one per local day.
+export const engagementPushField = 'engagementPushAt';
 
 export function notificationPath(data: Record<string, string>): string {
   if (data.type === 'new_message' && data.chatId && data.chatType === 'group') {
@@ -66,7 +91,13 @@ export function notificationPath(data: Record<string, string>): string {
   if (data.type === 'friend_request' || data.type === 'friend_request_accepted') {
     return '/?tab=friends';
   }
-  if (data.type === 'daily_song_expired' || data.type === 'daily_song_liked') return '/?tab=daily-song';
+  if (
+    data.type === 'daily_song_expired' ||
+    data.type === 'daily_song_liked' ||
+    data.type === 'friend_digest'
+  ) {
+    return '/?tab=daily-song';
+  }
   return '/';
 }
 
@@ -98,17 +129,20 @@ export function chatNotification(
 }
 
 // Notifications with the same tag replace each other in the drawer, keeping
-// one entry per conversation instead of an unbounded stack.
+// one entry per conversation instead of an unbounded stack. A quiet
+// notification is delivered without sound, vibration or heads-up display.
 export async function sendNotification(
   recipientUid: string,
   recipientPrivateData: DocumentData | undefined,
   notification: { title: string; body: string },
   data: Record<string, string>,
   tag?: string,
+  options: { quiet?: boolean } = {},
 ): Promise<void> {
-  const sound = recipientPrivateData?.notifSound !== false;
+  const quiet = options.quiet === true;
+  const sound = !quiet && recipientPrivateData?.notifSound !== false;
   const vibration = recipientPrivateData?.notifVibration !== false;
-  const channelId = notifChannelId(sound, vibration);
+  const channelId = quiet ? quietChannelId : notifChannelId(sound, vibration);
   const isChatMessage = data.type === 'new_message';
   const privateUserRef = db.doc(`${userPrivateCollection}/${recipientUid}`);
   const pushTokensSnapshot = await privateUserRef
@@ -131,7 +165,7 @@ export async function sendNotification(
         ...(!isChatMessage ? { notification } : {}),
         data,
         android: {
-          priority: 'high',
+          priority: quiet ? 'normal' : 'high',
           ...(!isChatMessage
             ? { notification: { channelId, ...(tag ? { tag } : {}) } }
             : {}),

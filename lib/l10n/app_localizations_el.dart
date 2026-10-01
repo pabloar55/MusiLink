@@ -707,6 +707,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsSound => 'Ήχος';
 
   @override
+  String get settingsFriendDigest => 'Ημερήσια σύνοψη φίλων';
+
+  @override
   String get pushNotificationsTitle => 'Μην χάσετε κανένα μήνυμα';
 
   @override

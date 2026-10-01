@@ -9,6 +9,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { db } from './firebase';
 import {
+  engagementPushField,
   notificationText,
   preferredLocale,
   sendNotification,
@@ -101,6 +102,12 @@ export const expireDailySongs = onSchedule(
           { type: 'daily_song_expired' },
           'daily_song_expired',
         );
+        // The friend digest skips anyone already reminded to publish today.
+        if (privateProfile.exists) {
+          await privateProfile.ref.update({
+            [engagementPushField]: FieldValue.serverTimestamp(),
+          });
+        }
       }));
     }
 

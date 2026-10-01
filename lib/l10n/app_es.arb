@@ -260,6 +260,7 @@
   "settingsNotifications": "Notificaciones",
   "settingsVibration": "Vibración",
   "settingsSound": "Sonido",
+  "settingsFriendDigest": "Resumen diario de amigos",
   "pushNotificationsTitle": "No te pierdas ningún mensaje",
   "pushNotificationsBody": "Activa las notificaciones para recibir mensajes y solicitudes de amistad aunque MusiLink esté cerrada.",
   "pushNotificationsEnable": "Activar notificaciones",

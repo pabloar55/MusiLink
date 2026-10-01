@@ -700,6 +700,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSound => 'Sound';
 
   @override
+  String get settingsFriendDigest => 'Daily friends recap';
+
+  @override
   String get pushNotificationsTitle => 'Don\'t miss a message';
 
   @override

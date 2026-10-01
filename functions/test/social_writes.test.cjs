@@ -463,3 +463,81 @@ test('a failed like notification remains retryable', async () => {
   assert.equal((await db.doc('users/bob/daily_song_likes/alice').get()).data().notificationSentFor, undefined);
   assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, async () => {}, now), true);
 });
+
+const { sendFriendDigests } = require('../lib/friend_digest.js');
+const digestSlot = new Date('2026-10-01T19:00:00Z'); // 21:00 at UTC+02:00
+const beforeDigestSlot = (minutes) => Timestamp.fromMillis(digestSlot.getTime() - minutes * 60000);
+async function seedFriendDigest() {
+  await Promise.all([
+    seedUser('alice', ['bob', 'carol', 'dave']),
+    seedUser('bob', ['alice']),
+    seedUser('carol', ['alice']),
+    seedUser('dave', ['alice']),
+  ]);
+  await Promise.all([
+    db.doc('user_private/alice').update({ utcOffsetMinutes: 120, preferredLocale: 'es' }),
+    db.doc('users/bob').update({ displayName: 'Bob', dailySong: replyTrack, dailySongUpdatedAt: beforeDigestSlot(120) }),
+    db.doc('users/carol').update({ displayName: 'Carol', dailySong: replyTrack, dailySongUpdatedAt: beforeDigestSlot(30) }),
+  ]);
+}
+
+test('the friend digest is sent quietly once per local day at 21:00', async () => {
+  await seedFriendDigest();
+  const sent = [];
+  const notify = async (...args) => { sent.push(args); };
+  assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 1, sent: 1 });
+  assert.equal(sent[0][0], 'alice');
+  assert.equal(sent[0][2].body, 'Carol y Bob han publicado su canción del día. ¡Publica la tuya!');
+  assert.deepEqual(sent[0].slice(3), [{ type: 'friend_digest' }, 'friend_digest', { quiet: true }]);
+  assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 1, sent: 0 });
+
+  const nextDay = new Date(digestSlot.getTime() + 86400000);
+  const republished = Timestamp.fromMillis(nextDay.getTime() - 3600000);
+  await Promise.all(['bob', 'carol'].map((uid) => db.doc(`users/${uid}`).update({ dailySongUpdatedAt: republished })));
+  assert.deepEqual(await sendFriendDigests(db, nextDay, notify), { candidates: 1, sent: 1 });
+  assert.equal(sent.length, 2);
+});
+
+test('the friend digest names a single friend in the singular', async () => {
+  await seedFriendDigest();
+  await db.doc('user_private/alice').update({ blockedUsers: ['carol'] });
+  const sent = [];
+  await sendFriendDigests(db, digestSlot, async (...args) => { sent.push(args); });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][2].body, 'Bob ha publicado su canción del día. ¡Publica la tuya!');
+});
+
+test('the friend digest skips users who should not be reminded', async () => {
+  let sends = 0;
+  const notify = async () => { sends++; };
+  for (const mutate of [
+    () => db.doc('user_private/alice').update({ notifFriendDigest: false }),
+    () => db.doc('users/alice').update({ dailySong: replyTrack, dailySongUpdatedAt: beforeDigestSlot(60) }),
+    () => Promise.all(['bob', 'carol'].map((uid) => db.doc(`users/${uid}`).update({ dailySongUpdatedAt: beforeDigestSlot(25 * 60) }))),
+    () => db.doc('user_private/alice').update({ blockedUsers: ['bob', 'carol'] }),
+    () => db.doc('user_private/alice').update({ utcOffsetMinutes: 60 }),
+    () => db.doc('account_deletions/alice').set({ status: 'requested' }),
+    // The song expiry reminder was already sent earlier today.
+    () => db.doc('user_private/alice').update({ engagementPushAt: beforeDigestSlot(180) }),
+  ]) {
+    await clearFirestore();
+    await seedFriendDigest();
+    await mutate();
+    assert.equal((await sendFriendDigests(db, digestSlot, notify)).sent, 0);
+  }
+  assert.equal(sends, 0);
+});
+
+test('a failed friend digest neither blocks other recipients nor repeats', async () => {
+  await seedFriendDigest();
+  await seedUser('erin', ['bob', 'carol']);
+  await db.doc('user_private/erin').update({ utcOffsetMinutes: 120 });
+  const delivered = [];
+  const notify = async (uid) => {
+    if (uid === 'alice') throw new Error('FCM unavailable');
+    delivered.push(uid);
+  };
+  assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 2, sent: 1 });
+  assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 2, sent: 0 });
+  assert.deepEqual(delivered, ['erin']);
+});
