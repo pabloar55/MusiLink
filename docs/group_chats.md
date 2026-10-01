@@ -6,7 +6,7 @@ al menos dos amigos, a una segunda pantalla para poner el nombre, elegir
 opcionalmente una foto y crear el grupo.
 El creador también es miembro; el máximo total es 20. Los grupos vacíos aparecen
 en la lista desde su creación. La cabecera abre los datos del grupo: foto,
-miembros y la opción de salir.
+miembros y las opciones de añadir miembros y de salir.
 Se reutilizan el historial paginado, los mensajes de texto, las canciones,
 las reacciones, las denuncias y el borrado suave personal.
 
@@ -46,6 +46,27 @@ las reacciones, las denuncias y el borrado suave personal.
   de `createGroupChat`. Si la subida falla, el grupo queda creado sin foto y se
   avisa al usuario, que puede añadirla desde los datos del grupo.
 
+## Añadir miembros
+
+- Cualquier miembro puede añadir a sus propios amigos desde los datos del
+  grupo. La pantalla solo ofrece amigos que aún no están en él.
+- `addGroupChatMembers` exige autenticación y App Check. En una transacción
+  comprueba que quien llama es miembro y está activo, que cada persona añadida
+  está activa y es amiga mutua suya, y que el total no supera 20. No hace falta
+  que sea amiga del resto.
+- Un bloqueo, en cualquier sentido, entre la persona añadida y cualquier
+  miembro activo impide añadirla: los bloqueos impiden enviar al grupo.
+- Permite 30 llamadas por hora y usuario. Repetir la llamada o incluir a quien
+  ya es miembro no cambia nada ni consume cuota.
+- Quien entra ve todo el historial del grupo y empieza sin mensajes pendientes:
+  el alta escribe `unreadCounts[uid] = 0` y `lastReadAt[uid]` con la hora de
+  incorporación. `onNewMessage` respeta esa marca, así que un trigger que se
+  ejecute tarde para un mensaje anterior ni lo cuenta ni lo notifica.
+  No recibe ninguna notificación por haber sido añadido.
+- Volver a añadir a quien salió borra su registro en `departures`: al ser
+  miembro de nuevo sus reacciones restantes vuelven a ser válidas, y la
+  limpieza en curso se detiene porque lee ese registro en cada transacción.
+
 ## Salir del grupo
 
 - `leaveGroupChat` exige autenticación y App Check. En una transacción retira
@@ -59,10 +80,26 @@ las reacciones, las denuncias y el borrado suave personal.
   el registro al terminar; si falla, Firestore reintenta el trigger y el
   registro sigue indicando la limpieza pendiente.
 - Los mensajes enviados se conservan. Quien sale deja de leer el grupo y de
-  recibir sus notificaciones, y no puede volver a entrar por su cuenta.
+  recibir sus notificaciones, y solo vuelve si un amigo del grupo lo añade.
 - Al salir el último miembro la transacción elimina el grupo. `onGroupChatDeleted`
   borra después, también con reintentos, sus mensajes, los registros de salida
   y su foto.
+
+## IDs de grupos eliminados
+
+`createGroupChat` acepta el ID que elige el cliente, así que un ID eliminado
+no debe poder reutilizarse: el grupo nuevo heredaría los mensajes antiguos aún
+sin limpiar y una ejecución tardía de `onGroupChatDeleted` lo borraría.
+
+- Toda eliminación de un grupo desde el backend escribe, en la misma
+  transacción, `deleted_group_chats/{chatId}`. El registro es permanente y solo
+  contiene la fecha.
+- `createGroupChat` lee ese registro en su transacción y rechaza el ID con
+  `already-exists`.
+- `onGroupChatDeleted` comprueba antes de limpiar que no exista un grupo con
+  ese ID; si existe, no borra nada. Si falta el registro (grupo borrado desde
+  la consola), lo crea en ese momento. Hasta entonces ese ID sí podría
+  recrearse, por lo que conviene no borrar grupos a mano.
 
 ## Grupos sin cuentas activas
 
@@ -88,12 +125,12 @@ su foto:
 ## Activación y alcance pendiente
 
 Requiere desplegar las funciones modificadas, incluidas `createGroupChat`,
-`leaveGroupChat`, `onGroupMemberLeft`, `onGroupChatDeleted` y
-`processAccountDeletion`, y las reglas de
+`addGroupChatMembers`, `leaveGroupChat`, `onGroupMemberLeft`,
+`onGroupChatDeleted` y `processAccountDeletion`, y las reglas de
 Firestore y de Storage antes de publicar el cliente. No requiere migrar chats existentes ni nuevos índices. El procedimiento
 general está en [firebase_hosting.md](firebase_hosting.md).
 
-Quedan para siguientes iteraciones: añadir o expulsar miembros, roles de
+Quedan para siguientes iteraciones: expulsar miembros, roles de
 administrador, editar el nombre, quitar la foto y recibos de lectura por miembro.
 Ocultar una conversación no equivale a abandonar el grupo.
 

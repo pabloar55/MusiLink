@@ -204,6 +204,23 @@ class ChatService with AuthenticatedService {
     }
   }
 
+  /// El backend exige que cada persona añadida sea amiga mutua de quien llama
+  /// y que no tenga bloqueos con los miembros actuales.
+  Future<void> addGroupMembers(
+    String chatId,
+    List<String> participantIds,
+  ) async {
+    try {
+      await _functions
+          .httpsCallable('addGroupChatMembers')
+          .call<void>({'chatId': chatId, 'participantIds': participantIds})
+          .timeout(const Duration(seconds: 30));
+    } catch (error, stack) {
+      reportError(error, stack).ignore();
+      rethrow;
+    }
+  }
+
   /// La pertenencia solo la modifica el backend, que además limpia los datos
   /// por miembro y elimina el grupo cuando se queda vacío.
   Future<void> leaveGroupChat(String chatId) async {

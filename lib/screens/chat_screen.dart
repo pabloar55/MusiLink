@@ -522,6 +522,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
+      // La altura por defecto oculta las acciones del final en grupos pequeños.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+      ),
       builder: (_) => GroupInfoSheet(
         group: widget.group!,
         getUser: getUserFuture,
@@ -530,6 +535,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           context.push(
             userProfileLocation(user.uid, fromChat: true),
             extra: user,
+          );
+        },
+        onAddMembers: () {
+          if (!mounted) return;
+          context.push(
+            '/group-chat/${Uri.encodeComponent(widget.chatId)}/add-members',
           );
         },
         onLeave: _leaveGroup,

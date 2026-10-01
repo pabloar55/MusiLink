@@ -24,8 +24,10 @@ const { createModerationReport } = require('../lib/moderation_reports.js');
 const { deleteGroupIfAbandoned } = require('../lib/abandoned_groups.js');
 const { processChats } = require('../lib/account_deletion.js');
 const {
+  addGroupMembers,
   cleanUpDeparture,
-  deleteGroupContents,
+  cleanUpDeletedGroup,
+  createGroupChat,
   leaveGroup,
 } = require('../lib/group_chats.js');
 
@@ -693,7 +695,7 @@ test('leaveGroupChat elimina el grupo cuando sale el último miembro y su limpie
   assert.equal((await db.doc(`chats/${chatId}`).get()).exists, false);
   assert.equal((await db.collection(`chats/${chatId}/departures`).get()).size, 1);
 
-  await deleteGroupContents(db, chatId);
+  await cleanUpDeletedGroup(db, chatId);
   assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, true);
   assert.equal((await db.collection(`chats/${chatId}/departures`).get()).empty, true);
 
@@ -771,8 +773,8 @@ test('salir elimina el grupo si solo quedan cuentas eliminadas', async () => {
 
   // La limpieza del contenido puede repetirse si el trigger falla a medias.
   assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, false);
-  await deleteGroupContents(db, chatId);
-  await deleteGroupContents(db, chatId);
+  await cleanUpDeletedGroup(db, chatId);
+  await cleanUpDeletedGroup(db, chatId);
   assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, true);
   await leaveGroup(db, chatId, 'bob');
   assert.equal(await deleteGroupIfAbandoned(db, chatId), true);
@@ -825,4 +827,228 @@ test('dos eliminaciones de cuenta simultáneas borran el grupo que compartían',
 
   assert.equal(await groupExists(chatId), false);
   assert.equal(await groupExists(keptId), true);
+});
+
+async function groupParticipants(chatId) {
+  return (await db.doc(`chats/${chatId}`).get()).data().participants;
+}
+
+async function seedFriends(a, b) {
+  await Promise.all([seedUser(a, [b]), seedUser(b, [a])]);
+}
+
+test('addGroupChatMembers: un miembro añade a sus amigos aunque no lo sean del resto', async () => {
+  const chatId = 'GroupChat00000000001';
+  await seedGroup(chatId, ['alice', 'bob', 'carol']);
+  await seedFriends('bob', 'dave');
+
+  const joinedAt = Timestamp.fromMillis(5_000);
+  await addGroupMembers(db, chatId, 'bob', ['dave'], joinedAt);
+
+  const chat = (await db.doc(`chats/${chatId}`).get()).data();
+  assert.deepEqual(chat.participants, ['alice', 'bob', 'carol', 'dave']);
+  assert.equal(chat.unreadCounts.dave, 0);
+  // La marca de lectura inicial excluye los mensajes anteriores al alta.
+  assert.equal(chat.lastReadAt.dave.toMillis(), joinedAt.toMillis());
+
+  // Un reintento, o incluir a quien ya es miembro, no repite ni consume cuota.
+  await addGroupMembers(db, chatId, 'bob', ['dave', 'alice']);
+  assert.deepEqual(await groupParticipants(chatId), ['alice', 'bob', 'carol', 'dave']);
+  assert.equal((await db.doc('rate_limits/bob').get()).data().groupAddCount, 1);
+});
+
+test('addGroupChatMembers: exige pertenencia, amistad mutua, cuentas activas y ausencia de bloqueos', async () => {
+  const chatId = 'GroupChat00000000001';
+  const members = ['alice', 'bob', 'carol'];
+  await seedGroup(chatId, members);
+  const denied = { code: 'permission-denied' };
+
+  await seedFriends('mallory', 'erin');
+  await assert.rejects(addGroupMembers(db, chatId, 'mallory', ['erin']), denied);
+
+  await seedUser('bob');
+  await assert.rejects(addGroupMembers(db, chatId, 'bob', ['erin']), denied);
+  await seedUser('bob', ['erin']);
+  await assert.rejects(addGroupMembers(db, chatId, 'bob', ['erin']), denied);
+
+  // Un bloqueo con cualquier miembro, en cualquier sentido, impide añadirlo.
+  await seedFriends('bob', 'frank');
+  await seedUser('carol', [], ['frank']);
+  await assert.rejects(addGroupMembers(db, chatId, 'bob', ['frank']), denied);
+  await seedUser('carol');
+  await seedUser('frank', ['bob'], ['alice']);
+  await assert.rejects(addGroupMembers(db, chatId, 'bob', ['frank']), denied);
+
+  await seedFriends('bob', 'gina');
+  await db.doc('account_deletions/gina').set({ status: 'requested' });
+  await assert.rejects(
+    addGroupMembers(db, chatId, 'bob', ['gina']),
+    { code: 'failed-precondition' },
+  );
+
+  await db.doc('rate_limits/bob').set({
+    groupAddWindowStart: Timestamp.now(),
+    groupAddCount: 30,
+  });
+  await seedFriends('bob', 'dave');
+  await assert.rejects(
+    addGroupMembers(db, chatId, 'bob', ['dave']),
+    { code: 'resource-exhausted' },
+  );
+
+  assert.deepEqual(await groupParticipants(chatId), members);
+});
+
+test('addGroupChatMembers: dos miembros añadiendo a la vez no superan los 20', async () => {
+  const chatId = 'GroupChat00000000001';
+  const members = Array.from({ length: 18 }, (_, index) => `member${index}`);
+  await seedGroup(chatId, members);
+  await Promise.all([
+    seedUser('member0', ['new1', 'new2']),
+    seedUser('new1', ['member0']),
+    seedUser('new2', ['member0']),
+    seedUser('member1', ['new3', 'new4']),
+    seedUser('new3', ['member1']),
+    seedUser('new4', ['member1']),
+  ]);
+
+  const results = await Promise.allSettled([
+    addGroupMembers(db, chatId, 'member0', ['new1', 'new2']),
+    addGroupMembers(db, chatId, 'member1', ['new3', 'new4']),
+  ]);
+
+  assert.deepEqual(results.map((result) => result.status).sort(), ['fulfilled', 'rejected']);
+  assert.equal(results.find((result) => result.status === 'rejected').reason.code, 'failed-precondition');
+  const chat = (await db.doc(`chats/${chatId}`).get()).data();
+  assert.equal(chat.participants.length, 20);
+  assert.equal(Object.keys(chat.unreadCounts).length, 20);
+});
+
+test('volver a añadir a quien salió cancela su limpieza pendiente', async () => {
+  const chatId = 'GroupChat00000000001';
+  const departure = db.doc(`chats/${chatId}/departures/alice`);
+  const initial = { '❤️': ['alice', 'bob', 'carol'], '🔥': ['alice'] };
+  await seedGroup(chatId, ['alice', 'bob', 'carol']);
+  await seedFriends('bob', 'alice');
+
+  await leaveGroup(db, chatId, 'alice');
+  await addGroupMembers(db, chatId, 'bob', ['alice']);
+  assert.equal((await departure.get()).exists, false);
+  assert.deepEqual(await groupParticipants(chatId), ['bob', 'carol', 'alice']);
+
+  // El trigger de la salida anterior llega tarde y ya no debe tocar nada.
+  await cleanUpDeparture(db, chatId, 'alice');
+  assert.deepEqual(await groupReactions(chatId), initial);
+
+  // Una nueva salida registra y completa su propia limpieza.
+  await leaveGroup(db, chatId, 'alice');
+  await cleanUpDeparture(db, chatId, 'alice');
+  assert.deepEqual(await groupReactions(chatId), { '❤️': ['bob', 'carol'] });
+  assert.equal((await departure.get()).exists, false);
+});
+
+test('una limpieza en curso se detiene cuando el miembro vuelve al grupo', async () => {
+  const chatId = 'GroupChat00000000001';
+  const messageCount = 12;
+  await seedGroup(chatId, ['alice', 'bob', 'carol'], messageCount);
+  await seedFriends('bob', 'alice');
+  await leaveGroup(db, chatId, 'alice');
+
+  await Promise.all([
+    cleanUpDeparture(db, chatId, 'alice'),
+    addGroupMembers(db, chatId, 'bob', ['alice']),
+  ]);
+
+  assert.deepEqual(await groupParticipants(chatId), ['bob', 'carol', 'alice']);
+  assert.equal((await db.collection(`chats/${chatId}/departures`).get()).empty, true);
+
+  // La cancelación no impide limpiar por completo una salida posterior.
+  await leaveGroup(db, chatId, 'alice');
+  await cleanUpDeparture(db, chatId, 'alice');
+  for (let index = 1; index <= messageCount; index += 1) {
+    assert.deepEqual(await groupReactions(chatId, `message-${index}`), { '❤️': ['bob', 'carol'] });
+  }
+});
+
+async function createGroupAs(uid, chatId, participantIds) {
+  return createGroupChat.run({
+    auth: { uid },
+    data: { chatId, name: 'Grupo nuevo', participantIds },
+  });
+}
+
+async function seedGroupCreator() {
+  await Promise.all([
+    seedUser('alice', ['bob', 'carol']),
+    seedUser('bob', ['alice']),
+    seedUser('carol', ['alice']),
+  ]);
+}
+
+test('el ID de un grupo eliminado no se puede volver a crear', async () => {
+  const leftId = 'GroupChat00000000001';
+  const abandonedId = 'GroupChat00000000002';
+  await seedGroup(leftId, ['alice']);
+  await seedGroup(abandonedId, ['dave']);
+  await leaveGroup(db, leftId, 'alice');
+  await anonymizeAccount('dave');
+  assert.equal(await deleteGroupIfAbandoned(db, abandonedId), true);
+  await seedGroupCreator();
+
+  for (const chatId of [leftId, abandonedId]) {
+    assert.equal((await db.doc(`deleted_group_chats/${chatId}`).get()).exists, true);
+    // El contenido antiguo sigue pendiente de limpieza y no debe heredarse.
+    await assert.rejects(
+      createGroupAs('alice', chatId, ['bob', 'carol']),
+      { code: 'already-exists' },
+    );
+    assert.equal(await groupExists(chatId), false);
+    assert.equal(await cleanUpDeletedGroup(db, chatId), true);
+    await assert.rejects(
+      createGroupAs('alice', chatId, ['bob', 'carol']),
+      { code: 'already-exists' },
+    );
+  }
+
+  // Un ID sin usar sigue funcionando y la cuota solo cuenta esa creación.
+  await createGroupAs('alice', 'GroupChat00000000003', ['bob', 'carol']);
+  assert.equal(await groupExists('GroupChat00000000003'), true);
+  assert.equal((await db.doc('rate_limits/alice').get()).data().groupCount, 1);
+});
+
+test('crear con el ID de un grupo que se está eliminando no lo recupera', async () => {
+  const chatId = 'GroupChat00000000001';
+  await seedGroup(chatId, ['dave']);
+  await seedGroupCreator();
+
+  await Promise.allSettled([
+    leaveGroup(db, chatId, 'dave'),
+    createGroupAs('alice', chatId, ['bob', 'carol']),
+  ]);
+
+  assert.equal(await groupExists(chatId), false);
+  assert.equal((await db.doc(`deleted_group_chats/${chatId}`).get()).exists, true);
+});
+
+test('la limpieza de un grupo borrado fuera del backend no toca uno recreado', async () => {
+  const recreatedId = 'GroupChat00000000001';
+  const removedId = 'GroupChat00000000002';
+  await seedGroup(recreatedId, ['dave']);
+  await seedGroup(removedId, ['dave']);
+  await seedGroupCreator();
+  // Borrado manual: sin registro, el ID se puede recrear antes del trigger.
+  await Promise.all([db.doc(`chats/${recreatedId}`).delete(), db.doc(`chats/${removedId}`).delete()]);
+  await createGroupAs('alice', recreatedId, ['bob', 'carol']);
+
+  assert.equal(await cleanUpDeletedGroup(db, recreatedId), false);
+  assert.deepEqual(await groupParticipants(recreatedId), ['alice', 'bob', 'carol']);
+  assert.equal((await db.collection(`chats/${recreatedId}/messages`).get()).empty, false);
+
+  // Sin recreación, la limpieza retira el ID antes de borrar el contenido.
+  assert.equal(await cleanUpDeletedGroup(db, removedId), true);
+  assert.equal((await db.collection(`chats/${removedId}/messages`).get()).empty, true);
+  await assert.rejects(
+    createGroupAs('alice', removedId, ['bob', 'carol']),
+    { code: 'already-exists' },
+  );
 });

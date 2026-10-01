@@ -52,3 +52,11 @@ test('shouldIncrementUnreadCount ignores messages hidden by a deletion', () => {
     true,
   );
 });
+
+test('shouldIncrementUnreadCount ignores messages up to the read or joining mark', () => {
+  const chat = { lastReadAt: { dave: Timestamp.fromMillis(2_000) } };
+
+  assert.equal(shouldIncrementUnreadCount(chat, 'dave', Timestamp.fromMillis(1_999)), false);
+  assert.equal(shouldIncrementUnreadCount(chat, 'dave', Timestamp.fromMillis(2_000)), false);
+  assert.equal(shouldIncrementUnreadCount(chat, 'dave', Timestamp.fromMillis(2_001)), true);
+});

@@ -1,6 +1,19 @@
-import { Firestore, Transaction } from 'firebase-admin/firestore';
+import { Firestore, Timestamp, Transaction } from 'firebase-admin/firestore';
 
 import { chatParticipants } from './firestore_values';
+
+export const deletedGroupsCollection = 'deleted_group_chats';
+
+/**
+ * Deletes the group and retires its ID in the same commit. The record is kept
+ * forever: `createGroupChat` accepts client-chosen IDs, and a group recreated
+ * under a deleted ID would inherit the old messages still pending cleanup and
+ * be erased by a late `onGroupChatDeleted` run.
+ */
+export function deleteGroup(firestore: Firestore, tx: Transaction, chatId: string): void {
+  tx.delete(firestore.doc(`chats/${chatId}`));
+  tx.set(firestore.doc(`${deletedGroupsCollection}/${chatId}`), { deletedAt: Timestamp.now() });
+}
 
 /**
  * Whether nobody in `ids` can use a group any more: every account has been
@@ -28,7 +41,7 @@ export async function deleteGroupIfAbandoned(firestore: Firestore, chatId: strin
     if (!chat.exists) return true;
     if (chat.data()?.type !== 'group') return false;
     if (!await everyAccountDeleted(firestore, tx, chatParticipants(chat.data()))) return false;
-    tx.delete(chatRef);
+    deleteGroup(firestore, tx, chatId);
     return true;
   });
 }

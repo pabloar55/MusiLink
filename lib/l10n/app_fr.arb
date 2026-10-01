@@ -325,6 +325,9 @@
   "groupChatPhotoError": "Impossible d’enregistrer la photo du groupe. Veuillez réessayer.",
   "groupChatLeave": "Quitter le groupe",
   "groupChatLeaveTitle": "Quitter ce groupe ?",
-  "groupChatLeaveBody": "Vous ne verrez plus ses messages et vous ne pourrez pas le rejoindre.",
-  "groupChatLeaveError": "Impossible de quitter le groupe. Veuillez réessayer."
+  "groupChatLeaveBody": "Vous ne verrez plus ses messages. Vous ne pourrez revenir que si un ami du groupe vous ajoute.",
+  "groupChatLeaveError": "Impossible de quitter le groupe. Veuillez réessayer.",
+  "groupChatAddMembers": "Ajouter des membres",
+  "groupChatNoFriendsToAdd": "Tous vos amis font déjà partie de ce groupe.",
+  "groupChatAddMembersError": "Impossible d’ajouter les membres. Vérifiez qu’ils sont toujours vos amis, qu’il n’y a aucun blocage avec d’autres membres et que le groupe ne dépasse pas 20 membres."
 }

@@ -31,6 +31,7 @@ export { acknowledgeChatDelivery } from './chat_delivery';
 
 export {
   createGroupChat,
+  addGroupChatMembers,
   leaveGroupChat,
   onGroupMemberLeft,
   onGroupChatDeleted,

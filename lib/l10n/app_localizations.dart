@@ -1665,7 +1665,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupChatLeaveBody.
   ///
   /// In en, this message translates to:
-  /// **'You will no longer see its messages and you will not be able to rejoin.'**
+  /// **'You will no longer see its messages. You can only come back if a friend in the group adds you.'**
   String get groupChatLeaveBody;
 
   /// No description provided for @groupChatLeaveError.
@@ -1673,6 +1673,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not leave the group. Please try again.'**
   String get groupChatLeaveError;
+
+  /// No description provided for @groupChatAddMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Add members'**
+  String get groupChatAddMembers;
+
+  /// No description provided for @groupChatNoFriendsToAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'All your friends are already in this group.'**
+  String get groupChatNoFriendsToAdd;
+
+  /// No description provided for @groupChatAddMembersError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add the members. Check that they are still your friends, that there are no blocks with other members and that the group does not exceed 20 members.'**
+  String get groupChatAddMembersError;
 }
 
 class _AppLocalizationsDelegate

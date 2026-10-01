@@ -890,9 +890,20 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get groupChatLeaveBody =>
-      'Vous ne verrez plus ses messages et vous ne pourrez pas le rejoindre.';
+      'Vous ne verrez plus ses messages. Vous ne pourrez revenir que si un ami du groupe vous ajoute.';
 
   @override
   String get groupChatLeaveError =>
       'Impossible de quitter le groupe. Veuillez réessayer.';
+
+  @override
+  String get groupChatAddMembers => 'Ajouter des membres';
+
+  @override
+  String get groupChatNoFriendsToAdd =>
+      'Tous vos amis font déjà partie de ce groupe.';
+
+  @override
+  String get groupChatAddMembersError =>
+      'Impossible d’ajouter les membres. Vérifiez qu’ils sont toujours vos amis, qu’il n’y a aucun blocage avec d’autres membres et que le groupe ne dépasse pas 20 membres.';
 }

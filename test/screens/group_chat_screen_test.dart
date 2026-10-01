@@ -6,11 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/screens/chat_screen.dart';
+import 'package:musi_link/screens/create_group_chat_screen.dart';
 import 'package:musi_link/screens/group_chat_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
@@ -65,6 +68,13 @@ Future<_MockChatService> _openGroup(
           chatId: state.pathParameters['chatId']!,
           initialGroup: initialGroup,
         ),
+        routes: [
+          GoRoute(
+            path: 'add-members',
+            builder: (_, state) =>
+                AddGroupMembersScreen(chatId: state.pathParameters['chatId']!),
+          ),
+        ],
       ),
     ],
   );
@@ -76,6 +86,13 @@ Future<_MockChatService> _openGroup(
         chatServiceProvider.overrideWithValue(service),
         notificationServiceProvider.overrideWithValue(notifications),
         userServiceProvider.overrideWithValue(users),
+        friendProfilesStreamProvider.overrideWith(
+          (_) => Stream.value(const [
+            AppUser(uid: 'other-user', displayName: 'Already Here'),
+            AppUser(uid: 'new-friend', displayName: 'New Friend'),
+            AppUser(uid: 'second-friend', displayName: 'Second Friend'),
+          ]),
+        ),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -121,6 +138,8 @@ void main() {
 
     await tester.tap(find.text('Music friends'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Leave group'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Leave group'));
     await tester.pumpAndSettle();
     expect(find.text('Leave this group?'), findsOneWidget);
@@ -131,6 +150,74 @@ void main() {
     verify(() => service.leaveGroupChat('group-1')).called(1);
     expect(find.byType(ChatScreen), findsNothing);
     expect(find.text('Messages'), findsOneWidget);
+  });
+
+  testWidgets('adding members offers only friends outside the group', (
+    tester,
+  ) async {
+    final service = await _openGroup(
+      tester,
+      groups.stream,
+      initialGroup: _group(),
+    );
+    when(() => service.addGroupMembers('group-1', ['new-friend']))
+        .thenAnswer((_) async {});
+    groups.add(_group());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Music friends'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add members'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddGroupMembersScreen), findsOneWidget);
+    expect(find.text('New Friend'), findsOneWidget);
+    expect(find.text('Already Here'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.tap(find.text('New Friend'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    verify(() => service.addGroupMembers('group-1', ['new-friend'])).called(1);
+    expect(find.byType(AddGroupMembersScreen), findsNothing);
+    expect(find.byType(ChatScreen), findsOneWidget);
+  });
+
+  testWidgets('a selected friend added by someone else frees their seat', (
+    tester,
+  ) async {
+    final members = [
+      'current-user',
+      for (var index = 1; index < 18; index += 1) 'member-$index',
+    ];
+    final service = await _openGroup(
+      tester,
+      groups.stream,
+      initialGroup: _group(participants: members),
+    );
+    when(() => service.addGroupMembers('group-1', ['second-friend']))
+        .thenAnswer((_) async {});
+    groups.add(_group(participants: members));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Music friends'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add members'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New Friend'));
+    await tester.pumpAndSettle();
+
+    // Otro miembro añade al amigo seleccionado: queda una única plaza libre.
+    groups.add(_group(participants: [...members, 'new-friend']));
+    await tester.pumpAndSettle();
+    expect(find.text('New Friend'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.tap(find.text('Second Friend'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    verify(() => service.addGroupMembers('group-1', ['second-friend']))
+        .called(1);
   });
 
   testWidgets('a direct link waits for verified group data', (tester) async {

@@ -161,3 +161,44 @@ test('push delivery capability is message-specific, idempotent and does not mark
   await ref.delete();
   assert.equal(await confirmPushDelivery(payload), false);
 });
+
+test('un trigger tardío no cuenta ni notifica mensajes anteriores al alta de un miembro', async () => {
+  const groupRef = db.doc('chats/GroupChat00000000001');
+  const privateRefs = ['bob', 'dave'].map((uid) => db.doc(`user_private/${uid}`));
+  try {
+    await aliceRef.set({ displayName: 'Alice' });
+    await Promise.all(privateRefs.map((ref) => ref.set({})));
+    // Dave se incorporó en 3000; los mensajes son de antes y de después.
+    await groupRef.set({
+      type: 'group',
+      name: 'Grupo',
+      participants: ['alice', 'bob', 'dave'],
+      lastMessage: '',
+      lastMessageTime: Timestamp.fromMillis(1_000),
+      unreadCounts: { alice: 0, bob: 0, dave: 0 },
+      lastReadAt: { dave: Timestamp.fromMillis(3_000) },
+    });
+    const run = async (id, millis) => {
+      const ref = groupRef.collection('messages').doc(id);
+      await ref.set({ senderId: 'alice', text: id, timestamp: Timestamp.fromMillis(millis) });
+      await onNewMessage.run({
+        data: await ref.get(),
+        params: { chatId: groupRef.id, messageId: id },
+      });
+      return (await ref.get()).data();
+    };
+
+    const earlier = await run('before-joining', 2_000);
+    assert.deepEqual((await groupRef.get()).data().unreadCounts, { alice: 0, bob: 1, dave: 0 });
+    assert.deepEqual(earlier.notifiedRecipients, ['bob']);
+
+    const later = await run('after-joining', 4_000);
+    assert.deepEqual((await groupRef.get()).data().unreadCounts, { alice: 0, bob: 2, dave: 1 });
+    assert.deepEqual(later.notifiedRecipients, ['bob', 'dave']);
+  } finally {
+    await Promise.all([
+      db.recursiveDelete(groupRef),
+      ...privateRefs.map((ref) => ref.delete()),
+    ]);
+  }
+});

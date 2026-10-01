@@ -184,6 +184,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           chatId: state.pathParameters['chatId']!,
           initialGroup: state.extra is Chat ? state.extra! as Chat : null,
         ),
+        routes: [
+          GoRoute(
+            path: 'add-members',
+            builder: (context, state) =>
+                AddGroupMembersScreen(chatId: state.pathParameters['chatId']!),
+          ),
+        ],
       ),
       GoRoute(
         path: '/chat',

@@ -885,9 +885,20 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get groupChatLeaveBody =>
-      'Δεν θα βλέπεις πλέον τα μηνύματά της και δεν θα μπορείς να συμμετάσχεις ξανά.';
+      'Δεν θα βλέπεις πλέον τα μηνύματά της. Θα μπορέσεις να επιστρέψεις μόνο αν σε προσθέσει ένας φίλος από την ομάδα.';
 
   @override
   String get groupChatLeaveError =>
       'Δεν ήταν δυνατή η αποχώρηση από την ομάδα. Δοκίμασε ξανά.';
+
+  @override
+  String get groupChatAddMembers => 'Προσθήκη μελών';
+
+  @override
+  String get groupChatNoFriendsToAdd =>
+      'Όλοι οι φίλοι σου είναι ήδη σε αυτή την ομάδα.';
+
+  @override
+  String get groupChatAddMembersError =>
+      'Δεν ήταν δυνατή η προσθήκη των μελών. Έλεγξε ότι είναι ακόμη φίλοι σου, ότι δεν υπάρχουν αποκλεισμοί με άλλα μέλη και ότι η ομάδα δεν ξεπερνά τα 20 μέλη.';
 }

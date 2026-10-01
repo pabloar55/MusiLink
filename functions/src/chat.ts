@@ -224,9 +224,14 @@ export const onNewMessage = onDocumentCreated(
           tx.update(messageRef, { summaryApplied: true });
         }
 
+        const isGroup = chatData.type === 'group';
         return {
-          recipientIds,
-          groupName: chatData.type === 'group' ? String(chatData.name ?? '') : undefined,
+          // A member who already read past this message, or joined after it,
+          // must not be notified by a trigger that runs late.
+          recipientIds: isGroup
+            ? recipientIds.filter((uid) => shouldIncrementUnreadCount(chatData, uid, messageTime))
+            : recipientIds,
+          groupName: isGroup ? String(chatData.name ?? '') : undefined,
           notifiedRecipients: currentMessage.notifiedRecipients ?? [],
           shouldSendNotification: currentMessage.notificationSent !== true,
         };

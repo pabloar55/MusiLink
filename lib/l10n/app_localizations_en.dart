@@ -876,9 +876,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupChatLeaveBody =>
-      'You will no longer see its messages and you will not be able to rejoin.';
+      'You will no longer see its messages. You can only come back if a friend in the group adds you.';
 
   @override
   String get groupChatLeaveError =>
       'Could not leave the group. Please try again.';
+
+  @override
+  String get groupChatAddMembers => 'Add members';
+
+  @override
+  String get groupChatNoFriendsToAdd =>
+      'All your friends are already in this group.';
+
+  @override
+  String get groupChatAddMembersError =>
+      'Could not add the members. Check that they are still your friends, that there are no blocks with other members and that the group does not exceed 20 members.';
 }

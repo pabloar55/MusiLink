@@ -7,6 +7,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/image_source_picker.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
@@ -18,12 +19,14 @@ class GroupInfoSheet extends ConsumerStatefulWidget {
     required this.group,
     required this.getUser,
     required this.onOpenProfile,
+    required this.onAddMembers,
     required this.onLeave,
   });
 
   final Chat group;
   final Future<AppUser?> Function(String uid) getUser;
   final void Function(AppUser user) onOpenProfile;
+  final VoidCallback onAddMembers;
   final VoidCallback onLeave;
 
   @override
@@ -109,6 +112,18 @@ class _GroupInfoSheetState extends ConsumerState<GroupInfoSheet> {
             textAlign: TextAlign.center,
           ),
         ),
+        if (group.participants.length < ChatService.maxGroupParticipants)
+          ListTile(
+            leading: const CircleAvatar(
+              radius: 20,
+              child: Icon(LucideIcons.userPlus, size: 20),
+            ),
+            title: Text(l10n.groupChatAddMembers),
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.onAddMembers();
+            },
+          ),
         for (final uid in group.participants)
           FutureBuilder<AppUser?>(
             future: widget.getUser(uid),
