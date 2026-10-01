@@ -8,6 +8,7 @@ import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/account_deletion_service.dart';
+import 'package:musi_link/services/app_invite_service.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/friend_service.dart';
@@ -109,6 +110,10 @@ final friendServiceProvider = Provider<FriendService>((ref) {
 
 final moderationServiceProvider = Provider<ModerationService>((ref) {
   return ModerationService(ref.watch(firebaseFunctionsProvider));
+});
+
+final appInviteServiceProvider = Provider<AppInviteService>((ref) {
+  return const AppInviteService();
 });
 
 // ── Servicios con dependencias ──────────────────────────────────

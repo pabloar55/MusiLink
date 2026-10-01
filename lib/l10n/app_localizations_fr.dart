@@ -463,6 +463,25 @@ class AppLocalizationsFr extends AppLocalizations {
       'Ajoutez des amis pour voir leurs chansons du jour';
 
   @override
+  String get inviteFriendsTitle => 'Invitez vos amis';
+
+  @override
+  String get inviteFriendsButton => 'Inviter un ami';
+
+  @override
+  String get inviteLinkCopied => 'Invitation copiée dans le presse-papiers';
+
+  @override
+  String inviteMessage(String username, String url) {
+    return 'Rejoins-moi sur MusiLink et ajoute-moi en ami : je suis @$username. $url';
+  }
+
+  @override
+  String inviteMessageNoUsername(String url) {
+    return 'Rejoins-moi sur MusiLink. $url';
+  }
+
+  @override
   String get dailySongSaveError =>
       'Impossible de publier la chanson. Vérifiez votre connexion et réessayez.';
 

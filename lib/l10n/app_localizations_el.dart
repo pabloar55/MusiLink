@@ -455,6 +455,25 @@ class AppLocalizationsEl extends AppLocalizations {
       'Προσθέστε φίλους για να δείτε το τραγούδι τους της ημέρας';
 
   @override
+  String get inviteFriendsTitle => 'Προσκαλέστε τους φίλους σας';
+
+  @override
+  String get inviteFriendsButton => 'Προσκαλέστε έναν φίλο';
+
+  @override
+  String get inviteLinkCopied => 'Η πρόσκληση αντιγράφηκε στο πρόχειρο';
+
+  @override
+  String inviteMessage(String username, String url) {
+    return 'Έλα στο MusiLink και πρόσθεσέ με ως φίλο: είμαι ο χρήστης @$username. $url';
+  }
+
+  @override
+  String inviteMessageNoUsername(String url) {
+    return 'Έλα στο MusiLink. $url';
+  }
+
+  @override
   String get dailySongSaveError =>
       'Δεν ήταν δυνατή η δημοσίευση του τραγουδιού. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
 

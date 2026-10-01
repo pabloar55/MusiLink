@@ -16,6 +16,20 @@
   -->
   <base href="$FLUTTER_BASE_HREF">
 
+  <script>
+    // Enlace de invitación: Android va a Google Play; el resto continúa en la
+    // web desde la raíz, que es también el start_url de la PWA.
+    if (/^\/invite\/?$/.test(window.location.pathname)) {
+      if (/Android/i.test(window.navigator.userAgent)) {
+        window.location.replace(
+          'https://play.google.com/store/apps/details?id=app.musilink',
+        );
+      } else {
+        window.history.replaceState(null, '', '/');
+      }
+    }
+  </script>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">

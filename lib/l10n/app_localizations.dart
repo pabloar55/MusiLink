@@ -906,6 +906,36 @@ abstract class AppLocalizations {
   /// **'Add friends to see their song of the day'**
   String get dailySongNoFriends;
 
+  /// No description provided for @inviteFriendsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite your friends'**
+  String get inviteFriendsTitle;
+
+  /// No description provided for @inviteFriendsButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite a friend'**
+  String get inviteFriendsButton;
+
+  /// No description provided for @inviteLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite copied to the clipboard'**
+  String get inviteLinkCopied;
+
+  /// No description provided for @inviteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Join me on MusiLink and add me as a friend: I\'m @{username}. {url}'**
+  String inviteMessage(String username, String url);
+
+  /// No description provided for @inviteMessageNoUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Join me on MusiLink. {url}'**
+  String inviteMessageNoUsername(String url);
+
   /// No description provided for @dailySongSaveError.
   ///
   /// In en, this message translates to:

@@ -71,6 +71,14 @@ Antes de dar por terminado un despliegue se deben comprobar el inicio de sesión
 Firestore, Functions, Storage, App Check, FCM y la navegación directa a rutas
 internas.
 
+## Enlace de invitación
+
+`https://musilink.app/invite` es el enlace que comparte la app
+(`AppInviteService.inviteUrl`). Un script en línea de `web/index.html` lo
+resuelve antes de cargar Flutter: en Android redirige a Google Play y en el
+resto de plataformas continúa en `/`, donde iOS muestra la instalación de la
+PWA.
+
 ## Confirmaciones de entrega del chat
 
 Los mensajes aparecen localmente al enviar y se reconcilian por ID con

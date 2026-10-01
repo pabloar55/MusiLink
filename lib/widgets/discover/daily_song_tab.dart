@@ -16,6 +16,7 @@ import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_actions.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
+import 'package:musi_link/widgets/discover/invite_friends_card.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -203,6 +204,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
         .where((friend) => friend.dailySong != null)
         .toList();
     final dailySong = currentUser?.dailySong;
+    final hasFriends = (friendIds ?? const <String>[]).isNotEmpty;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _scheduleExpiryRefresh(currentUser, loadedFriends);
@@ -337,23 +339,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
             ),
           ),
           const SizedBox(height: 12),
-          if ((friendIds ?? const <String>[]).isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: Text(
-                    l10n.dailySongNoFriends,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
-            )
-          else if (friendsWithSongs.isEmpty)
+          if (hasFriends && friendsWithSongs.isEmpty) ...[
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -368,8 +354,9 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                   ),
                 ),
               ),
-            )
-          else
+            ),
+            const SizedBox(height: 8),
+          ] else if (hasFriends)
             ...List.generate(friendsWithSongs.length, (index) {
               final friend = friendsWithSongs[index];
               return Padding(
@@ -387,6 +374,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                 ),
               );
             }),
+          const InviteFriendsCard(),
         ],
       ),
     );

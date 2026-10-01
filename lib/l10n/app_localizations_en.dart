@@ -452,6 +452,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dailySongNoFriends => 'Add friends to see their song of the day';
 
   @override
+  String get inviteFriendsTitle => 'Invite your friends';
+
+  @override
+  String get inviteFriendsButton => 'Invite a friend';
+
+  @override
+  String get inviteLinkCopied => 'Invite copied to the clipboard';
+
+  @override
+  String inviteMessage(String username, String url) {
+    return 'Join me on MusiLink and add me as a friend: I\'m @$username. $url';
+  }
+
+  @override
+  String inviteMessageNoUsername(String url) {
+    return 'Join me on MusiLink. $url';
+  }
+
+  @override
   String get dailySongSaveError =>
       'The song couldn\'t be published. Check your connection and try again.';
 
