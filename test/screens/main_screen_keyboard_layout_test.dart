@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/friend_request.dart';
+import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
@@ -50,6 +51,12 @@ void main() {
       ProviderScope(
         overrides: [
           currentUserProvider.overrideWith((_) => Stream<AppUser?>.value(null)),
+          friendsStreamProvider.overrideWith(
+            (_) => Stream<List<String>>.value(const []),
+          ),
+          friendProfilesStreamProvider.overrideWith(
+            (_) => Stream<List<AppUser>>.value(const []),
+          ),
           receivedRequestsProvider.overrideWith(
             (_) => Stream<List<FriendRequest>>.value(const []),
           ),

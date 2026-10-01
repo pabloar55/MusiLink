@@ -18,6 +18,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
         AutomaticKeepAliveClientMixin<DiscoverScreen>,
         TickerProviderStateMixin {
   late TabController _tabController;
+  bool _discoveryRequested = false;
   String? _lastRequestedTab;
 
   @override
@@ -26,10 +27,14 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(discoverProvider.notifier).loadDiscovery();
-    });
+    _tabController = TabController(length: 2, vsync: this)
+      ..addListener(_loadDiscoveryWhenSelected);
+  }
+
+  void _loadDiscoveryWhenSelected() {
+    if (_tabController.index != 1 || _discoveryRequested) return;
+    _discoveryRequested = true;
+    ref.read(discoverProvider.notifier).loadDiscovery();
   }
 
   @override
@@ -38,15 +43,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     final requestedTab = GoRouterState.of(context).uri.queryParameters['tab'];
     if (requestedTab == _lastRequestedTab) return;
     _lastRequestedTab = requestedTab;
-    if (requestedTab != 'daily-song' || _tabController.index == 1) return;
+    if (requestedTab != 'daily-song' || _tabController.index == 0) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _tabController.animateTo(1);
+      if (mounted) _tabController.animateTo(0);
     });
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_loadDiscoveryWhenSelected);
     _tabController.dispose();
     super.dispose();
   }
@@ -65,8 +71,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
           dividerColor: Colors.transparent,
           controller: _tabController,
           tabs: [
-            Tab(text: l10n.discoverTabPeople),
             Tab(text: l10n.dailySongTitle),
+            Tab(text: l10n.discoverTabPeople),
           ],
         ),
         Expanded(
@@ -74,6 +80,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
             controller: _tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
+              const DailySongTab(),
               PeopleTab(
                 results: discoverState.results,
                 isLoading: discoverState.isLoading,
@@ -84,7 +91,6 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                 onRefresh: discoverNotifier.refresh,
                 onLoadMore: discoverNotifier.loadMore,
               ),
-              const DailySongTab(),
             ],
           ),
         ),
