@@ -32,7 +32,7 @@ App social musical: Flutter/Dart, Riverpod, GoRouter y Firebase; backend TypeScr
 
 ## Validación
 
-Ejecuta desde la raíz los comandos correspondientes al cambio:
+Selecciona desde la raíz la validación necesaria según el alcance y el riesgo del cambio; no ejecutes toda la batería por defecto:
 
 | Área | Comando |
 | --- | --- |
@@ -47,7 +47,9 @@ Ejecuta desde la raíz los comandos correspondientes al cambio:
 | Shell PWA | `npm run test:web-shell` |
 
 - Las pruebas de integración del backend están en los scripts `test:functions:*` de `package.json` y en `functions/package.json`. Estos scripts incluyen la compilación necesaria.
-- Añade o actualiza pruebas al cambiar comportamiento y cubre los errores corregidos con pruebas de regresión. Valida también los consumidores de contratos compartidos.
+- No crees tests automáticamente para cada cambio. Los ajustes visuales, colores, opacidades, espaciado, textos y cambios simples de interfaz de bajo riesgo no requieren tests nuevos por defecto; basta con revisar el diff y aplicar el formato, análisis o comprobación visual pertinente.
+- Añade o actualiza pruebas cuando aporten protección útil: lógica de negocio, permisos, contratos de datos, cálculos, concurrencia o flujos complejos. Cubre errores corregidos con pruebas de regresión cuando exista un riesgo relevante de repetición. Valida también los consumidores de contratos compartidos.
+- Prefiere reutilizar o ampliar pruebas existentes. Evita tests que solo reproduzcan la implementación o comprueben detalles cosméticos triviales, salvo petición explícita del usuario. Decide la cobertura con criterio, sin pedir confirmación para omitir tests innecesarios.
 - La validación completa de CI está definida en `.github/workflows/ci.yml`.
 - Para cambios exclusivamente documentales, revisa contenido y diff.
 - Al terminar, resume en español los cambios y la validación realizada; indica cualquier fallo o comprobación pendiente.

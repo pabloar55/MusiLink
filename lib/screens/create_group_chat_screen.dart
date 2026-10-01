@@ -267,6 +267,7 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final currentUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
     final currentUser = ref.watch(currentUserProvider).asData?.value;
+    final hasName = _name.text.trim().isNotEmpty;
     return PopScope(
       canPop: !_saving,
       child: Scaffold(
@@ -274,9 +275,13 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
         floatingActionButton: FloatingActionButton(
           heroTag: 'group-chat-create',
           tooltip: l10n.groupChatCreate,
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
-          onPressed: _saving || _name.text.trim().isEmpty ? null : _create,
+          backgroundColor: hasName
+              ? colorScheme.primary
+              : colorScheme.surfaceContainerHighest,
+          foregroundColor: hasName
+              ? colorScheme.onPrimary
+              : colorScheme.onSurface.withAlpha(AppTokens.alphaDisabled),
+          onPressed: _saving || !hasName ? null : _create,
           child: _saving
               ? SizedBox.square(
                   dimension: 18,
