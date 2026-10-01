@@ -31,6 +31,18 @@ exports.notificationText = {
         es: () => '¡Tu canción del día ha caducado! Publica una nueva.',
         fr: () => 'Votre chanson du jour a expiré. Partagez-en une nouvelle !',
     },
+    dailySongExpiredFriend: {
+        el: () => 'Το τραγούδι της ημέρας σας έληξε και ένας φίλος σας μοιράστηκε ήδη το δικό του. Μοιραστείτε ένα νέο!',
+        en: () => 'Your song of the day has expired and a friend has already shared theirs. Share a new one!',
+        es: () => 'Tu canción del día ha caducado y un amigo ya ha publicado la suya. ¡Publica una nueva!',
+        fr: () => 'Votre chanson du jour a expiré et un ami a déjà partagé la sienne. Partagez-en une nouvelle !',
+    },
+    dailySongExpiredFriends: {
+        el: (count) => `Το τραγούδι της ημέρας σας έληξε και ${count} φίλοι σας μοιράστηκαν ήδη το δικό τους. Μοιραστείτε ένα νέο!`,
+        en: (count) => `Your song of the day has expired and ${count} friends have already shared theirs. Share a new one!`,
+        es: (count) => `Tu canción del día ha caducado y ${count} amigos ya han publicado la suya. ¡Publica una nueva!`,
+        fr: (count) => `Votre chanson du jour a expiré et ${count} amis ont déjà partagé la leur. Partagez-en une nouvelle !`,
+    },
     dailySongReply: {
         el: (name) => `${name} απάντησε στο τραγούδι σας`,
         en: (name) => `${name} replied to your song`,

@@ -13,16 +13,32 @@ Un usuario recibe el resumen solo si se cumplen todas las condiciones:
 
 - No ha desactivado «Resumen diario de amigos» en ajustes
   (`user_private/{uid}.notifFriendDigest`).
-- No tiene una canción del día vigente.
+- No tiene ninguna canción en su perfil. Una ya vencida que `expireDailySongs`
+  aún no ha retirado también cuenta: su aviso de caducidad llega enseguida.
 - Al menos un amigo no bloqueado tiene una canción publicada en las últimas
   24 horas (`friendDigestMinFriends`). Se nombran hasta tres, empezando por la publicación más reciente.
 - No ha recibido hoy otro recordatorio para publicar. `expireDailySongs` y el
   resumen comparten `user_private/{uid}.engagementPushAt`, de modo que el aviso
   de canción caducada y el resumen nunca coinciden en el mismo día local.
+  `expireDailySongs` escribe la marca en la misma transacción que retira la
+  canción, así que el resumen ve la canción todavía publicada o la marca ya
+  puesta, sin intervalo entre ambas.
 - La cuenta está activa y no tiene una baja pendiente.
 
 La marca `engagementPushAt` se escribe en una transacción antes de enviar. Un
 reintento del tramo no repite el aviso; si el envío falla, ese día se pierde.
+
+## Aviso de canción caducada
+
+Cuando `expireDailySongs` retira una canción, el aviso menciona a los amigos no
+bloqueados que tienen una canción publicada en las últimas 24 horas: «Tu canción
+del día ha caducado y 4 amigos ya han publicado la suya. ¡Publica una nueva!»
+(«un amigo ya ha publicado la suya» si es uno solo). Sin amigos con canción
+vigente se mantiene «¡Tu canción del día ha caducado! Publica una nueva.». Si la
+consulta de amigos falla, se envía igualmente el texto sin recuento.
+
+Este aviso conserva el sonido, la vibración y la prioridad habituales; solo el
+resumen de las 21:00 es silencioso.
 
 ## Entrega
 

@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { after, before, beforeEach, test } = require('node:test');
 const { getApps, deleteApp } = require('firebase-admin/app');
-const { Timestamp } = require('firebase-admin/firestore');
+const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 
 const { db } = require('../lib/firebase.js');
 const {
@@ -464,7 +464,7 @@ test('a failed like notification remains retryable', async () => {
   assert.equal(await notifyDailySongLike(db, 'bob', 'alice', now, now, async () => {}, now), true);
 });
 
-const { sendFriendDigests } = require('../lib/friend_digest.js');
+const { friendDigestOffsets, sendFriendDigests } = require('../lib/friend_digest.js');
 const digestSlot = new Date('2026-10-01T19:00:00Z'); // 21:00 at UTC+02:00
 const beforeDigestSlot = (minutes) => Timestamp.fromMillis(digestSlot.getTime() - minutes * 60000);
 async function seedFriendDigest() {
@@ -513,6 +513,8 @@ test('the friend digest skips users who should not be reminded', async () => {
   for (const mutate of [
     () => db.doc('user_private/alice').update({ notifFriendDigest: false }),
     () => db.doc('users/alice').update({ dailySong: replyTrack, dailySongUpdatedAt: beforeDigestSlot(60) }),
+    // A song past its lifetime is still waiting for its own expiry reminder.
+    () => db.doc('users/alice').update({ dailySong: replyTrack, dailySongUpdatedAt: beforeDigestSlot(25 * 60) }),
     () => Promise.all(['bob', 'carol'].map((uid) => db.doc(`users/${uid}`).update({ dailySongUpdatedAt: beforeDigestSlot(25 * 60) }))),
     () => db.doc('user_private/alice').update({ blockedUsers: ['bob', 'carol'] }),
     () => db.doc('user_private/alice').update({ utcOffsetMinutes: 60 }),
@@ -540,4 +542,48 @@ test('a failed friend digest neither blocks other recipients nor repeats', async
   assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 2, sent: 1 });
   assert.deepEqual(await sendFriendDigests(db, digestSlot, notify), { candidates: 2, sent: 0 });
   assert.deepEqual(delivered, ['erin']);
+});
+
+const { expireDailySong, notifyDailySongExpired } = require('../lib/daily_song.js');
+test('the expiry reminder counts friends who have published', async () => {
+  await seedFriendDigest();
+  const activeAfter = digestSlot.getTime() - 86400000;
+  const bodies = [];
+  const notify = async (uid, privateData, notification) => { bodies.push(notification.body); };
+
+  await notifyDailySongExpired(db, 'alice', activeAfter, new Map(), notify);
+  await db.doc('user_private/alice').update({ blockedUsers: ['carol'] });
+  await notifyDailySongExpired(db, 'alice', activeAfter, new Map(), notify);
+  // Nobody among Dave's friends has an active song.
+  await db.doc('user_private/dave').update({ preferredLocale: 'es' });
+  await notifyDailySongExpired(db, 'dave', activeAfter, new Map(), notify);
+
+  assert.deepEqual(bodies, [
+    'Tu canción del día ha caducado y 2 amigos ya han publicado la suya. ¡Publica una nueva!',
+    'Tu canción del día ha caducado y un amigo ya ha publicado la suya. ¡Publica una nueva!',
+    '¡Tu canción del día ha caducado! Publica una nueva.',
+  ]);
+});
+
+test('expiring a song claims the daily reminder so the digest cannot follow it', async () => {
+  const now = new Date();
+  const hoursAgo = (hours) => Timestamp.fromMillis(now.getTime() - hours * 3600000);
+  await seedFriendDigest();
+  await Promise.all([
+    db.doc('user_private/alice').update({ utcOffsetMinutes: friendDigestOffsets(now)[0] }),
+    db.doc('users/alice').update({ dailySong: replyTrack, dailySongUpdatedAt: hoursAgo(25) }),
+    ...['bob', 'carol'].map((uid) => db.doc(`users/${uid}`).update({ dailySongUpdatedAt: hoursAgo(1) })),
+  ]);
+  let sends = 0;
+  const notify = async () => { sends++; };
+
+  assert.equal(await expireDailySong(db.doc('users/alice'), hoursAgo(24)), true);
+  assert.equal((await db.doc('users/alice').get()).data().dailySong, undefined);
+  assert.ok((await db.doc('user_private/alice').get()).data().engagementPushAt instanceof Timestamp);
+  assert.equal((await sendFriendDigests(db, now, notify)).sent, 0);
+  assert.equal(sends, 0);
+
+  // Without the claim the same user would receive the digest.
+  await db.doc('user_private/alice').update({ engagementPushAt: FieldValue.delete() });
+  assert.equal((await sendFriendDigests(db, now, notify)).sent, 1);
 });

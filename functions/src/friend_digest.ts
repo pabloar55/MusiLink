@@ -28,7 +28,7 @@ const friendDigestPageSize = 200;
 const friendDigestConcurrency = 20;
 const friendProfileBatchSize = 100;
 
-interface FriendSong {
+export interface FriendSong {
   name: string;
   publishedAt: number;
 }
@@ -86,7 +86,13 @@ function friendSong(data: DocumentData | undefined, activeAfter: number): Friend
   return { name: data.displayName.trim(), publishedAt: updatedAt.toMillis() };
 }
 
-async function loadFriendSongs(
+export function unblockedFriendIds(privateData: DocumentData | undefined): string[] {
+  const blocked = new Set(stringList(privateData?.blockedUsers));
+  return stringList(privateData?.friends).filter((id) => !blocked.has(id));
+}
+
+/** Friends with a song published after [activeAfter]; profiles are cached per run. */
+export async function loadFriendSongs(
   firestore: Firestore,
   friendIds: string[],
   activeAfter: number,
@@ -118,8 +124,7 @@ async function sendFriendDigest(
   const privateData = privateProfile.data();
   if (!wantsFriendDigest(privateData, nowMillis)) return false;
 
-  const blocked = new Set(stringList(privateData.blockedUsers));
-  const friendIds = stringList(privateData.friends).filter((id) => !blocked.has(id));
+  const friendIds = unblockedFriendIds(privateData);
   if (friendIds.length < friendDigestMinFriends) return false;
 
   const [profileSnap, deletion] = await Promise.all([
@@ -128,11 +133,10 @@ async function sendFriendDigest(
   ]);
   const profile = profileSnap.data();
   const activeAfter = nowMillis - dailySongLifetimeMs;
-  const publishedAt = profile?.dailySongUpdatedAt;
-  // The client keeps a legacy song without a publication time visible, so it
-  // also counts as already published here.
-  const hasPublished = Boolean(profile?.dailySong)
-    && (!(publishedAt instanceof Timestamp) || publishedAt.toMillis() > activeAfter);
+  // Any song still on the profile counts. One past its lifetime is waiting for
+  // expireDailySongs, whose own reminder follows; a legacy one without a
+  // publication time stays visible in the client.
+  const hasPublished = Boolean(profile?.dailySong);
   if (deletion.exists || !profile || profile.username === 'deleted_user' || hasPublished) {
     return false;
   }

@@ -5,6 +5,8 @@ exports.friendDigestOffsets = friendDigestOffsets;
 exports.localDay = localDay;
 exports.friendDigestBody = friendDigestBody;
 exports.wantsFriendDigest = wantsFriendDigest;
+exports.unblockedFriendIds = unblockedFriendIds;
+exports.loadFriendSongs = loadFriendSongs;
 exports.sendFriendDigests = sendFriendDigests;
 const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
@@ -66,6 +68,11 @@ function friendSong(data, activeAfter) {
     }
     return { name: data.displayName.trim(), publishedAt: updatedAt.toMillis() };
 }
+function unblockedFriendIds(privateData) {
+    const blocked = new Set((0, firestore_values_1.stringList)(privateData?.blockedUsers));
+    return (0, firestore_values_1.stringList)(privateData?.friends).filter((id) => !blocked.has(id));
+}
+/** Friends with a song published after [activeAfter]; profiles are cached per run. */
 async function loadFriendSongs(firestore, friendIds, activeAfter, cache) {
     const missing = friendIds.filter((id) => !cache.has(id));
     for (let index = 0; index < missing.length; index += friendProfileBatchSize) {
@@ -83,8 +90,7 @@ async function sendFriendDigest(firestore, privateProfile, nowMillis, cache, not
     const privateData = privateProfile.data();
     if (!wantsFriendDigest(privateData, nowMillis))
         return false;
-    const blocked = new Set((0, firestore_values_1.stringList)(privateData.blockedUsers));
-    const friendIds = (0, firestore_values_1.stringList)(privateData.friends).filter((id) => !blocked.has(id));
+    const friendIds = unblockedFriendIds(privateData);
     if (friendIds.length < friendDigestMinFriends)
         return false;
     const [profileSnap, deletion] = await Promise.all([
@@ -93,11 +99,10 @@ async function sendFriendDigest(firestore, privateProfile, nowMillis, cache, not
     ]);
     const profile = profileSnap.data();
     const activeAfter = nowMillis - dailySongLifetimeMs;
-    const publishedAt = profile?.dailySongUpdatedAt;
-    // The client keeps a legacy song without a publication time visible, so it
-    // also counts as already published here.
-    const hasPublished = Boolean(profile?.dailySong)
-        && (!(publishedAt instanceof firestore_1.Timestamp) || publishedAt.toMillis() > activeAfter);
+    // Any song still on the profile counts. One past its lifetime is waiting for
+    // expireDailySongs, whose own reminder follows; a legacy one without a
+    // publication time stays visible in the client.
+    const hasPublished = Boolean(profile?.dailySong);
     if (deletion.exists || !profile || profile.username === 'deleted_user' || hasPublished) {
         return false;
     }
