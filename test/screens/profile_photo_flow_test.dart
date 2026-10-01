@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +20,7 @@ import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
 import 'package:musi_link/services/storage_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/mocks.dart';
@@ -100,7 +101,7 @@ void main() {
         ],
         child: MaterialApp(
           locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: ValueListenableBuilder<Widget>(
             valueListenable: screen,

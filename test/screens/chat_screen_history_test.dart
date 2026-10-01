@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +14,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 
@@ -82,7 +83,7 @@ void main() {
           child: MaterialApp.router(
             routerConfig: router,
             locale: const Locale('en'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
           ),
         ),
@@ -208,7 +209,7 @@ void main() {
           ],
           child: MaterialApp.router(
             locale: const Locale('en'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             routerConfig: router,
           ),

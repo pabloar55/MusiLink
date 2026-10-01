@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/services/moderation_service.dart';
 

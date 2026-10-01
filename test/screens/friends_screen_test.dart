@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -11,6 +11,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/screens/friends_screen.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/user_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:musi_link/widgets/friends/friend_tile.dart';
 
 class _MockFriendService extends Mock implements FriendService {}
@@ -46,7 +47,7 @@ Widget _app({
     ],
     child: const MaterialApp(
       locale: Locale('es'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: FriendsScreen(),
     ),

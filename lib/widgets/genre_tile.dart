@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/models/genre.dart';
 import 'package:musi_link/theme/app_theme.dart';
 

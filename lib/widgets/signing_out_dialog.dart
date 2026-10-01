@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 
 /// Dialogo que muestra un indicador de progreso y un mensaje localizado "Signing out…".  

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +13,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/main_screen.dart';
 import 'package:musi_link/services/music_profile_sync_coordinator.dart';
 import 'package:musi_link/services/notification_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 class _TestDiscoverNotifier extends DiscoverNotifier {
   @override
@@ -62,7 +63,7 @@ void main() {
         child: MaterialApp.router(
           routerConfig: router,
           locale: const Locale('es'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
         ),
       ),

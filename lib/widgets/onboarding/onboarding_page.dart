@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Widget reutilizable para cada página individual del onboarding.
 /// Muestra un icono con fondo circular, título y descripción centrados.

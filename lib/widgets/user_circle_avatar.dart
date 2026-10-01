@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/widgets/user_profile_photo.dart';
 
 /// CircleAvatar del usuario con imagen + fallback de letra inicial.

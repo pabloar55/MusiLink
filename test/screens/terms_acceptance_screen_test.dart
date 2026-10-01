@@ -2,7 +2,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +14,7 @@ import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/terms_acceptance_screen.dart';
 import 'package:musi_link/services/terms_acceptance_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 import '../helpers/mocks.dart';
 
@@ -51,12 +52,12 @@ void main() {
     ],
     child: router != null
         ? MaterialApp.router(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             routerConfig: router,
           )
         : const MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: TermsAcceptanceScreen(),
           ),

@@ -9,7 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:musi_link/firebase_options.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
@@ -26,6 +26,7 @@ import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/utils/pwa_environment.dart';
@@ -422,7 +423,7 @@ class _BootstrapMaterialApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       darkTheme: AppTheme.darkTheme,
       theme: AppTheme.lightTheme,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, child) => _RuntimeCompilationBadge(
         child: ThemeEnvironmentSync(child: child ?? const SizedBox.shrink()),
@@ -511,7 +512,7 @@ class _MainAppState extends ConsumerState<MainApp> {
       theme: AppTheme.lightTheme,
       themeAnimationDuration: const Duration(milliseconds: 200),
       themeAnimationCurve: Curves.easeInOut,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
       builder: (context, child) => _RuntimeCompilationBadge(

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +15,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/artist_selector_screen.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/mocks.dart';
@@ -57,7 +58,7 @@ void main() {
           overrides: [musicCatalogServiceProvider.overrideWithValue(catalog)],
           child: const MaterialApp(
             locale: Locale('es'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: ArtistSelectorScreen(),
           ),
@@ -103,7 +104,7 @@ void main() {
             overrides: [musicCatalogServiceProvider.overrideWithValue(catalog)],
             child: MaterialApp(
               locale: locale,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: appLocalizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: const ArtistSelectorScreen(),
             ),
@@ -215,7 +216,7 @@ void main() {
           ],
           child: MaterialApp.router(
             locale: const Locale('en'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             routerConfig: router,
           ),

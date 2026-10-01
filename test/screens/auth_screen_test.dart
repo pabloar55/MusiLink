@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/screens/auth_screen.dart';
+import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 void main() {
   testWidgets('el registro no solicita el nombre antes de crear el perfil', (
@@ -17,12 +17,7 @@ void main() {
         child: MaterialApp(
           locale: Locale('en'),
           builder: _compactTestText,
-          localizationsDelegates: [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: AuthScreen(),
         ),

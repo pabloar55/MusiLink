@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/utils/trusted_media_url.dart';
 
 /// Displays a user profile photo with a browser-safe fallback.

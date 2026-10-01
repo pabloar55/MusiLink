@@ -1,6 +1,6 @@
 // ignore_for_file: avoid_redundant_argument_values
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Design tokens centralizados para MusiLink.
 /// Todos los widgets deben leer colores, tipografía y espaciado desde aquí.
