@@ -79,6 +79,11 @@ resuelve antes de cargar Flutter: en Android redirige a Google Play y en el
 resto de plataformas continúa en `/`, donde iOS muestra la instalación de la
 PWA.
 
+La vista previa del enlace (título, descripción e imagen) sale de las etiquetas
+Open Graph de `web/index.html` y de `web/og-image.jpg` (1200×630). Las apps de
+mensajería guardan la vista previa en caché: al cambiar la imagen conviene
+cambiar también su nombre de archivo.
+
 ## Confirmaciones de entrega del chat
 
 Los mensajes aparecen localmente al enviar y se reconcilian por ID con
