@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processAccountDeletion = exports.requestAccountDeletion = exports.reactionEmojis = void 0;
 exports.scrubUserReactions = scrubUserReactions;
+exports.processChats = processChats;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("firebase-admin/auth");
 const functions_1 = require("firebase-admin/functions");
@@ -10,6 +11,7 @@ const storage_1 = require("firebase-admin/storage");
 const v2_1 = require("firebase-functions/v2");
 const https_1 = require("firebase-functions/v2/https");
 const tasks_1 = require("firebase-functions/v2/tasks");
+const abandoned_groups_1 = require("./abandoned_groups");
 const callableRegion = 'europe-southwest1';
 // Cloud Tasks is not available in Madrid. Keep the client-facing callable
 // close to Firestore and run only the durable queue worker in Belgium.
@@ -256,6 +258,10 @@ async function freezeAccount(uid) {
         }
     });
 }
+// Runs after `freeze`, so this account already counts as deleted when its
+// groups are checked. Whichever of two concurrent deletions or departures
+// commits last therefore sees that nobody is left. A group deleted between the
+// query and the batch fails the slice, which the job retries.
 async function processChats(uid, cursor) {
     let query = (0, firestore_1.getFirestore)()
         .collection('chats')
@@ -268,6 +274,9 @@ async function processChats(uid, cursor) {
     if (snapshot.empty)
         return { nextPhase: 'owned_recommendations' };
     const latestMessages = await Promise.all(snapshot.docs.map(async (chat) => {
+        if (chat.data().type === 'group' && await (0, abandoned_groups_1.deleteGroupIfAbandoned)((0, firestore_1.getFirestore)(), chat.id)) {
+            return undefined;
+        }
         const latest = await chat.ref
             .collection('messages')
             .orderBy('timestamp', 'desc')
@@ -276,7 +285,10 @@ async function processChats(uid, cursor) {
         return { chat, latest: latest.docs[0] };
     }));
     const batch = (0, firestore_1.getFirestore)().batch();
-    for (const { chat, latest } of latestMessages) {
+    for (const entry of latestMessages) {
+        if (!entry)
+            continue;
+        const { chat, latest } = entry;
         if (!latest) {
             if (chat.data().type === 'group') {
                 batch.update(chat.ref, new firestore_1.FieldPath('unreadCounts', uid), firestore_1.FieldValue.delete(), new firestore_1.FieldPath('deletedAt', uid), firestore_1.FieldValue.delete());

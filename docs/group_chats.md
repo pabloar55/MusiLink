@@ -31,7 +31,9 @@ las reacciones, las denuncias y el borrado suave personal.
 - Las notificaciones se envían a los demás miembros y abren `/group-chat/:id`.
   Cada destinatario completado se registra para los reintentos del trigger.
 - La eliminación de una cuenta conserva el grupo, incluso sin mensajes, y
-  mantiene la referencia anonimizada como en los chats individuales.
+  mantiene la referencia anonimizada como en los chats individuales, mientras
+  quede algún miembro con la cuenta sin eliminar (véase «Grupos sin cuentas
+  activas»).
 
 ## Foto del grupo
 
@@ -61,13 +63,33 @@ las reacciones, las denuncias y el borrado suave personal.
 - Al salir el último miembro la transacción elimina el grupo. `onGroupChatDeleted`
   borra después, también con reintentos, sus mensajes, los registros de salida
   y su foto.
+
+## Grupos sin cuentas activas
+
+Las cuentas eliminadas siguen en `participants`. Un grupo en el que todas lo
+están ya no puede abrirlo nadie, así que se elimina junto con sus mensajes y
+su foto:
+
+- Una cuenta cuenta como eliminada cuando su perfil público es la lápida
+  `deleted_user`. Un perfil ausente no basta y conserva el grupo.
+- Al salir, `leaveGroupChat` lee en su misma transacción los perfiles de quienes
+  quedan y elimina el grupo si todos están eliminados.
+- Al eliminar una cuenta, la fase `chats` del job comprueba cada grupo con
+  `deleteGroupIfAbandoned`. Se ejecuta después de anonimizar el perfil, por lo
+  que la última de varias salidas o eliminaciones simultáneas ve que no queda
+  nadie. Si la fase falla, el job la reintenta y la comprobación es repetible.
+- El contenido lo borra `onGroupChatDeleted`, igual que al salir el último
+  miembro.
+- Los grupos que ya estaban huérfanos antes de este cambio no se limpian: no
+  hay una ejecución puntual para ellos.
 - El cliente vuelve a la lista de chats al confirmar, sin esperar al backend;
   si la llamada falla, lo indica y el grupo sigue en la lista.
 
 ## Activación y alcance pendiente
 
 Requiere desplegar las funciones modificadas, incluidas `createGroupChat`,
-`leaveGroupChat`, `onGroupMemberLeft` y `onGroupChatDeleted`, y las reglas de
+`leaveGroupChat`, `onGroupMemberLeft`, `onGroupChatDeleted` y
+`processAccountDeletion`, y las reglas de
 Firestore y de Storage antes de publicar el cliente. No requiere migrar chats existentes ni nuevos índices. El procedimiento
 general está en [firebase_hosting.md](firebase_hosting.md).
 

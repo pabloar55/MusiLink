@@ -21,6 +21,8 @@ const {
   maxCatalogSearchesPerWindow,
 } = require('../lib/rate_limits.js');
 const { createModerationReport } = require('../lib/moderation_reports.js');
+const { deleteGroupIfAbandoned } = require('../lib/abandoned_groups.js');
+const { processChats } = require('../lib/account_deletion.js');
 const {
   cleanUpDeparture,
   deleteGroupContents,
@@ -594,6 +596,7 @@ test('expiring a song claims the daily reminder so the digest cannot follow it',
 });
 
 async function seedGroup(chatId, participants, messageCount = 1) {
+  await Promise.all(participants.map((uid) => seedUser(uid)));
   const members = Object.fromEntries(participants.map((uid) => [uid, 0]));
   await db.doc(`chats/${chatId}`).set({
     type: 'group',
@@ -711,4 +714,115 @@ test('leaveGroupChat no modifica los chats individuales', async () => {
     (await db.doc('chats/DirectChat0000000001').get()).data().participants,
     ['alice', 'bob'],
   );
+});
+
+// Estado que deja la fase `freeze` del borrado de cuenta.
+async function anonymizeAccount(uid) {
+  await db.doc(`users/${uid}`).set({
+    displayName: 'Deleted user',
+    username: 'deleted_user',
+    photoUrl: '',
+  });
+}
+
+// La fase `chats` se ejecuta tras `freeze` y el job la repite si falla.
+async function deleteAccountChats(uid) {
+  await anonymizeAccount(uid);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await processChats(uid);
+    } catch (error) {
+      if (attempt === 5) throw error;
+    }
+  }
+}
+
+async function groupExists(chatId) {
+  return (await db.doc(`chats/${chatId}`).get()).exists;
+}
+
+test('un grupo se conserva mientras quede una cuenta sin eliminar', async () => {
+  const chatId = 'GroupChat00000000001';
+  await seedGroup(chatId, ['alice', 'bob', 'carol']);
+  await anonymizeAccount('alice');
+
+  assert.equal(await deleteGroupIfAbandoned(db, chatId), false);
+  await leaveGroup(db, chatId, 'bob');
+
+  assert.deepEqual(
+    (await db.doc(`chats/${chatId}`).get()).data().participants,
+    ['alice', 'carol'],
+  );
+  assert.equal((await db.doc(`chats/${chatId}/departures/bob`).get()).exists, true);
+  // Un perfil ausente no demuestra que la cuenta se haya eliminado.
+  await db.doc('users/carol').delete();
+  assert.equal(await deleteGroupIfAbandoned(db, chatId), false);
+  assert.equal(await groupExists(chatId), true);
+});
+
+test('salir elimina el grupo si solo quedan cuentas eliminadas', async () => {
+  const chatId = 'GroupChat00000000001';
+  await seedGroup(chatId, ['alice', 'bob', 'carol']);
+  await Promise.all([anonymizeAccount('alice'), anonymizeAccount('carol')]);
+
+  await leaveGroup(db, chatId, 'bob');
+  assert.equal(await groupExists(chatId), false);
+  assert.equal((await db.collection(`chats/${chatId}/departures`).get()).empty, true);
+
+  // La limpieza del contenido puede repetirse si el trigger falla a medias.
+  assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, false);
+  await deleteGroupContents(db, chatId);
+  await deleteGroupContents(db, chatId);
+  assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, true);
+  await leaveGroup(db, chatId, 'bob');
+  assert.equal(await deleteGroupIfAbandoned(db, chatId), true);
+  assert.equal(await groupExists(chatId), false);
+});
+
+test('eliminar una cuenta borra sus grupos sin cuentas activas y conserva el resto', async () => {
+  const abandoned = 'GroupChat00000000001';
+  const active = 'GroupChat00000000002';
+  await seedGroup(abandoned, ['alice', 'bob']);
+  await seedGroup(active, ['alice', 'carol']);
+  await seedChat();
+  await anonymizeAccount('bob');
+
+  await deleteAccountChats('alice');
+
+  assert.equal(await groupExists(abandoned), false);
+  const kept = (await db.doc(`chats/${active}`).get()).data();
+  assert.deepEqual(kept.participants, ['alice', 'carol']);
+  assert.deepEqual(Object.keys(kept.unreadCounts), ['carol']);
+  // El chat individual vacío se elimina como antes.
+  assert.equal(await groupExists('alice_bob'), false);
+
+  // Repetir la fase tras un fallo posterior no altera el resultado.
+  await processChats('alice');
+  assert.equal(await groupExists(abandoned), false);
+  assert.deepEqual((await db.doc(`chats/${active}`).get()).data().participants, ['alice', 'carol']);
+});
+
+test('una salida y una eliminación de cuenta simultáneas no dejan el grupo huérfano', async () => {
+  const orders = {
+    GroupChat00000000001: async (leave, remove) => { await leave(); await remove(); },
+    GroupChat00000000002: async (leave, remove) => { await remove(); await leave(); },
+    GroupChat00000000003: (leave, remove) => Promise.all([leave(), remove()]),
+  };
+  for (const [chatId, run] of Object.entries(orders)) {
+    await seedGroup(chatId, ['alice', 'bob']);
+    await run(() => leaveGroup(db, chatId, 'bob'), () => deleteAccountChats('alice'));
+    assert.equal(await groupExists(chatId), false, chatId);
+  }
+});
+
+test('dos eliminaciones de cuenta simultáneas borran el grupo que compartían', async () => {
+  const chatId = 'GroupChat00000000001';
+  const keptId = 'GroupChat00000000002';
+  await seedGroup(chatId, ['alice', 'bob']);
+  await seedGroup(keptId, ['alice', 'bob', 'carol']);
+
+  await Promise.all([deleteAccountChats('alice'), deleteAccountChats('bob')]);
+
+  assert.equal(await groupExists(chatId), false);
+  assert.equal(await groupExists(keptId), true);
 });

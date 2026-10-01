@@ -10,6 +10,7 @@ const storage_1 = require("firebase-admin/storage");
 const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
+const abandoned_groups_1 = require("./abandoned_groups");
 const account_deletion_1 = require("./account_deletion");
 const firebase_1 = require("./firebase");
 const firestore_values_1 = require("./firestore_values");
@@ -114,9 +115,10 @@ exports.createGroupChat = (0, https_1.onCall)(options, async (request) => {
 });
 /**
  * Removes the member together with every per-member field, or deletes the
- * group once nobody is left. The remaining cleanup is slower and can fail, so
- * it is left to triggers that Firestore retries: the departure record written
- * here starts `onGroupMemberLeft`, and the deletion starts `onGroupChatDeleted`.
+ * group once no usable account is left. The remaining cleanup is slower and
+ * can fail, so it is left to triggers that Firestore retries: the departure
+ * record written here starts `onGroupMemberLeft`, and the deletion starts
+ * `onGroupChatDeleted`.
  */
 async function leaveGroup(firestore, chatId, uid) {
     const chatRef = firestore.doc(`chats/${chatId}`);
@@ -131,7 +133,10 @@ async function leaveGroup(firestore, chatId, uid) {
         // Retrying a lost callable response finds the member already removed.
         if (!ids.includes(uid))
             return;
-        if (ids.length === 1) {
+        // Deleted accounts stay in `participants`; once only they remain, nobody
+        // can open the group again.
+        const remaining = ids.filter((id) => id !== uid);
+        if (await (0, abandoned_groups_1.everyAccountDeleted)(firestore, tx, remaining)) {
             tx.delete(chatRef);
             return;
         }

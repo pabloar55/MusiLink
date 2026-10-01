@@ -16,6 +16,7 @@ import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 
+import { deleteGroupIfAbandoned } from './abandoned_groups';
 const callableRegion = 'europe-southwest1';
 // Cloud Tasks is not available in Madrid. Keep the client-facing callable
 // close to Firestore and run only the durable queue worker in Belgium.
@@ -320,7 +321,11 @@ async function freezeAccount(uid: string): Promise<void> {
   });
 }
 
-async function processChats(uid: string, cursor?: string): Promise<PhaseResult> {
+// Runs after `freeze`, so this account already counts as deleted when its
+// groups are checked. Whichever of two concurrent deletions or departures
+// commits last therefore sees that nobody is left. A group deleted between the
+// query and the batch fails the slice, which the job retries.
+export async function processChats(uid: string, cursor?: string): Promise<PhaseResult> {
   let query = getFirestore()
     .collection('chats')
     .where('participants', 'array-contains', uid)
@@ -331,6 +336,9 @@ async function processChats(uid: string, cursor?: string): Promise<PhaseResult> 
   if (snapshot.empty) return { nextPhase: 'owned_recommendations' };
 
   const latestMessages = await Promise.all(snapshot.docs.map(async (chat) => {
+    if (chat.data().type === 'group' && await deleteGroupIfAbandoned(getFirestore(), chat.id)) {
+      return undefined;
+    }
     const latest = await chat.ref
       .collection('messages')
       .orderBy('timestamp', 'desc')
@@ -340,7 +348,9 @@ async function processChats(uid: string, cursor?: string): Promise<PhaseResult> 
   }));
 
   const batch = getFirestore().batch();
-  for (const { chat, latest } of latestMessages) {
+  for (const entry of latestMessages) {
+    if (!entry) continue;
+    const { chat, latest } = entry;
     if (!latest) {
       if (chat.data().type === 'group') {
         batch.update(chat.ref, new FieldPath('unreadCounts', uid), FieldValue.delete(),
