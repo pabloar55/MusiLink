@@ -47,22 +47,28 @@ las reacciones, las denuncias y el borrado suave personal.
 ## Salir del grupo
 
 - `leaveGroupChat` exige autenticación y App Check. En una transacción retira
-  al usuario de `participants` y elimina sus entradas de `unreadCounts`,
-  `deletedAt` y `lastReadAt`. Después limpia sus reacciones en los mensajes del
-  grupo, porque las reglas validan las reacciones contra los participantes.
+  al usuario de `participants`, elimina sus entradas de `unreadCounts`,
+  `deletedAt` y `lastReadAt` y crea `chats/{chatId}/departures/{uid}`, el
+  registro de la limpieza pendiente. Es idempotente ante reintentos.
+- `onGroupMemberLeft` se dispara al crearse ese registro y limpia las
+  reacciones de quien salió, porque las reglas validan las reacciones contra
+  los participantes. Reescribe cada mensaje en su propia transacción, de modo
+  que varias salidas simultáneas o una reacción concurrente no se pisan. Borra
+  el registro al terminar; si falla, Firestore reintenta el trigger y el
+  registro sigue indicando la limpieza pendiente.
 - Los mensajes enviados se conservan. Quien sale deja de leer el grupo y de
   recibir sus notificaciones, y no puede volver a entrar por su cuenta.
-- Al salir el último miembro se eliminan el grupo, sus mensajes y su foto.
-- La llamada es idempotente: un reintento tras una respuesta perdida repite
-  las limpiezas pendientes sin alterar el grupo.
+- Al salir el último miembro la transacción elimina el grupo. `onGroupChatDeleted`
+  borra después, también con reintentos, sus mensajes, los registros de salida
+  y su foto.
 - El cliente vuelve a la lista de chats al confirmar, sin esperar al backend;
   si la llamada falla, lo indica y el grupo sigue en la lista.
 
 ## Activación y alcance pendiente
 
-Requiere desplegar las funciones modificadas, incluidas `createGroupChat` y
-`leaveGroupChat`, y las reglas de Firestore y de Storage antes de publicar el
-cliente. No requiere migrar chats existentes ni nuevos índices. El procedimiento
+Requiere desplegar las funciones modificadas, incluidas `createGroupChat`,
+`leaveGroupChat`, `onGroupMemberLeft` y `onGroupChatDeleted`, y las reglas de
+Firestore y de Storage antes de publicar el cliente. No requiere migrar chats existentes ni nuevos índices. El procedimiento
 general está en [firebase_hosting.md](firebase_hosting.md).
 
 Quedan para siguientes iteraciones: añadir o expulsar miembros, roles de

@@ -546,6 +546,10 @@ test('un miembro solo puede cambiar la foto del grupo por la de su ruta en Stora
   await assertFails(updateDoc(doc(dbFor('bob'), chatPath), {
     participants: ['alice', 'carol'],
   }));
+  await assertFails(getDoc(doc(dbFor('bob'), `${chatPath}/departures/alice`)));
+  await assertFails(setDoc(doc(dbFor('bob'), `${chatPath}/departures/bob`), {
+    leftAt: serverTimestamp(),
+  }));
 
   await seedChat();
   await assertFails(updateDoc(doc(dbFor('alice'), 'chats/alice_bob'), {

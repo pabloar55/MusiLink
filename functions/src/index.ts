@@ -29,4 +29,9 @@ export { submitModerationReport } from './moderation_reports';
 
 export { acknowledgeChatDelivery } from './chat_delivery';
 
-export { createGroupChat, leaveGroupChat } from './group_chats';
+export {
+  createGroupChat,
+  leaveGroupChat,
+  onGroupMemberLeft,
+  onGroupChatDeleted,
+} from './group_chats';

@@ -1,10 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.leaveGroupChat = exports.createGroupChat = exports.maxGroupParticipants = void 0;
+exports.onGroupChatDeleted = exports.onGroupMemberLeft = exports.leaveGroupChat = exports.createGroupChat = exports.maxGroupParticipants = void 0;
 exports.validateGroupSender = validateGroupSender;
 exports.leaveGroup = leaveGroup;
+exports.cleanUpDeparture = cleanUpDeparture;
+exports.deleteGroupContents = deleteGroupContents;
 const firestore_1 = require("firebase-admin/firestore");
 const storage_1 = require("firebase-admin/storage");
+const v2_1 = require("firebase-functions/v2");
+const firestore_2 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const account_deletion_1 = require("./account_deletion");
 const firebase_1 = require("./firebase");
@@ -14,7 +18,8 @@ const options = { region: 'europe-southwest1', enforceAppCheck: true };
 exports.maxGroupParticipants = 20;
 // Groups use random Firestore IDs; direct chats never match this pattern.
 const groupChatIdPattern = /^[A-Za-z0-9]{20}$/;
-const reactionScrubBatchSize = 400;
+const departuresCollection = 'departures';
+const reactionScrubConcurrency = 20;
 async function memberProfiles(firestore, tx, ids) {
     return Promise.all(ids.map(async (uid) => {
         const [profile, privateProfile, deletion] = await Promise.all([
@@ -107,56 +112,64 @@ exports.createGroupChat = (0, https_1.onCall)(options, async (request) => {
     });
     return { chatId };
 });
-// Firestore Rules validate reactions against `participants`, so a reaction
-// left behind would block the remaining members from reacting to that message.
-async function scrubGroupReactions(firestore, chatId, uid) {
-    for (const emoji of account_deletion_1.reactionEmojis) {
-        // The reaction indexes only exist at collection-group scope.
-        const snapshot = await firestore.collectionGroup('messages')
-            .where(new firestore_1.FieldPath('reactions', emoji), 'array-contains', uid)
-            .get();
-        const messages = snapshot.docs.filter((message) => message.ref.parent.parent?.id === chatId);
-        for (let start = 0; start < messages.length; start += reactionScrubBatchSize) {
-            const batch = firestore.batch();
-            for (const message of messages.slice(start, start + reactionScrubBatchSize)) {
-                batch.update(message.ref, { reactions: (0, account_deletion_1.scrubUserReactions)(message.data().reactions, uid) });
-            }
-            await batch.commit();
-        }
-    }
-}
 /**
- * Removes the member together with every per-member field. The group is
- * deleted with its messages once nobody is left. Returns whether it remains.
+ * Removes the member together with every per-member field, or deletes the
+ * group once nobody is left. The remaining cleanup is slower and can fail, so
+ * it is left to triggers that Firestore retries: the departure record written
+ * here starts `onGroupMemberLeft`, and the deletion starts `onGroupChatDeleted`.
  */
 async function leaveGroup(firestore, chatId, uid) {
     const chatRef = firestore.doc(`chats/${chatId}`);
-    const remains = await firestore.runTransaction(async (tx) => {
+    await firestore.runTransaction(async (tx) => {
         const chat = await tx.get(chatRef);
         if (!chat.exists)
-            return false;
+            return;
         if (chat.data()?.type !== 'group') {
             throw new https_1.HttpsError('failed-precondition', 'Not a group chat.');
         }
         const ids = (0, firestore_values_1.chatParticipants)(chat.data());
         // Retrying a lost callable response finds the member already removed.
         if (!ids.includes(uid))
-            return true;
+            return;
         if (ids.length === 1) {
             tx.delete(chatRef);
-            return false;
+            return;
         }
         tx.update(chatRef, 'participants', firestore_1.FieldValue.arrayRemove(uid), new firestore_1.FieldPath('unreadCounts', uid), firestore_1.FieldValue.delete(), new firestore_1.FieldPath('deletedAt', uid), firestore_1.FieldValue.delete(), new firestore_1.FieldPath('lastReadAt', uid), firestore_1.FieldValue.delete());
-        return true;
+        tx.set(chatRef.collection(departuresCollection).doc(uid), { leftAt: firestore_1.Timestamp.now() });
     });
-    // Both cleanups also run on retries, so an interrupted call can be resumed.
-    if (remains) {
-        await scrubGroupReactions(firestore, chatId, uid);
+}
+/**
+ * Firestore Rules validate reactions against `participants`, so a reaction
+ * left behind would block the remaining members from reacting to that message.
+ * Each message is rewritten in its own transaction: members leaving at the
+ * same time, or reacting meanwhile, must not restore each other's old values.
+ * A former member cannot rejoin, so removing the reaction is always correct.
+ */
+async function cleanUpDeparture(firestore, chatId, uid) {
+    for (const emoji of account_deletion_1.reactionEmojis) {
+        // The reaction indexes only exist at collection-group scope.
+        const snapshot = await firestore.collectionGroup('messages')
+            .where(new firestore_1.FieldPath('reactions', emoji), 'array-contains', uid)
+            .get();
+        const messages = snapshot.docs
+            .map((message) => message.ref)
+            .filter((message) => message.parent.parent?.id === chatId);
+        for (let start = 0; start < messages.length; start += reactionScrubConcurrency) {
+            await Promise.all(messages.slice(start, start + reactionScrubConcurrency).map((message) => firestore.runTransaction(async (tx) => {
+                const current = await tx.get(message);
+                if (!current.exists)
+                    return;
+                tx.update(message, { reactions: (0, account_deletion_1.scrubUserReactions)(current.data()?.reactions, uid) });
+            })));
+        }
     }
-    else {
-        await firestore.recursiveDelete(chatRef);
-    }
-    return remains;
+    // Kept until the reactions are gone, as the record of a pending cleanup.
+    await firestore.doc(`chats/${chatId}/${departuresCollection}/${uid}`).delete();
+}
+/** Removes what a deleted group leaves behind: messages and pending departures. */
+async function deleteGroupContents(firestore, chatId) {
+    await firestore.recursiveDelete(firestore.doc(`chats/${chatId}`));
 }
 exports.leaveGroupChat = (0, https_1.onCall)(options, async (request) => {
     const uid = request.auth?.uid;
@@ -166,9 +179,38 @@ exports.leaveGroupChat = (0, https_1.onCall)(options, async (request) => {
     if (typeof chatId !== 'string' || !groupChatIdPattern.test(chatId)) {
         throw new https_1.HttpsError('invalid-argument', 'Invalid group.');
     }
-    if (!await leaveGroup(firebase_1.db, chatId, uid)) {
+    await leaveGroup(firebase_1.db, chatId, uid);
+    return { chatId };
+});
+exports.onGroupMemberLeft = (0, firestore_2.onDocumentCreated)({
+    document: `chats/{chatId}/${departuresCollection}/{uid}`,
+    region: options.region,
+    retry: true,
+}, async (event) => {
+    try {
+        await cleanUpDeparture(firebase_1.db, event.params.chatId, event.params.uid);
+    }
+    catch (error) {
+        v2_1.logger.error('onGroupMemberLeft: cleanup failed, will retry', {
+            chatId: event.params.chatId,
+            uid: event.params.uid,
+            error,
+        });
+        throw error;
+    }
+});
+exports.onGroupChatDeleted = (0, firestore_2.onDocumentDeleted)({ document: 'chats/{chatId}', region: options.region, retry: true }, async (event) => {
+    // Direct chats are only deleted once they have no messages.
+    if (event.data?.data()?.type !== 'group')
+        return;
+    const chatId = event.params.chatId;
+    try {
+        await deleteGroupContents(firebase_1.db, chatId);
         await (0, storage_1.getStorage)().bucket().file(`group_photos/${chatId}`).delete({ ignoreNotFound: true });
     }
-    return { chatId };
+    catch (error) {
+        v2_1.logger.error('onGroupChatDeleted: cleanup failed, will retry', { chatId, error });
+        throw error;
+    }
 });
 //# sourceMappingURL=group_chats.js.map

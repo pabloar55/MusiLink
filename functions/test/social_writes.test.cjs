@@ -21,7 +21,11 @@ const {
   maxCatalogSearchesPerWindow,
 } = require('../lib/rate_limits.js');
 const { createModerationReport } = require('../lib/moderation_reports.js');
-const { leaveGroup } = require('../lib/group_chats.js');
+const {
+  cleanUpDeparture,
+  deleteGroupContents,
+  leaveGroup,
+} = require('../lib/group_chats.js');
 
 before(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -589,7 +593,7 @@ test('expiring a song claims the daily reminder so the digest cannot follow it',
   assert.equal((await sendFriendDigests(db, now, notify)).sent, 1);
 });
 
-async function seedGroup(chatId, participants) {
+async function seedGroup(chatId, participants, messageCount = 1) {
   const members = Object.fromEntries(participants.map((uid) => [uid, 0]));
   await db.doc(`chats/${chatId}`).set({
     type: 'group',
@@ -603,34 +607,43 @@ async function seedGroup(chatId, participants) {
     deletedAt: Object.fromEntries(participants.map((uid) => [uid, Timestamp.fromMillis(1)])),
     lastReadAt: Object.fromEntries(participants.map((uid) => [uid, Timestamp.fromMillis(1)])),
   });
-  await db.doc(`chats/${chatId}/messages/message-1`).set({
-    senderId: participants[0],
-    text: 'hola',
-    timestamp: Timestamp.fromMillis(2),
-    groupMessage: true,
-    reactions: { '❤️': participants, '🔥': [participants[0]] },
-  });
+  for (let index = 1; index <= messageCount; index += 1) {
+    await db.doc(`chats/${chatId}/messages/message-${index}`).set({
+      senderId: participants[0],
+      text: 'hola',
+      timestamp: Timestamp.fromMillis(2),
+      groupMessage: true,
+      reactions: { '❤️': participants, '🔥': [participants[0]] },
+    });
+  }
 }
 
-test('leaveGroupChat retira al miembro, sus datos y sus reacciones solo de ese grupo', async () => {
+async function groupReactions(chatId, messageId = 'message-1') {
+  return (await db.doc(`chats/${chatId}/messages/${messageId}`).get()).data().reactions;
+}
+
+test('leaveGroupChat retira al miembro y deja registrada la limpieza de sus reacciones', async () => {
   const chatId = 'GroupChat00000000001';
   const otherChatId = 'GroupChat00000000002';
+  const departure = db.doc(`chats/${chatId}/departures/alice`);
   await seedGroup(chatId, ['alice', 'bob', 'carol']);
   await seedGroup(otherChatId, ['alice', 'bob', 'carol']);
 
-  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
+  await leaveGroup(db, chatId, 'alice');
 
   const chat = (await db.doc(`chats/${chatId}`).get()).data();
   assert.deepEqual(chat.participants, ['bob', 'carol']);
   for (const field of ['unreadCounts', 'deletedAt', 'lastReadAt']) {
     assert.deepEqual(Object.keys(chat[field]).sort(), ['bob', 'carol']);
   }
+  // La limpieza queda pendiente en el mismo commit que retira al miembro.
+  assert.equal((await departure.get()).exists, true);
+
+  await cleanUpDeparture(db, chatId, 'alice');
+  assert.deepEqual(await groupReactions(chatId), { '❤️': ['bob', 'carol'] });
+  assert.equal((await departure.get()).exists, false);
   assert.deepEqual(
-    (await db.doc(`chats/${chatId}/messages/message-1`).get()).data().reactions,
-    { '❤️': ['bob', 'carol'] },
-  );
-  assert.deepEqual(
-    (await db.doc(`chats/${otherChatId}/messages/message-1`).get()).data().reactions,
+    await groupReactions(otherChatId),
     { '❤️': ['alice', 'bob', 'carol'], '🔥': ['alice'] },
   );
   assert.deepEqual(
@@ -638,24 +651,53 @@ test('leaveGroupChat retira al miembro, sus datos y sus reacciones solo de ese g
     ['alice', 'bob', 'carol'],
   );
 
-  // Un reintento, o una llamada de quien no es miembro, no altera el grupo.
-  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
-  assert.equal(await leaveGroup(db, chatId, 'mallory'), true);
+  // Un reintento, o una llamada de quien no es miembro, no altera el grupo
+  // ni registra limpiezas; repetir el trigger tampoco.
+  await leaveGroup(db, chatId, 'alice');
+  await leaveGroup(db, chatId, 'mallory');
+  await cleanUpDeparture(db, chatId, 'alice');
   assert.deepEqual(
     (await db.doc(`chats/${chatId}`).get()).data().participants,
     ['bob', 'carol'],
   );
+  assert.equal((await db.collection(`chats/${chatId}/departures`).get()).empty, true);
+  assert.deepEqual(await groupReactions(chatId), { '❤️': ['bob', 'carol'] });
 });
 
-test('leaveGroupChat elimina el grupo y sus mensajes cuando sale el último miembro', async () => {
+test('las salidas simultáneas no restauran las reacciones que limpia la otra', async () => {
+  const chatId = 'GroupChat00000000001';
+  const messageCount = 12;
+  await seedGroup(chatId, ['alice', 'bob', 'carol'], messageCount);
+
+  await Promise.all([leaveGroup(db, chatId, 'alice'), leaveGroup(db, chatId, 'bob')]);
+  await Promise.all([
+    cleanUpDeparture(db, chatId, 'alice'),
+    cleanUpDeparture(db, chatId, 'bob'),
+  ]);
+
+  assert.deepEqual((await db.doc(`chats/${chatId}`).get()).data().participants, ['carol']);
+  for (let index = 1; index <= messageCount; index += 1) {
+    assert.deepEqual(await groupReactions(chatId, `message-${index}`), { '❤️': ['carol'] });
+  }
+});
+
+test('leaveGroupChat elimina el grupo cuando sale el último miembro y su limpieza borra el resto', async () => {
   const chatId = 'GroupChat00000000001';
   await seedGroup(chatId, ['alice', 'bob']);
 
-  assert.equal(await leaveGroup(db, chatId, 'alice'), true);
-  assert.equal(await leaveGroup(db, chatId, 'bob'), false);
+  // Los últimos miembros pueden salir a la vez: solo uno elimina el grupo.
+  await Promise.all([leaveGroup(db, chatId, 'alice'), leaveGroup(db, chatId, 'bob')]);
   assert.equal((await db.doc(`chats/${chatId}`).get()).exists, false);
+  assert.equal((await db.collection(`chats/${chatId}/departures`).get()).size, 1);
+
+  await deleteGroupContents(db, chatId);
   assert.equal((await db.collection(`chats/${chatId}/messages`).get()).empty, true);
-  assert.equal(await leaveGroup(db, chatId, 'bob'), false);
+  assert.equal((await db.collection(`chats/${chatId}/departures`).get()).empty, true);
+
+  // Reintentos tardíos sobre un grupo ya eliminado.
+  await leaveGroup(db, chatId, 'bob');
+  await cleanUpDeparture(db, chatId, 'alice');
+  assert.equal((await db.doc(`chats/${chatId}`).get()).exists, false);
 });
 
 test('leaveGroupChat no modifica los chats individuales', async () => {

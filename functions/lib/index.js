@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.leaveGroupChat = exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onGroupChatDeleted = exports.onGroupMemberLeft = exports.leaveGroupChat = exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -45,4 +45,6 @@ Object.defineProperty(exports, "acknowledgeChatDelivery", { enumerable: true, ge
 var group_chats_1 = require("./group_chats");
 Object.defineProperty(exports, "createGroupChat", { enumerable: true, get: function () { return group_chats_1.createGroupChat; } });
 Object.defineProperty(exports, "leaveGroupChat", { enumerable: true, get: function () { return group_chats_1.leaveGroupChat; } });
+Object.defineProperty(exports, "onGroupMemberLeft", { enumerable: true, get: function () { return group_chats_1.onGroupMemberLeft; } });
+Object.defineProperty(exports, "onGroupChatDeleted", { enumerable: true, get: function () { return group_chats_1.onGroupChatDeleted; } });
 //# sourceMappingURL=index.js.map

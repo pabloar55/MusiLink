@@ -646,6 +646,12 @@ service cloud.firestore {
 
       allow delete: if false;
 
+      // Limpiezas pendientes de quienes salen de un grupo. Las escribe
+      // leaveGroupChat y las consume onGroupMemberLeft con Admin SDK.
+      match /departures/{userId} {
+        allow read, write: if false;
+      }
+
       // ─── Mensajes (subcolección) ────────────────────
       match /messages/{messageId} {
         // Solo los participantes del chat padre pueden leer mensajes
