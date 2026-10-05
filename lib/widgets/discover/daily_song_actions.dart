@@ -77,6 +77,107 @@ Future<void> replyToDailySong(
   }
 }
 
+/// Heart toggle that pops when liked instead of showing an ink ripple.
+class _DailySongLikeButton extends StatefulWidget {
+  const _DailySongLikeButton({
+    required this.liked,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final bool liked;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  State<_DailySongLikeButton> createState() => _DailySongLikeButtonState();
+}
+
+class _DailySongLikeButtonState extends State<_DailySongLikeButton>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: AppTokens.durationSlow,
+  );
+  late final _pop = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 1.0,
+        end: 0.8,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+      weight: 20,
+    ),
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 0.8,
+        end: 1.25,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+      weight: 40,
+    ),
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 1.25,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 40,
+    ),
+  ]).animate(_controller);
+  late final _dip = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 1.0,
+        end: 0.85,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+      weight: 40,
+    ),
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 0.85,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 60,
+    ),
+  ]).animate(_controller);
+
+  @override
+  void didUpdateWidget(_DailySongLikeButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.liked != widget.liked &&
+        !MediaQuery.disableAnimationsOf(context)) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return IconButton(
+      onPressed: widget.onPressed,
+      isSelected: widget.liked,
+      tooltip: widget.tooltip,
+      style: IconButton.styleFrom(
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
+      ),
+      icon: ScaleTransition(
+        scale: widget.liked ? _pop : _dip,
+        child: Icon(
+          widget.liked ? Icons.favorite : Icons.favorite_border,
+          color: widget.liked
+              ? colorScheme.primary
+              : colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
 /// Lists who liked the signed-in user's own [publication].
 Future<void> showDailySongLikesSheet(
   BuildContext context,
@@ -99,15 +200,32 @@ class DailySongActions extends ConsumerStatefulWidget {
 class _DailySongActionsState extends ConsumerState<DailySongActions> {
   bool _saving = false;
 
+  /// Like state shown from the tap until the stream confirms it, so the
+  /// button reacts immediately even when the write needs a server round trip.
+  bool? _optimisticLiked;
+
+  @override
+  void didUpdateWidget(DailySongActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.owner.uid != widget.owner.uid ||
+        oldWidget.owner.dailySongUpdatedAt != widget.owner.dailySongUpdatedAt) {
+      _optimisticLiked = null;
+    }
+  }
+
   Future<void> _setLiked(DailySongPublication publication, bool liked) async {
     if (_saving) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _optimisticLiked = liked;
+    });
     try {
       await ref
           .read(dailySongInteractionServiceProvider)
           .setLiked(publication, liked);
     } catch (_) {
       if (mounted) {
+        setState(() => _optimisticLiked = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -157,8 +275,13 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
       );
     }
     final colorScheme = Theme.of(context).colorScheme;
+    ref.listen(dailySongMyLikeProvider(publication), (_, next) {
+      if (_optimisticLiked != null && next.asData?.value == _optimisticLiked) {
+        setState(() => _optimisticLiked = null);
+      }
+    });
     final likes = ref.watch(dailySongMyLikeProvider(publication));
-    final liked = likes.asData?.value ?? false;
+    final liked = _optimisticLiked ?? likes.asData?.value ?? false;
     final failedReplies = ref
         .watch(dailySongReplyProvider)
         .where((reply) => reply.matches(owner))
@@ -227,15 +350,10 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
                 ),
               )
             else
-              IconButton(
-                onPressed: _saving
-                    ? null
-                    : () => _setLiked(publication, !liked),
-                isSelected: liked,
+              _DailySongLikeButton(
+                liked: liked,
                 tooltip: liked ? l10n.dailySongUnlike : l10n.dailySongLike,
-                color: colorScheme.onSurfaceVariant,
-                icon: const Icon(Icons.favorite_border),
-                selectedIcon: Icon(Icons.favorite, color: colorScheme.primary),
+                onPressed: () => _setLiked(publication, !liked),
               ),
           ],
         ),

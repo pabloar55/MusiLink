@@ -236,6 +236,38 @@ class SkeletonDiscoveryCard extends StatelessWidget {
   }
 }
 
+/// Artwork, title/artist lines and the "more" button shared by the daily song
+/// cards.
+class _SkeletonDailySongRow extends StatelessWidget {
+  const _SkeletonDailySongRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        SkeletonBox(width: 64, height: 64, borderRadius: 8),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SkeletonBox(width: 150, height: 14),
+              SizedBox(height: 8),
+              SkeletonBox(width: 100, height: 12),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 48,
+          child: Center(
+            child: SkeletonBox(width: 22, height: 6, borderRadius: 3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Daily song card — matches DailySongCard layout.
 class SkeletonDailySongCard extends StatelessWidget {
   const SkeletonDailySongCard({super.key});
@@ -244,23 +276,49 @@ class SkeletonDailySongCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
+        padding: EdgeInsets.all(12),
+        child: _SkeletonDailySongRow(),
+      ),
+    );
+  }
+}
+
+/// Friend daily song card — matches FriendDailySongCard layout.
+class SkeletonFriendDailySongCard extends StatelessWidget {
+  const SkeletonFriendDailySongCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SkeletonBox(width: 56, height: 56, borderRadius: 8),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              children: [
+                _SkeletonCircle(radius: 14),
+                SizedBox(width: 8),
+                SkeletonBox(width: 110, height: 12),
+              ],
+            ),
+            SizedBox(height: 12),
+            _SkeletonDailySongRow(),
+            SizedBox(height: 8),
+            // Reply pill + like button.
+            SizedBox(
+              height: 48,
+              child: Row(
                 children: [
-                  SkeletonBox(height: 14),
-                  SizedBox(height: 6),
-                  SkeletonBox(width: 100, height: 12),
+                  Expanded(child: SkeletonBox(height: 40, borderRadius: 20)),
+                  SizedBox(width: 4),
+                  SizedBox(
+                    width: 48,
+                    child: Center(child: _SkeletonCircle(radius: 12)),
+                  ),
                 ],
               ),
             ),
-            SizedBox(width: 8),
-            SkeletonBox(width: 32, height: 32, borderRadius: 16),
           ],
         ),
       ),
@@ -397,7 +455,8 @@ class SkeletonFriendshipButtons extends StatelessWidget {
   }
 }
 
-/// Daily song tab loading layout — card + section title + friend tiles.
+/// Daily song tab loading layout — own card with its actions + section title
+/// + friend cards.
 class SkeletonDailySongTab extends StatelessWidget {
   const SkeletonDailySongTab({super.key});
 
@@ -406,41 +465,36 @@ class SkeletonDailySongTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       children: [
-        const SkeletonBox(width: 160, height: 18, borderRadius: 4),
+        const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: SkeletonBox(width: 160, height: 18, borderRadius: 4),
+        ),
         const SizedBox(height: 12),
         const SkeletonDailySongCard(),
+        const SizedBox(height: 4),
+        // Likes + choose song buttons.
+        const SizedBox(
+          height: 48,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SkeletonBox(width: 80, height: 14),
+              SizedBox(width: 32),
+              SkeletonBox(width: 170, height: 14),
+            ],
+          ),
+        ),
         const SizedBox(height: 24),
-        const SkeletonBox(width: 180, height: 18, borderRadius: 4),
+        const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: SkeletonBox(width: 180, height: 18, borderRadius: 4),
+        ),
         const SizedBox(height: 12),
         ...List.generate(
           3,
           (_) => const Padding(
             padding: EdgeInsets.only(bottom: 8),
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    SkeletonBox(width: 36, height: 36, borderRadius: 18),
-                     SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SkeletonBox(width: 100, height: 12),
-                           SizedBox(height: 6),
-                          SkeletonBox(
-                            width: 140,
-                            height: 11,
-                            borderRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child: SkeletonFriendDailySongCard(),
           ),
         ),
       ],
