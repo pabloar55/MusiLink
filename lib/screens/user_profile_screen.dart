@@ -13,6 +13,8 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/utils/spotify_url.dart';
+import 'package:musi_link/widgets/discover/daily_song_actions.dart';
+import 'package:musi_link/widgets/discover/daily_song_menu_sheet.dart';
 import 'package:musi_link/widgets/profile/compatibility_card.dart';
 import 'package:musi_link/widgets/profile/friendship_buttons.dart';
 import 'package:musi_link/widgets/profile/music_taste_section.dart';
@@ -215,12 +217,52 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
   }
 
-  Future<void> _openSpotifyUrl(String url) async {
-    final uri = parseSpotifyTrackUri(url);
-    if (uri == null) return;
+  Future<void> _openSpotify(Uri uri) async {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  List<DailySongMenuItem> _dailySongMenuItems(AppUser user) {
+    final song = user.dailySong;
+    if (song == null) return const [];
+    final l10n = AppLocalizations.of(context)!;
+    final spotifyUri = parseSpotifyTrackUri(song.spotifyUrl);
+    final publishedAt = user.dailySongUpdatedAt;
+    final canReply = canInteractWithDailySong(
+      user,
+      uid: _currentUid.isEmpty ? null : _currentUid,
+      friends: ref.watch(friendsStreamProvider).asData?.value ?? const [],
+      blocked: ref.watch(blockedUsersProvider).asData?.value ?? const [],
+    );
+    return [
+      if (spotifyUri != null)
+        (
+          icon: LucideIcons.externalLink,
+          label: l10n.dailySongOpenInSpotify,
+          onTap: () => _openSpotify(spotifyUri),
+        ),
+      if (canReply)
+        (
+          icon: LucideIcons.reply,
+          label: l10n.dailySongReply,
+          onTap: () {
+            if (mounted) replyToDailySong(context, ref, user);
+          },
+        ),
+      if (_isOwnProfile && publishedAt != null)
+        (
+          icon: LucideIcons.heart,
+          label: l10n.dailySongLikesTitle,
+          onTap: () {
+            if (!mounted) return;
+            showDailySongLikesSheet(context, (
+              ownerId: user.uid,
+              publishedAt: publishedAt,
+            ));
+          },
+        ),
+    ];
   }
 
   void _scheduleDailySongExpiryRefresh(AppUser user) {
@@ -258,6 +300,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         user.topArtists.isNotEmpty || user.topGenres.isNotEmpty;
     final isDeletedProfile = user.isDeleted;
     _scheduleDailySongExpiryRefresh(user);
+    final dailySong = user.dailySong;
+    final dailySongMenuItems = _dailySongMenuItems(user);
 
     return Scaffold(
       body: CustomScrollView(
@@ -330,18 +374,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
               ),
               child: Column(
                 children: [
-                  if (user.dailySong != null)
-                    ProfileDailySongCard(
-                      song: user.dailySong!,
-                      onTap:
-                          parseSpotifyTrackUri(user.dailySong!.spotifyUrl) !=
-                              null
-                          ? () => _openSpotifyUrl(user.dailySong!.spotifyUrl)
-                          : null,
-                    ),
-
-                  const SizedBox(height: 4),
-
                   if (!_isOwnProfile && !isDeletedProfile)
                     Builder(
                       builder: (context) {
@@ -360,11 +392,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
                         return Column(
                           children: [
-                            CompatibilityCard(value: compatibilityValue),
-                            const SizedBox(height: 16),
                             Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
+                                horizontal: 16,
                               ),
                               child: FriendshipButtons(
                                 value: relationshipValue,
@@ -377,9 +407,26 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                                 onUnblock: _unblockUser,
                               ),
                             ),
+                            if (!compatibilityValue.hasError) ...[
+                              const SizedBox(height: 16),
+                              CompatibilityCard(value: compatibilityValue),
+                            ],
+                            if (dailySong != null) const SizedBox(height: 12),
                           ],
                         );
                       },
+                    ),
+
+                  if (dailySong != null)
+                    ProfileDailySongCard(
+                      song: dailySong,
+                      onTap: dailySongMenuItems.isEmpty
+                          ? null
+                          : () => showDailySongMenu(
+                              context,
+                              song: dailySong,
+                              items: dailySongMenuItems,
+                            ),
                     ),
 
                   const SizedBox(height: 24),

@@ -62,61 +62,69 @@ class _CompatibilityCardContentState extends State<_CompatibilityCardContent>
     final tt = Theme.of(context).textTheme;
     final l10n = AppLocalizations.of(context)!;
     final score = widget.result.score;
+    final sharedArtists = widget.result.sharedArtistNames;
+    final sharedGenres = widget.result.sharedGenreNames;
+
+    final gauge = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedBuilder(
+          animation: _gaugeAnimation,
+          builder: (ctx, child) => _CompatibilityGauge(
+            score: score,
+            progress: _gaugeAnimation.value,
+            primaryColor: cs.primary,
+            trackColor: cs.surfaceContainerHighest,
+            onSurface: cs.onSurface,
+            textTheme: tt,
+          ),
+        ),
+        const SizedBox(height: AppTokens.spaceXS),
+        Text(
+          l10n.profileCompatible,
+          style: tt.bodySmall?.copyWith(letterSpacing: 0.5),
+        ),
+      ],
+    );
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: AppTokens.spaceXL),
+      margin: const EdgeInsets.symmetric(horizontal: AppTokens.spaceLG),
       child: Padding(
-        padding: const EdgeInsets.all(AppTokens.spaceXL),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Gauge circular con score
-            AnimatedBuilder(
-              animation: _gaugeAnimation,
-              builder: (ctx, child) => _CompatibilityGauge(
-                score: score,
-                progress: _gaugeAnimation.value,
-                primaryColor: cs.primary,
-                trackColor: cs.surfaceContainerHighest,
-                onSurface: cs.onSurface,
-                textTheme: tt,
+        padding: const EdgeInsets.all(AppTokens.spaceLG),
+        child: sharedArtists.isEmpty && sharedGenres.isEmpty
+            ? Center(child: gauge)
+            : Row(
+                children: [
+                  gauge,
+                  const SizedBox(width: AppTokens.spaceLG),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (sharedArtists.isNotEmpty) ...[
+                          _SectionLabel(
+                            label: l10n.profileSharedArtists,
+                            icon: LucideIcons.music,
+                          ),
+                          const SizedBox(height: AppTokens.spaceSM),
+                          _ChipWrap(items: sharedArtists, color: cs.primary),
+                        ],
+                        if (sharedArtists.isNotEmpty && sharedGenres.isNotEmpty)
+                          const SizedBox(height: AppTokens.spaceMD),
+                        if (sharedGenres.isNotEmpty) ...[
+                          _SectionLabel(
+                            label: l10n.profileSharedGenres,
+                            icon: LucideIcons.tag,
+                          ),
+                          const SizedBox(height: AppTokens.spaceSM),
+                          _ChipWrap(items: sharedGenres, color: cs.secondary),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: AppTokens.spaceXS),
-            Text(
-              l10n.profileCompatible,
-              style: tt.bodySmall?.copyWith(letterSpacing: 0.5),
-            ),
-
-            // Artistas compartidos
-            if (widget.result.sharedArtistNames.isNotEmpty) ...[
-              const SizedBox(height: AppTokens.spaceLG),
-              _SectionLabel(
-                label: l10n.profileSharedArtists,
-                icon: LucideIcons.music,
-              ),
-              const SizedBox(height: AppTokens.spaceSM),
-              _ChipWrap(
-                items: widget.result.sharedArtistNames,
-                color: cs.primary,
-              ),
-            ],
-
-            // Géneros compartidos
-            if (widget.result.sharedGenreNames.isNotEmpty) ...[
-              const SizedBox(height: AppTokens.spaceLG),
-              _SectionLabel(
-                label: l10n.profileSharedGenres,
-                icon: LucideIcons.tag,
-              ),
-              const SizedBox(height: AppTokens.spaceSM),
-              _ChipWrap(
-                items: widget.result.sharedGenreNames,
-                color: cs.secondary,
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -143,7 +151,7 @@ class _CompatibilityGauge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const size = 110.0;
+    const size = 84.0;
     final displayScore = (score * progress).round();
 
     return SizedBox(
@@ -168,7 +176,7 @@ class _CompatibilityGauge extends StatelessWidget {
                 style: textTheme.displaySmall?.copyWith(
                   color: primaryColor,
                   fontWeight: FontWeight.w800,
-                  fontSize: 30,
+                  fontSize: 22,
                 ),
               ),
             ],
@@ -192,7 +200,7 @@ class _GaugePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const strokeWidth = 10.0;
+    const strokeWidth = 8.0;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
     const startAngle = math.pi * 0.75;
@@ -245,14 +253,15 @@ class _SectionLabel extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: AppTokens.spaceXS),
-        Text(
-          label.toUpperCase(),
-          style: tt.labelSmall?.copyWith(letterSpacing: 1.0),
+        Flexible(
+          child: Text(
+            label.toUpperCase(),
+            style: tt.labelSmall?.copyWith(letterSpacing: 1.0),
+          ),
         ),
       ],
     );
@@ -273,7 +282,6 @@ class _ChipWrap extends StatelessWidget {
     return Wrap(
       spacing: AppTokens.spaceXS,
       runSpacing: AppTokens.spaceXS,
-      alignment: WrapAlignment.center,
       children: items.map((item) {
         return Container(
           padding: const EdgeInsets.symmetric(

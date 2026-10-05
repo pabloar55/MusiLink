@@ -16,7 +16,7 @@ class ProfileDailySongCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
@@ -26,8 +26,8 @@ class ProfileDailySongCard extends StatelessWidget {
             children: [
               TrackArtwork(
                 imageUrl: song.imageUrl,
-                width: 56,
-                height: 56,
+                width: 64,
+                height: 64,
                 borderRadius: BorderRadius.circular(8),
               ),
               const SizedBox(width: 12),
@@ -47,7 +47,7 @@ class ProfileDailySongCard extends StatelessWidget {
                     Text(
                       song.title,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
@@ -65,11 +65,13 @@ class ProfileDailySongCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                LucideIcons.externalLink,
-                color: colorScheme.onSurfaceVariant,
-                size: 22,
-              ),
+              if (onTap != null)
+                IconButton(
+                  onPressed: onTap,
+                  tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
+                  color: colorScheme.onSurfaceVariant,
+                  icon: const Icon(LucideIcons.ellipsis, size: 22),
+                ),
             ],
           ),
         ),

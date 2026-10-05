@@ -71,13 +71,13 @@ class SkeletonBox extends StatelessWidget {
     final peak = cs.onSurface.withAlpha(55);
 
     Widget box(Color color) => Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(borderRadius),
-          ),
-        );
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+    );
 
     if (ctrl != null) {
       return AnimatedBuilder(
@@ -146,7 +146,11 @@ class SkeletonRequestTile extends StatelessWidget {
           SizedBox(width: 16),
           Expanded(child: SkeletonBox(width: 130, height: 14)),
           SizedBox(width: 8),
-          SkeletonBox(width: 72, height: 32, borderRadius: AppTokens.radiusFull),
+          SkeletonBox(
+            width: 72,
+            height: 32,
+            borderRadius: AppTokens.radiusFull,
+          ),
         ],
       ),
     );
@@ -333,39 +337,44 @@ class SkeletonCompatibilityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Card(
-      margin: EdgeInsets.symmetric(horizontal: AppTokens.spaceXL),
+      margin: EdgeInsets.symmetric(horizontal: AppTokens.spaceLG),
       child: Padding(
-        padding: EdgeInsets.all(AppTokens.spaceXL),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        padding: EdgeInsets.all(AppTokens.spaceLG),
+        child: Row(
           children: [
-            _SkeletonCircle(radius: 55),
-            SizedBox(height: AppTokens.spaceSM),
-            SkeletonBox(width: 100, height: 12),
-            SizedBox(height: AppTokens.spaceLG),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SkeletonBox(
-                    width: 70, height: 28, borderRadius: AppTokens.radiusFull),
-                SizedBox(width: AppTokens.spaceXS),
-                SkeletonBox(
-                    width: 70, height: 28, borderRadius: AppTokens.radiusFull),
-                SizedBox(width: AppTokens.spaceXS),
-                SkeletonBox(
-                    width: 60, height: 28, borderRadius: AppTokens.radiusFull),
+                _SkeletonCircle(radius: 42),
+                SizedBox(height: AppTokens.spaceSM),
+                SkeletonBox(width: 64, height: 12),
               ],
             ),
-             SizedBox(height: AppTokens.spaceXS),
-             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SkeletonBox(
-                    width: 80, height: 28, borderRadius: AppTokens.radiusFull),
-                SizedBox(width: AppTokens.spaceXS),
-                SkeletonBox(
-                    width: 55, height: 28, borderRadius: AppTokens.radiusFull),
-              ],
+            SizedBox(width: AppTokens.spaceLG),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SkeletonBox(width: 120, height: 11),
+                  SizedBox(height: AppTokens.spaceSM),
+                  Row(
+                    children: [
+                      SkeletonBox(
+                        width: 70,
+                        height: 28,
+                        borderRadius: AppTokens.radiusFull,
+                      ),
+                      SizedBox(width: AppTokens.spaceXS),
+                      SkeletonBox(
+                        width: 56,
+                        height: 28,
+                        borderRadius: AppTokens.radiusFull,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -526,11 +535,7 @@ class SkeletonChatMessages extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Align(
             alignment: b.isMe ? Alignment.centerRight : Alignment.centerLeft,
-            child: SkeletonBox(
-              width: b.width,
-              height: 40,
-              borderRadius: 16,
-            ),
+            child: SkeletonBox(width: b.width, height: 40, borderRadius: 16),
           ),
         );
       }).toList(),
