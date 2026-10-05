@@ -182,6 +182,8 @@
   "dailySongInteractionError": "Impossible d’enregistrer. Vérifiez que vous êtes toujours amis et que la chanson est encore disponible, puis réessayez.",
   "dailySongReplyTooLong": "La réponse est trop longue.",
   "dailySongRetry": "Réessayer",
+  "dailySongOpenInSpotify": "Ouvrir dans Spotify",
+  "dailySongViewProfile": "Voir le profil",
 
   "onboardingDiscoverTitle": "Découvrez des personnes",
   "onboardingDiscoverDesc": "MusiLink vous connecte avec des personnes qui partagent vos goûts musicaux. Découvrez votre compatibilité selon vos artistes préférés.",

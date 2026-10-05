@@ -1,38 +1,30 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/models/track.dart';
-import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/track_artwork.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class DailySongCard extends StatelessWidget {
   final Track song;
+  final VoidCallback? onTap;
 
-  const DailySongCard({super.key, required this.song});
-
-  Future<void> _openSpotify(Uri uri) async {
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
+  const DailySongCard({super.key, required this.song, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final spotifyUri = parseSpotifyTrackUri(song.spotifyUrl);
 
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: spotifyUri == null ? null : () => _openSpotify(spotifyUri),
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               TrackArtwork(
                 imageUrl: song.imageUrl,
-                width: 56,
-                height: 56,
+                width: 64,
+                height: 64,
                 borderRadius: BorderRadius.circular(8),
               ),
               const SizedBox(width: 12),
@@ -43,12 +35,13 @@ class DailySongCard extends StatelessWidget {
                     Text(
                       song.title,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       song.artist,
                       style: TextStyle(
@@ -61,10 +54,11 @@ class DailySongCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                LucideIcons.externalLink,
+              IconButton(
+                onPressed: onTap,
+                tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
                 color: colorScheme.onSurfaceVariant,
-                size: 22,
+                icon: const Icon(LucideIcons.ellipsis, size: 22),
               ),
             ],
           ),

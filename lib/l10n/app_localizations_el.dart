@@ -531,6 +531,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dailySongRetry => 'Δοκιμάστε ξανά';
 
   @override
+  String get dailySongOpenInSpotify => 'Άνοιγμα στο Spotify';
+
+  @override
+  String get dailySongViewProfile => 'Προβολή προφίλ';
+
+  @override
   String get onboardingDiscoverTitle => 'Ανακαλύψτε ανθρώπους';
 
   @override

@@ -199,6 +199,8 @@
   "dailySongInteractionError": "Could not save. Check that you are still friends and the song is still available, then try again.",
   "dailySongReplyTooLong": "The reply is too long.",
   "dailySongRetry": "Try again",
+  "dailySongOpenInSpotify": "Open in Spotify",
+  "dailySongViewProfile": "View profile",
 
   "onboardingDiscoverTitle": "Discover people",
   "onboardingDiscoverDesc": "MusiLink connects you with people who share your music taste. See how compatible you are based on your favourite artists.",

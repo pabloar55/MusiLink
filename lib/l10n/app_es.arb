@@ -182,6 +182,8 @@
   "dailySongInteractionError": "No se pudo guardar. Comprueba que seguís siendo amigos y la canción sigue disponible, e inténtalo de nuevo.",
   "dailySongReplyTooLong": "La respuesta es demasiado larga.",
   "dailySongRetry": "Reintentar",
+  "dailySongOpenInSpotify": "Abrir en Spotify",
+  "dailySongViewProfile": "Ver perfil",
 
   "onboardingDiscoverTitle": "Descubre personas",
   "onboardingDiscoverDesc": "MusiLink te conecta con personas que comparten tus gustos musicales. Descubre lo compatibles que sois según vuestros artistas favoritos.",

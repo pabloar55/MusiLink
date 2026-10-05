@@ -14,6 +14,7 @@ import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_actions.dart';
+import 'package:musi_link/widgets/discover/daily_song_menu_sheet.dart';
 import 'package:musi_link/widgets/discover/daily_song_search_sheet.dart';
 import 'package:musi_link/widgets/discover/friend_daily_song_card.dart';
 import 'package:musi_link/widgets/discover/invite_friends_card.dart';
@@ -136,12 +137,94 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
     super.dispose();
   }
 
-  Future<void> _openSpotifyUrl(String url) async {
-    final uri = parseSpotifyTrackUri(url);
-    if (uri == null) return;
+  Future<void> _openSpotify(Uri uri) async {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _openOwnSongMenu(AppUser user) {
+    final song = user.dailySong;
+    if (song == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final spotifyUri = parseSpotifyTrackUri(song.spotifyUrl);
+    final publishedAt = user.dailySongUpdatedAt;
+    showDailySongMenu(
+      context,
+      song: song,
+      items: [
+        if (spotifyUri != null)
+          (
+            icon: LucideIcons.externalLink,
+            label: l10n.dailySongOpenInSpotify,
+            onTap: () => _openSpotify(spotifyUri),
+          ),
+        if (publishedAt != null)
+          (
+            icon: LucideIcons.heart,
+            label: l10n.dailySongLikesTitle,
+            onTap: () {
+              if (!mounted) return;
+              showDailySongLikesSheet(context, (
+                ownerId: user.uid,
+                publishedAt: publishedAt,
+              ));
+            },
+          ),
+        (
+          icon: LucideIcons.pencil,
+          label: l10n.dailySongChoose,
+          onTap: () {
+            if (mounted && !ref.read(dailySongSaveProvider).isSaving) {
+              _chooseDailySong();
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  void _openFriendSongMenu(AppUser friend) {
+    final song = friend.dailySong;
+    if (song == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final spotifyUri = parseSpotifyTrackUri(song.spotifyUrl);
+    final canReply = canInteractWithDailySong(
+      friend,
+      uid: _currentUid.isEmpty ? null : _currentUid,
+      friends: ref.read(friendsStreamProvider).asData?.value ?? const [],
+      blocked: ref.read(blockedUsersProvider).asData?.value ?? const [],
+    );
+    showDailySongMenu(
+      context,
+      song: song,
+      items: [
+        if (spotifyUri != null)
+          (
+            icon: LucideIcons.externalLink,
+            label: l10n.dailySongOpenInSpotify,
+            onTap: () => _openSpotify(spotifyUri),
+          ),
+        if (canReply)
+          (
+            icon: LucideIcons.reply,
+            label: l10n.dailySongReply,
+            onTap: () {
+              if (mounted) replyToDailySong(context, ref, friend);
+            },
+          ),
+        (
+          icon: LucideIcons.user,
+          label: l10n.dailySongViewProfile,
+          onTap: () => _openProfile(friend),
+        ),
+      ],
+    );
+  }
+
+  void _openProfile(AppUser friend) {
+    if (!mounted) return;
+    context.push(userProfileLocation(friend.uid), extra: friend);
   }
 
   @override
@@ -227,15 +310,23 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
           ),
           const SizedBox(height: 12),
           if (dailySong != null) ...[
-            DailySongCard(song: dailySong),
-            DailySongActions(owner: currentUser!),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton.icon(
-                onPressed: saveState.isSaving ? null : _chooseDailySong,
-                icon: const Icon(LucideIcons.pencil, size: 18),
-                label: Text(l10n.dailySongChoose),
-              ),
+            DailySongCard(
+              song: dailySong,
+              onTap: () => _openOwnSongMenu(currentUser!),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                DailySongActions(owner: currentUser!),
+                TextButton.icon(
+                  onPressed: saveState.isSaving ? null : _chooseDailySong,
+                  icon: const Icon(LucideIcons.pencil, size: 18),
+                  label: Text(l10n.dailySongChoose),
+                ),
+              ],
             ),
           ] else ...[
             Card(
@@ -363,14 +454,8 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
                 padding: const EdgeInsets.only(bottom: 8),
                 child: FriendDailySongCard(
                   friend: friend,
-                  onTapSong:
-                      parseSpotifyTrackUri(friend.dailySong!.spotifyUrl) != null
-                      ? () => _openSpotifyUrl(friend.dailySong!.spotifyUrl)
-                      : null,
-                  onTapProfile: () => context.push(
-                    userProfileLocation(friend.uid),
-                    extra: friend,
-                  ),
+                  onTapSong: () => _openFriendSongMenu(friend),
+                  onTapProfile: () => _openProfile(friend),
                 ),
               );
             }),

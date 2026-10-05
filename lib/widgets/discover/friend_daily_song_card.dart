@@ -23,48 +23,31 @@ class FriendDailySongCard extends StatelessWidget {
     final song = friend.dailySong!;
 
     return Card(
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onTapSong,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: onTapProfile,
-                    child: UserCircleAvatar(
-                      photoUrl: friend.photoUrl,
-                      name: friend.displayName,
-                      radius: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  TrackArtwork(
-                    imageUrl: song.imageUrl,
-                    width: 44,
-                    height: 44,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTapSong,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onTapProfile,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UserCircleAvatar(
+                        photoUrl: friend.photoUrl,
+                        name: friend.displayName,
+                        radius: 14,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
                           friend.displayName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.primary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          song.title,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -72,10 +55,39 @@ class FriendDailySongCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  TrackArtwork(
+                    imageUrl: song.imageUrl,
+                    width: 64,
+                    height: 64,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          song.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
                         Text(
                           song.artist,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
                             color: colorScheme.onSurfaceVariant,
                           ),
                           maxLines: 1,
@@ -84,17 +96,22 @@ class FriendDailySongCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(
-                    LucideIcons.externalLink,
+                  IconButton(
+                    onPressed: onTapSong,
+                    tooltip: MaterialLocalizations.of(context)
+                        .moreButtonTooltip,
                     color: colorScheme.onSurfaceVariant,
-                    size: 22,
+                    icon: const Icon(LucideIcons.ellipsis, size: 22),
                   ),
                 ],
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: DailySongActions(owner: friend),
+              ),
+            ],
           ),
-          DailySongActions(owner: friend),
-        ],
+        ),
       ),
     );
   }

@@ -197,6 +197,8 @@
   "dailySongInteractionError": "Δεν ήταν δυνατή η αποθήκευση. Ελέγξτε ότι είστε ακόμα φίλοι και ότι το τραγούδι είναι διαθέσιμο και δοκιμάστε ξανά.",
   "dailySongReplyTooLong": "Η απάντηση είναι πολύ μεγάλη.",
   "dailySongRetry": "Δοκιμάστε ξανά",
+  "dailySongOpenInSpotify": "Άνοιγμα στο Spotify",
+  "dailySongViewProfile": "Προβολή προφίλ",
 
   "onboardingDiscoverTitle": "Ανακαλύψτε ανθρώπους",
   "onboardingDiscoverDesc": "Το MusiLink σας συνδέει με ανθρώπους που μοιράζονται τα μουσικά σας γούστα. Δείτε πόσο συμβατοί είστε βάσει των αγαπημένων σας καλλιτεχνών.",

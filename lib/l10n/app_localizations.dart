@@ -1038,6 +1038,18 @@ abstract class AppLocalizations {
   /// **'Try again'**
   String get dailySongRetry;
 
+  /// No description provided for @dailySongOpenInSpotify.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Spotify'**
+  String get dailySongOpenInSpotify;
+
+  /// No description provided for @dailySongViewProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'View profile'**
+  String get dailySongViewProfile;
+
   /// No description provided for @onboardingDiscoverTitle.
   ///
   /// In en, this message translates to:
