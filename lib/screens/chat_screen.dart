@@ -414,12 +414,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .sendMessage(widget.chatId, text, replyTo: replyTo);
     } on FirebaseException catch (e) {
       if (!mounted) return;
-      _restoreDraft(text, replyTo);
+      _restoreDraft(replyTo, text: text);
       _showWriteError(e);
       return;
     } catch (_) {
       if (!mounted) return;
-      _restoreDraft(text, replyTo);
+      _restoreDraft(replyTo, text: text);
       _showWriteError(null);
       return;
     }
@@ -428,14 +428,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToBottom();
   }
 
-  /// Un envío fallido devuelve el borrador, salvo que ya se escriba otro.
-  void _restoreDraft(String text, Message? replyTo) {
-    if (_messageController.text.isNotEmpty) return;
-    _messageController.text = text;
-    _messageController.selection = TextSelection.collapsed(offset: text.length);
-    if (replyTo != null && _replyingTo == null) {
-      setState(() => _replyingTo = replyTo);
+  /// Un envío fallido devuelve su texto y su cita juntos, y solo si el
+  /// compositor sigue como quedó al enviar ([remaining]): un error tardío no
+  /// se mezcla con el texto o la cita de un borrador posterior.
+  void _restoreDraft(Message? replyTo, {String? text, String remaining = ''}) {
+    if (_replyingTo != null || _messageController.text != remaining) return;
+    if (text != null) {
+      _messageController.text = text;
+      _messageController.selection = TextSelection.collapsed(
+        offset: text.length,
+      );
     }
+    if (replyTo != null) setState(() => _replyingTo = replyTo);
   }
 
   void _startReply(Message message) {
@@ -491,6 +495,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       builder: (_) => TrackSearchSheet(
         onTrackSelected: (track) async {
           Navigator.of(context).pop();
+          // La canción no consume el texto que hubiera a medio escribir.
+          final remaining = _messageController.text;
           final replyTo = _takeReply();
           try {
             await ref
@@ -498,9 +504,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 .sendTrackMessage(widget.chatId, track, replyTo: replyTo);
             _scrollToBottom();
           } on FirebaseException catch (e) {
-            if (mounted) _showWriteError(e);
+            if (!mounted) return;
+            _restoreDraft(replyTo, remaining: remaining);
+            _showWriteError(e);
           } catch (_) {
-            if (mounted) _showWriteError(null);
+            if (!mounted) return;
+            _restoreDraft(replyTo, remaining: remaining);
+            _showWriteError(null);
           }
         },
       ),
