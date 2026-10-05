@@ -282,6 +282,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatDateYesterday => 'Χθες';
 
   @override
+  String get chatReply => 'Απάντηση';
+
+  @override
+  String get chatReplyCancel => 'Ακύρωση απάντησης';
+
+  @override
   String get statsArtists => 'Καλλιτέχνες';
 
   @override

@@ -123,20 +123,27 @@ export function preferredLocale(data: DocumentData | undefined): SupportedLocale
     : defaultLocale;
 }
 
+/** Older daily song replies included the song caption in the message body. */
+export function messageBodyText(message: DocumentData, fallback = ''): string {
+  const reply = message.dailySongReply;
+  let body = typeof message.text === 'string' ? message.text : fallback;
+  if (reply && reply.formatVersion !== 2 && body.startsWith('🎵 “')) {
+    const separator = body.indexOf('\n\n');
+    if (separator >= 0) body = body.slice(separator + 2);
+  }
+  return body;
+}
+
 export function chatNotification(
   message: DocumentData,
   senderName: string,
   recipient: DocumentData | undefined,
 ): { title: string; body: string } {
-  const reply = message.dailySongReply;
-  let body = typeof message.text === 'string' ? message.text : '📎';
-  if (reply && reply.formatVersion !== 2 && body.startsWith('🎵 “')) {
-    const separator = body.indexOf('\n\n');
-    if (separator >= 0) body = body.slice(separator + 2);
-  }
   return {
-    title: reply ? notificationText.dailySongReply[preferredLocale(recipient)](senderName) : senderName,
-    body,
+    title: message.dailySongReply
+      ? notificationText.dailySongReply[preferredLocale(recipient)](senderName)
+      : senderName,
+    body: messageBodyText(message, '📎'),
   };
 }
 

@@ -96,6 +96,8 @@
   "chatDeleteCancel": "Annuler",
   "chatDateToday": "Aujourd’hui",
   "chatDateYesterday": "Hier",
+  "chatReply": "Répondre",
+  "chatReplyCancel": "Annuler la réponse",
 
   "statsArtists": "Artistes",
   "statsGenres": "Genres",

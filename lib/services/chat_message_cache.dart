@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/daily_song_reply.dart';
+import 'package:musi_link/models/message_reply.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -49,6 +50,7 @@ class ChatMessageCache {
               read: item['read'] as bool,
               delivered: item['delivered'] as bool? ?? false,
               dailySongReply: DailySongReply.tryFromMap(item['dailySongReply']),
+              replyTo: MessageReply.tryFromMap(item['replyTo']),
               type: MessageType.values.byName(item['type'] as String),
               trackData: item['trackData'] == null
                   ? null
@@ -132,6 +134,7 @@ class ChatMessageCache {
               'type': message.type.name,
               'trackData': message.trackData?.toMap(),
               'dailySongReply': message.dailySongReply?.toMap(),
+              'replyTo': message.replyTo?.toMap(),
               'reactions': message.reactions,
             },
           )

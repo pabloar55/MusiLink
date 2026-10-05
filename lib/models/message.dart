@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/models/daily_song_reply.dart';
+import 'package:musi_link/models/message_reply.dart';
 
 /// Tipo de mensaje: texto normal o canción compartida.
 enum MessageType { text, track }
@@ -19,6 +20,9 @@ class Message {
   final MessageType type;
   final Track? trackData;
   final DailySongReply? dailySongReply;
+
+  /// Mensaje citado al responder; el backend lo genera a partir del original.
+  final MessageReply? replyTo;
   final Map<String, List<String>> reactions; // emoji -> lista de uids
 
   const Message({
@@ -32,6 +36,7 @@ class Message {
     this.type = MessageType.text,
     this.trackData,
     this.dailySongReply,
+    this.replyTo,
     this.reactions = const {},
   });
 
@@ -47,6 +52,14 @@ class Message {
     }
     return text;
   }
+
+  /// Cita local equivalente a la que guarda el backend al responder.
+  MessageReply toReply() => MessageReply(
+    messageId: id,
+    senderId: senderId,
+    text: MessageReply.preview(bodyText),
+    isTrack: isTrack,
+  );
 
   static Message? fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
@@ -75,6 +88,7 @@ class Message {
       type: type,
       trackData: trackData,
       dailySongReply: DailySongReply.tryFromMap(data['dailySongReply']),
+      replyTo: MessageReply.tryFromMap(data['replyTo']),
       reactions: reactions,
     );
   }
@@ -93,6 +107,7 @@ class Message {
       map['trackData'] = trackData!.toMap();
     }
     if (dailySongReply != null) map['dailySongReply'] = dailySongReply!.toMap();
+    if (replyTo != null) map['replyTo'] = replyTo!.toMap();
 
     if (reactions.isNotEmpty) {
       map['reactions'] = reactions;
@@ -113,6 +128,7 @@ class Message {
       type: type,
       trackData: trackData,
       dailySongReply: dailySongReply,
+      replyTo: replyTo,
       reactions: reactions,
     );
   }

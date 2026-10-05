@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
+import 'package:musi_link/models/message.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -686,6 +687,46 @@ void main() {
           'text': 'Hello!',
         });
         expect(fakeTransaction.sets, isEmpty);
+      });
+
+      test('una respuesta envía solo el ID del mensaje citado', () async {
+        final mockChatDocRef = MockDocumentReference();
+        final mockMessagesCol = MockMessagesCollectionRef();
+        final mockMsgDocRef = MockDocumentReference();
+        when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
+        when(() => mockChatDocRef.collection('messages'))
+            .thenReturn(mockMessagesCol);
+        when(() => mockMessagesCol.doc()).thenReturn(mockMsgDocRef);
+        when(() => mockMsgDocRef.id).thenReturn('abcdefghijklmnopqrst');
+        final original = Message(
+          id: 'original_message_id_',
+          senderId: 'other_uid',
+          text: 'Song - Artist',
+          timestamp: DateTime(2026),
+          type: MessageType.track,
+          trackData: const Track(title: 'Song', artist: 'Artist', imageUrl: ''),
+        );
+
+        await chatService.sendMessage('chat_123', 'Hello!', replyTo: original);
+        await chatService.sendTrackMessage(
+          'chat_123',
+          original.trackData!,
+          replyTo: original,
+        );
+
+        final payloads = verify(
+          () => mockSendMessageCallable.call<void>(captureAny()),
+        ).captured.map((payload) => Map<String, dynamic>.from(payload as Map));
+        expect(payloads.first, {
+          'chatId': 'chat_123',
+          'messageId': 'abcdefghijklmnopqrst',
+          'type': 'text',
+          'text': 'Hello!',
+          'replyToMessageId': 'original_message_id_',
+        });
+        expect(payloads.last['type'], 'track');
+        expect(payloads.last['replyToMessageId'], 'original_message_id_');
+        expect(payloads.last, isNot(contains('replyTo')));
       });
 
       test('propaga los errores del backend', () async {

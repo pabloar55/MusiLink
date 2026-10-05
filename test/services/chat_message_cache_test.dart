@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/daily_song_reply.dart';
+import 'package:musi_link/models/message_reply.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -82,6 +83,26 @@ void main() {
       expect(restored.bodyText, 'Me encanta');
     },
   );
+
+  test('persiste la cita del mensaje respondido', () async {
+    final answer = Message(
+      id: 'answer',
+      senderId: 'alice',
+      text: 'Claro',
+      timestamp: time,
+      replyTo: const MessageReply(
+        messageId: 'original',
+        senderId: 'bob',
+        text: 'Song - Artist',
+        isTrack: true,
+      ),
+    );
+    cache.write('alice', 'chat', (since: null, messages: [answer, message]));
+    await Future<void>.delayed(Duration.zero);
+    final restored = ChatMessageCache(prefs).read('alice', 'chat')!.messages;
+    expect(restored.first.replyTo!.toMap(), answer.replyTo!.toMap());
+    expect(restored.last.replyTo, isNull);
+  });
 
   test('isolates accounts including identifiers containing separators', () {
     cache.write('alice.chat.bob', 'c', (since: null, messages: [message]));

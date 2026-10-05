@@ -21,6 +21,9 @@ class MessageBubble extends ConsumerStatefulWidget {
   final VoidCallback? onReport;
   final MessageSenderAvatar? senderAvatar;
 
+  /// Cita del mensaje al que responde, mostrada dentro de la burbuja.
+  final Widget? replyQuote;
+
   const MessageBubble({
     super.key,
     required this.message,
@@ -33,6 +36,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.showReceipts = true,
     this.onReport,
     this.senderAvatar,
+    this.replyQuote,
   });
 
   @override
@@ -98,8 +102,54 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final tt = Theme.of(context).textTheme;
     final senderAvatar = widget.senderAvatar;
     final avatarInset = senderAvatar == null ? 0.0 : MessageSenderAvatar.extent;
+    final replyQuote = widget.replyQuote;
     final time =
         '${widget.message.timestamp.hour.toString().padLeft(2, '0')}:${widget.message.timestamp.minute.toString().padLeft(2, '0')}';
+    final content = Column(
+      crossAxisAlignment: widget.isMe
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (replyQuote != null) ...[
+          SizedBox(width: double.infinity, child: replyQuote),
+          const SizedBox(height: 6),
+        ],
+        Text(
+          widget.message.bodyText,
+          style: tt.bodyMedium?.copyWith(
+            color: widget.isMe ? cs.onPrimary : cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: AppTokens.spaceXS),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              time,
+              style: tt.labelSmall?.copyWith(
+                fontSize: 11,
+                color: widget.isMe
+                    ? cs.onPrimary.withAlpha(AppTokens.alphaMedium)
+                    : cs.onSurface.withAlpha(AppTokens.alphaLow),
+              ),
+            ),
+            if (widget.isMe && widget.showReceipts) ...[
+              const SizedBox(width: AppTokens.spaceXS),
+              Icon(
+                (widget.message.read || widget.message.delivered)
+                    ? LucideIcons.checkCheck
+                    : LucideIcons.check,
+                size: 14,
+                color: widget.message.read
+                    ? AppTokens.readReceiptColor
+                    : cs.onPrimary.withAlpha(AppTokens.alphaMedium),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -163,56 +213,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                             ),
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: widget.isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              widget.message.bodyText,
-                              style: tt.bodyMedium?.copyWith(
-                                color: widget.isMe
-                                    ? cs.onPrimary
-                                    : cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: AppTokens.spaceXS),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  time,
-                                  style: tt.labelSmall?.copyWith(
-                                    fontSize: 11,
-                                    color: widget.isMe
-                                        ? cs.onPrimary.withAlpha(
-                                            AppTokens.alphaMedium,
-                                          )
-                                        : cs.onSurface.withAlpha(
-                                            AppTokens.alphaLow,
-                                          ),
-                                  ),
-                                ),
-                                if (widget.isMe && widget.showReceipts) ...[
-                                  const SizedBox(width: AppTokens.spaceXS),
-                                  Icon(
-                                    (widget.message.read ||
-                                            widget.message.delivered)
-                                        ? LucideIcons.checkCheck
-                                        : LucideIcons.check,
-                                    size: 14,
-                                    color: widget.message.read
-                                        ? AppTokens.readReceiptColor
-                                        : cs.onPrimary.withAlpha(
-                                            AppTokens.alphaMedium,
-                                          ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
+                        // La cita ocupa el ancho de la burbuja, que sigue
+                        // ajustándose al contenido más ancho.
+                        child: replyQuote == null
+                            ? content
+                            : IntrinsicWidth(child: content),
                       ),
                     ),
                   ),

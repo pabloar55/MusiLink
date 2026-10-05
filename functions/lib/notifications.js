@@ -4,6 +4,7 @@ exports.engagementPushField = exports.quietChannelId = exports.notificationText 
 exports.notifChannelId = notifChannelId;
 exports.notificationPath = notificationPath;
 exports.preferredLocale = preferredLocale;
+exports.messageBodyText = messageBodyText;
 exports.chatNotification = chatNotification;
 exports.sendNotification = sendNotification;
 const v2_1 = require("firebase-functions/v2");
@@ -119,17 +120,23 @@ function preferredLocale(data) {
         ? languageCode
         : defaultLocale;
 }
-function chatNotification(message, senderName, recipient) {
+/** Older daily song replies included the song caption in the message body. */
+function messageBodyText(message, fallback = '') {
     const reply = message.dailySongReply;
-    let body = typeof message.text === 'string' ? message.text : '📎';
+    let body = typeof message.text === 'string' ? message.text : fallback;
     if (reply && reply.formatVersion !== 2 && body.startsWith('🎵 “')) {
         const separator = body.indexOf('\n\n');
         if (separator >= 0)
             body = body.slice(separator + 2);
     }
+    return body;
+}
+function chatNotification(message, senderName, recipient) {
     return {
-        title: reply ? exports.notificationText.dailySongReply[preferredLocale(recipient)](senderName) : senderName,
-        body,
+        title: message.dailySongReply
+            ? exports.notificationText.dailySongReply[preferredLocale(recipient)](senderName)
+            : senderName,
+        body: messageBodyText(message, '📎'),
     };
 }
 // Notifications with the same tag replace each other in the drawer, keeping

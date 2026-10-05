@@ -23,6 +23,9 @@ class TrackBubble extends ConsumerStatefulWidget {
   final VoidCallback? onReport;
   final MessageSenderAvatar? senderAvatar;
 
+  /// Cita del mensaje al que responde, mostrada sobre la carátula.
+  final Widget? replyQuote;
+
   const TrackBubble({
     super.key,
     required this.message,
@@ -35,6 +38,7 @@ class TrackBubble extends ConsumerStatefulWidget {
     this.showReceipts = true,
     this.onReport,
     this.senderAvatar,
+    this.replyQuote,
   });
 
   @override
@@ -169,6 +173,16 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                if (widget.replyQuote != null)
+                                  Padding(
+                                    padding: const EdgeInsets.all(
+                                      AppTokens.spaceSM,
+                                    ),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: widget.replyQuote,
+                                    ),
+                                  ),
                                 TrackArtwork(
                                   imageUrl: track.imageUrl,
                                   width: double.infinity,

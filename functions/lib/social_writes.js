@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendChatMessage = exports.sendFriendRequest = void 0;
+exports.replyPreview = replyPreview;
 exports.parseChatMessagePayload = parseChatMessagePayload;
 exports.createFriendRequest = createFriendRequest;
 exports.createChatMessage = createChatMessage;
@@ -10,6 +11,7 @@ const firebase_1 = require("./firebase");
 const group_chats_1 = require("./group_chats");
 const rate_limits_1 = require("./rate_limits");
 const firestore_values_1 = require("./firestore_values");
+const notifications_1 = require("./notifications");
 const callableOptions = {
     region: 'europe-southwest1',
     enforceAppCheck: true,
@@ -19,6 +21,7 @@ const messageWindowMs = 10 * 1000;
 const friendRequestWindowMs = 10 * 60 * 1000;
 const maxMessagesPerWindow = 20;
 const maxFriendRequestsPerWindow = 20;
+const maxReplyPreviewChars = 200;
 function utf8Length(value) {
     return Buffer.byteLength(value, 'utf8');
 }
@@ -64,6 +67,25 @@ function parseTrack(value) {
     }
     return { title, artist, imageUrl, spotifyUrl };
 }
+function parseReplyTarget(value) {
+    if (!('replyToMessageId' in value))
+        return undefined;
+    if (!validDocumentId(value.replyToMessageId, 128) || value.replyToMessageId === value.messageId) {
+        throw new https_1.HttpsError('invalid-argument', 'Invalid reply reference.');
+    }
+    return value.replyToMessageId;
+}
+/** The quote is built from the stored message, never from client data. */
+function replyPreview(messageId, data) {
+    if (typeof data?.senderId !== 'string' || data.senderId.length === 0)
+        return undefined;
+    return {
+        messageId,
+        senderId: data.senderId,
+        type: data.type === 'track' ? 'track' : 'text',
+        text: Array.from((0, notifications_1.messageBodyText)(data)).slice(0, maxReplyPreviewChars).join(''),
+    };
+}
 function parseChatMessagePayload(value) {
     if (!isRecord(value)) {
         throw new https_1.HttpsError('invalid-argument', 'Message data is required.');
@@ -75,9 +97,11 @@ function parseChatMessagePayload(value) {
         || !/^[A-Za-z0-9_-]{20,64}$/.test(value.messageId)) {
         throw new https_1.HttpsError('invalid-argument', 'A valid messageId is required.');
     }
+    const replyToMessageId = parseReplyTarget(value);
+    const replyKeys = replyToMessageId ? ['replyToMessageId'] : [];
     if (value.type === 'text' || value.type === 'daily_song_reply') {
         const isReply = value.type === 'daily_song_reply';
-        if (!hasExactKeys(value, ['chatId', 'messageId', 'text', 'type', ...(isReply ? ['dailySongReply'] : [])])
+        if (!hasExactKeys(value, ['chatId', 'messageId', 'text', 'type', ...(isReply ? ['dailySongReply'] : replyKeys)])
             || typeof value.text !== 'string') {
             throw new https_1.HttpsError('invalid-argument', 'Message text is required.');
         }
@@ -104,10 +128,11 @@ function parseChatMessagePayload(value) {
             type: 'text',
             text,
             ...(dailySongReply ? { dailySongReply } : {}),
+            ...(replyToMessageId ? { replyToMessageId } : {}),
         };
     }
     if (value.type === 'track') {
-        if (!hasExactKeys(value, ['chatId', 'messageId', 'trackData', 'type'])) {
+        if (!hasExactKeys(value, ['chatId', 'messageId', 'trackData', 'type', ...replyKeys])) {
             throw new https_1.HttpsError('invalid-argument', 'Invalid track message fields.');
         }
         const trackData = parseTrack(value.trackData);
@@ -121,6 +146,7 @@ function parseChatMessagePayload(value) {
             type: 'track',
             text,
             trackData,
+            ...(replyToMessageId ? { replyToMessageId } : {}),
         };
     }
     throw new https_1.HttpsError('invalid-argument', 'Message type is invalid.');
@@ -200,6 +226,9 @@ async function createFriendRequest(firestore, senderId, receiverId, now = firest
 async function createChatMessage(firestore, senderId, payload, now = firestore_1.Timestamp.now()) {
     const chatRef = firestore.doc(`chats/${payload.chatId}`);
     const messageRef = chatRef.collection('messages').doc(payload.messageId);
+    const replyRef = payload.replyToMessageId
+        ? chatRef.collection('messages').doc(payload.replyToMessageId)
+        : undefined;
     const limiterRef = firestore.doc(`rate_limits/${senderId}`);
     return firestore.runTransaction(async (tx) => {
         const chatSnap = await tx.get(chatRef);
@@ -214,7 +243,11 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
             || !participants.includes(senderId)) {
             throw new https_1.HttpsError('permission-denied', 'The sender is not a chat participant.');
         }
-        const [messageSnap, limiterSnap] = await Promise.all([tx.get(messageRef), tx.get(limiterRef)]);
+        const [messageSnap, limiterSnap, replySnap] = await Promise.all([
+            tx.get(messageRef),
+            tx.get(limiterRef),
+            replyRef ? tx.get(replyRef) : undefined,
+        ]);
         let recipientProfile;
         let directRecipientId;
         if (isGroup) {
@@ -277,6 +310,8 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
         if (next.limited) {
             throw new https_1.HttpsError('resource-exhausted', 'Message rate limit reached.');
         }
+        // A quoted message that no longer exists does not block the reply itself.
+        const replyTo = replySnap ? replyPreview(replySnap.id, replySnap.data()) : undefined;
         tx.create(messageRef, {
             senderId,
             ...(isGroup ? { groupMessage: true } : {}),
@@ -287,6 +322,7 @@ async function createChatMessage(firestore, senderId, payload, now = firestore_1
             type: payload.type,
             ...(payload.trackData ? { trackData: payload.trackData } : {}),
             ...(payload.dailySongReply ? { dailySongReply: { ...payload.dailySongReply, formatVersion: 2 } } : {}),
+            ...(replyTo ? { replyTo } : {}),
         });
         tx.set(limiterRef, {
             lastMessageAt: now,

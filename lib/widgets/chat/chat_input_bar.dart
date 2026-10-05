@@ -15,6 +15,8 @@ class ChatInputBar extends StatelessWidget {
     this.errorText,
     this.onChanged,
     this.backgroundColor,
+    this.focusNode,
+    this.header,
   });
 
   final TextEditingController controller;
@@ -25,6 +27,10 @@ class ChatInputBar extends StatelessWidget {
   final String? errorText;
   final ValueChanged<String>? onChanged;
   final Color? backgroundColor;
+  final FocusNode? focusNode;
+
+  /// Contexto del mensaje en redacción, como la cita que se responde.
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
@@ -44,51 +50,71 @@ class ChatInputBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (onShareSong != null)
-              IconButton(
-                onPressed: canSend ? onShareSong : null,
-                icon: const Icon(LucideIcons.music),
-                tooltip: l10n.chatShareSong,
-              ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                autofocus: autofocus,
-                textCapitalization: TextCapitalization.sentences,
-                maxLines: 4,
-                minLines: 1,
-                decoration: InputDecoration(
-                  hintText: l10n.chatWriteMessage,
-                  errorText: errorText,
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest,
-                  border: AppTheme.pillInputBorder,
-                  enabledBorder: AppTheme.pillInputBorder,
-                  focusedBorder: AppTheme.pillInputBorder,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-                onChanged: onChanged,
-                onSubmitted: canSend ? (_) => onSend() : null,
-              ),
+            AnimatedSize(
+              duration: AppTokens.durationFast,
+              alignment: Alignment.topCenter,
+              child: header == null
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(bottom: AppTokens.spaceSM),
+                      child: header,
+                    ),
             ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: canSend ? onSend : null,
-              tooltip: l10n.dailySongReplySend,
-              icon: const Icon(LucideIcons.sendHorizontal500),
-              style: IconButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-              ),
-            ),
+            _buildComposer(colorScheme, l10n),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildComposer(ColorScheme colorScheme, AppLocalizations l10n) {
+    return Row(
+      children: [
+        if (onShareSong != null)
+          IconButton(
+            onPressed: canSend ? onShareSong : null,
+            icon: const Icon(LucideIcons.music),
+            tooltip: l10n.chatShareSong,
+          ),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: autofocus,
+            textCapitalization: TextCapitalization.sentences,
+            maxLines: 4,
+            minLines: 1,
+            decoration: InputDecoration(
+              hintText: l10n.chatWriteMessage,
+              errorText: errorText,
+              filled: true,
+              fillColor: colorScheme.surfaceContainerHighest,
+              border: AppTheme.pillInputBorder,
+              enabledBorder: AppTheme.pillInputBorder,
+              focusedBorder: AppTheme.pillInputBorder,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
+              ),
+            ),
+            onChanged: onChanged,
+            onSubmitted: canSend ? (_) => onSend() : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          onPressed: canSend ? onSend : null,
+          tooltip: l10n.dailySongReplySend,
+          icon: const Icon(LucideIcons.sendHorizontal500),
+          style: IconButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

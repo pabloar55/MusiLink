@@ -286,6 +286,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatDateYesterday => 'Hier';
 
   @override
+  String get chatReply => 'Répondre';
+
+  @override
+  String get chatReplyCancel => 'Annuler la réponse';
+
+  @override
   String get statsArtists => 'Artistes';
 
   @override

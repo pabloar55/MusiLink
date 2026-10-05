@@ -9,6 +9,7 @@ import { db } from './firebase';
 import { maxGroupParticipants, validateGroupSender } from './group_chats';
 import { advanceFixedWindow } from './rate_limits';
 import { chatParticipants, stringList } from './firestore_values';
+import { messageBodyText } from './notifications';
 
 const callableOptions = {
   region: 'europe-southwest1',
@@ -20,6 +21,7 @@ const messageWindowMs = 10 * 1000;
 const friendRequestWindowMs = 10 * 60 * 1000;
 const maxMessagesPerWindow = 20;
 const maxFriendRequestsPerWindow = 20;
+const maxReplyPreviewChars = 200;
 
 interface TrackPayload {
   title: string;
@@ -35,6 +37,14 @@ interface ChatMessagePayload {
   text: string;
   trackData?: TrackPayload;
   dailySongReply?: { ownerId: string; publishedAtMicros: number };
+  replyToMessageId?: string;
+}
+
+interface ReplyPreview {
+  messageId: string;
+  senderId: string;
+  type: 'text' | 'track';
+  text: string;
 }
 
 function utf8Length(value: string): number {
@@ -95,6 +105,25 @@ function parseTrack(value: unknown): TrackPayload {
   return { title, artist, imageUrl, spotifyUrl };
 }
 
+function parseReplyTarget(value: Record<string, unknown>): string | undefined {
+  if (!('replyToMessageId' in value)) return undefined;
+  if (!validDocumentId(value.replyToMessageId, 128) || value.replyToMessageId === value.messageId) {
+    throw new HttpsError('invalid-argument', 'Invalid reply reference.');
+  }
+  return value.replyToMessageId;
+}
+
+/** The quote is built from the stored message, never from client data. */
+export function replyPreview(messageId: string, data: DocumentData | undefined): ReplyPreview | undefined {
+  if (typeof data?.senderId !== 'string' || data.senderId.length === 0) return undefined;
+  return {
+    messageId,
+    senderId: data.senderId,
+    type: data.type === 'track' ? 'track' : 'text',
+    text: Array.from(messageBodyText(data)).slice(0, maxReplyPreviewChars).join(''),
+  };
+}
+
 export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
   if (!isRecord(value)) {
     throw new HttpsError('invalid-argument', 'Message data is required.');
@@ -109,10 +138,13 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
     throw new HttpsError('invalid-argument', 'A valid messageId is required.');
   }
 
+  const replyToMessageId = parseReplyTarget(value);
+  const replyKeys = replyToMessageId ? ['replyToMessageId'] : [];
+
   if (value.type === 'text' || value.type === 'daily_song_reply') {
     const isReply = value.type === 'daily_song_reply';
     if (
-      !hasExactKeys(value, ['chatId', 'messageId', 'text', 'type', ...(isReply ? ['dailySongReply'] : [])])
+      !hasExactKeys(value, ['chatId', 'messageId', 'text', 'type', ...(isReply ? ['dailySongReply'] : replyKeys)])
       || typeof value.text !== 'string'
     ) {
       throw new HttpsError('invalid-argument', 'Message text is required.');
@@ -140,11 +172,12 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
       type: 'text',
       text,
       ...(dailySongReply ? { dailySongReply } : {}),
+      ...(replyToMessageId ? { replyToMessageId } : {}),
     };
   }
 
   if (value.type === 'track') {
-    if (!hasExactKeys(value, ['chatId', 'messageId', 'trackData', 'type'])) {
+    if (!hasExactKeys(value, ['chatId', 'messageId', 'trackData', 'type', ...replyKeys])) {
       throw new HttpsError('invalid-argument', 'Invalid track message fields.');
     }
     const trackData = parseTrack(value.trackData);
@@ -158,6 +191,7 @@ export function parseChatMessagePayload(value: unknown): ChatMessagePayload {
       type: 'track',
       text,
       trackData,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
     };
   }
 
@@ -288,6 +322,9 @@ export async function createChatMessage(
 ): Promise<string> {
   const chatRef = firestore.doc(`chats/${payload.chatId}`);
   const messageRef = chatRef.collection('messages').doc(payload.messageId);
+  const replyRef = payload.replyToMessageId
+    ? chatRef.collection('messages').doc(payload.replyToMessageId)
+    : undefined;
   const limiterRef = firestore.doc(`rate_limits/${senderId}`);
 
   return firestore.runTransaction(async (tx) => {
@@ -305,7 +342,11 @@ export async function createChatMessage(
     ) {
       throw new HttpsError('permission-denied', 'The sender is not a chat participant.');
     }
-    const [messageSnap, limiterSnap] = await Promise.all([tx.get(messageRef), tx.get(limiterRef)]);
+    const [messageSnap, limiterSnap, replySnap] = await Promise.all([
+      tx.get(messageRef),
+      tx.get(limiterRef),
+      replyRef ? tx.get(replyRef) : undefined,
+    ]);
     let recipientProfile: DocumentData | undefined;
     let directRecipientId: string | undefined;
     if (isGroup) {
@@ -390,6 +431,9 @@ export async function createChatMessage(
       throw new HttpsError('resource-exhausted', 'Message rate limit reached.');
     }
 
+    // A quoted message that no longer exists does not block the reply itself.
+    const replyTo = replySnap ? replyPreview(replySnap.id, replySnap.data()) : undefined;
+
     tx.create(messageRef, {
       senderId,
       ...(isGroup ? { groupMessage: true } : {}),
@@ -400,6 +444,7 @@ export async function createChatMessage(
       type: payload.type,
       ...(payload.trackData ? { trackData: payload.trackData } : {}),
       ...(payload.dailySongReply ? { dailySongReply: { ...payload.dailySongReply, formatVersion: 2 } } : {}),
+      ...(replyTo ? { replyTo } : {}),
     });
     tx.set(limiterRef, {
       lastMessageAt: now,

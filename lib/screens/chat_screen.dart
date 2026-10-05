@@ -12,6 +12,7 @@ import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/message_reply.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
 import 'package:musi_link/services/user_service.dart';
@@ -19,6 +20,8 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
 import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
+import 'package:musi_link/widgets/chat/reply_quote.dart';
+import 'package:musi_link/widgets/chat/swipe_to_reply.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
@@ -53,6 +56,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   bool get _isGroup => widget.group != null;
   final _messageController = TextEditingController();
+  final _inputFocusNode = FocusNode();
+
+  /// Mensaje al que responderá el próximo envío.
+  Message? _replyingTo;
   final _scrollController = ScrollController(keepScrollOffset: false);
   StreamSubscription<List<Message>>? _messagesSubscription;
   DateTime? _oldestLiveTimestamp;
@@ -341,6 +348,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _messagesSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
     _messageController.dispose();
+    _inputFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -398,33 +406,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final replyTo = _takeReply();
     _messageController.clear();
     try {
-      await ref.read(chatServiceProvider).sendMessage(widget.chatId, text);
+      await ref
+          .read(chatServiceProvider)
+          .sendMessage(widget.chatId, text, replyTo: replyTo);
     } on FirebaseException catch (e) {
       if (!mounted) return;
-      if (_messageController.text.isEmpty) {
-        _messageController.text = text;
-        _messageController.selection = TextSelection.collapsed(
-          offset: text.length,
-        );
-      }
+      _restoreDraft(text, replyTo);
       _showWriteError(e);
       return;
     } catch (_) {
       if (!mounted) return;
-      if (_messageController.text.isEmpty) {
-        _messageController.text = text;
-        _messageController.selection = TextSelection.collapsed(
-          offset: text.length,
-        );
-      }
+      _restoreDraft(text, replyTo);
       _showWriteError(null);
       return;
     }
 
     // Scroll al final tras enviar
     _scrollToBottom();
+  }
+
+  /// Un envío fallido devuelve el borrador, salvo que ya se escriba otro.
+  void _restoreDraft(String text, Message? replyTo) {
+    if (_messageController.text.isNotEmpty) return;
+    _messageController.text = text;
+    _messageController.selection = TextSelection.collapsed(offset: text.length);
+    if (replyTo != null && _replyingTo == null) {
+      setState(() => _replyingTo = replyTo);
+    }
+  }
+
+  void _startReply(Message message) {
+    setState(() => _replyingTo = message);
+    _inputFocusNode.requestFocus();
+  }
+
+  void _cancelReply() => setState(() => _replyingTo = null);
+
+  /// La respuesta en curso se consume con el mensaje que la envía.
+  Message? _takeReply() {
+    final replyTo = _replyingTo;
+    if (replyTo != null && mounted) setState(() => _replyingTo = null);
+    return replyTo;
   }
 
   void _showWriteError(FirebaseException? error) {
@@ -466,10 +491,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       builder: (_) => TrackSearchSheet(
         onTrackSelected: (track) async {
           Navigator.of(context).pop();
+          final replyTo = _takeReply();
           try {
             await ref
                 .read(chatServiceProvider)
-                .sendTrackMessage(widget.chatId, track);
+                .sendTrackMessage(widget.chatId, track, replyTo: replyTo);
             _scrollToBottom();
           } on FirebaseException catch (e) {
             if (mounted) _showWriteError(e);
@@ -729,6 +755,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           ? l10n.socialUser
                           : widget.otherUserName,
                     );
+              final replyTo = msg.replyTo;
+              final replyQuote = replyTo == null
+                  ? null
+                  : _buildReplyQuote(
+                      replyTo,
+                      l10n,
+                      accentColor: isMe
+                          ? colorScheme.onPrimary
+                          : colorScheme.primary,
+                      textColor: isMe
+                          ? colorScheme.onPrimary.withAlpha(220)
+                          : colorScheme.onSurfaceVariant,
+                      backgroundColor:
+                          (isMe ? colorScheme.onPrimary : colorScheme.onSurface)
+                              .withAlpha(28),
+                    );
 
               final messageBubble = msg.isTrack
                   ? TrackBubble(
@@ -744,6 +786,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           ? () => _reportMessage(msg)
                           : null,
                       senderAvatar: senderAvatar,
+                      replyQuote: replyQuote,
                     )
                   : MessageBubble(
                       message: msg,
@@ -758,6 +801,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           ? () => _reportMessage(msg)
                           : null,
                       senderAvatar: senderAvatar,
+                      replyQuote: replyQuote,
                     );
 
               return Column(
@@ -781,7 +825,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         ),
                       ),
                     ),
-                  messageBubble,
+                  SwipeToReply(
+                    onReply:
+                        canInteract && !_isOtherUserDeleted && !msg.isPending
+                        ? () => _startReply(msg)
+                        : null,
+                    child: messageBubble,
+                  ),
                 ],
               );
             },
@@ -843,11 +893,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildInputBar({bool canSend = true}) {
+    final replyingTo = _replyingTo;
+    final colorScheme = Theme.of(context).colorScheme;
     return ChatInputBar(
       controller: _messageController,
+      focusNode: _inputFocusNode,
       canSend: canSend,
       onSend: _sendMessage,
       onShareSong: _showTrackSearch,
+      header: replyingTo == null
+          ? null
+          : _buildReplyQuote(
+              replyingTo.toReply(),
+              AppLocalizations.of(context)!,
+              accentColor: colorScheme.primary,
+              textColor: colorScheme.onSurfaceVariant,
+              backgroundColor: colorScheme.surfaceContainerHighest,
+              maxLines: 1,
+              onClose: _cancelReply,
+            ),
+    );
+  }
+
+  Widget _buildReplyQuote(
+    MessageReply reply,
+    AppLocalizations l10n, {
+    required Color accentColor,
+    required Color textColor,
+    required Color backgroundColor,
+    int maxLines = 2,
+    VoidCallback? onClose,
+  }) {
+    final isMine = reply.senderId == _currentUid;
+    return FutureBuilder<AppUser?>(
+      future: isMine
+          ? null
+          : _isGroup
+          ? getUserFuture(reply.senderId)
+          : _otherUserFuture,
+      builder: (context, snapshot) => ReplyQuote(
+        senderName: isMine
+            ? l10n.groupChatYou
+            : snapshot.data?.displayName ??
+                  (_isGroup ? l10n.socialUser : widget.otherUserName),
+        text: reply.text,
+        isTrack: reply.isTrack,
+        accentColor: accentColor,
+        textColor: textColor,
+        backgroundColor: backgroundColor,
+        maxLines: maxLines,
+        onClose: onClose,
+      ),
     );
   }
 

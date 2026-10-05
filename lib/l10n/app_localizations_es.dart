@@ -283,6 +283,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatDateYesterday => 'Ayer';
 
   @override
+  String get chatReply => 'Responder';
+
+  @override
+  String get chatReplyCancel => 'Cancelar respuesta';
+
+  @override
   String get statsArtists => 'Artistas';
 
   @override

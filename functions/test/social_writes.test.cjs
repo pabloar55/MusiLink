@@ -316,6 +316,63 @@ test('sendChatMessage comprueba amistad y bloqueos en el backend', async () => {
   );
 });
 
+test('sendChatMessage cita el mensaje respondido con los datos guardados', async () => {
+  await seedChat();
+  const send = (senderId, payload, millis) =>
+    createChatMessage(db, senderId, parseChatMessagePayload({ chatId: 'alice_bob', ...payload }), Timestamp.fromMillis(millis));
+  const stored = async (id) => (await db.doc(`chats/alice_bob/messages/${id}`).get()).data();
+  const track = {
+    title: 'Song',
+    artist: 'Artist',
+    imageUrl: '',
+    spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+  };
+
+  await send('bob', { messageId: 'original_message_id_', type: 'track', trackData: track }, 1_000);
+  assert.equal((await stored('original_message_id_')).replyTo, undefined);
+
+  await send('alice', {
+    messageId: 'answer_message_id___',
+    type: 'text',
+    text: 'Me gusta',
+    replyToMessageId: 'original_message_id_',
+  }, 2_000);
+  assert.deepEqual((await stored('answer_message_id___')).replyTo, {
+    messageId: 'original_message_id_',
+    senderId: 'bob',
+    type: 'track',
+    text: 'Song - Artist',
+  });
+
+  await send('bob', {
+    messageId: 'track_answer_id_____',
+    type: 'track',
+    trackData: track,
+    replyToMessageId: 'answer_message_id___',
+  }, 3_000);
+  const trackAnswer = await stored('track_answer_id_____');
+  assert.equal(trackAnswer.type, 'track');
+  assert.deepEqual(trackAnswer.replyTo, {
+    messageId: 'answer_message_id___',
+    senderId: 'alice',
+    type: 'text',
+    text: 'Me gusta',
+  });
+
+  // Un mensaje de otro chat o ya eliminado no bloquea el envío ni se cita.
+  await db.doc('chats/other_chat/messages/foreign_message_id__').set({ senderId: 'carol', text: 'secreto' });
+  await send('alice', {
+    messageId: 'orphan_answer_id____',
+    type: 'text',
+    text: 'sin cita',
+    replyToMessageId: 'foreign_message_id__',
+  }, 4_000);
+  const orphan = await stored('orphan_answer_id____');
+  assert.equal(orphan.text, 'sin cita');
+  assert.equal(orphan.replyTo, undefined);
+  assert.equal((await db.doc('rate_limits/alice').get()).data().messageCount, 2);
+});
+
 test('las denuncias validan el contexto, conservan el mensaje y se deduplican', async () => {
   await Promise.all([seedChat(), seedUser('carol')]);
   await db.doc('chats/alice_bob/messages/message-1').set({

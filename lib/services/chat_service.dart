@@ -510,13 +510,17 @@ class ChatService with AuthenticatedService {
   static bool _isValidMessageText(String text) =>
       text.isNotEmpty && utf8.encode(text).length <= maxMessageBytes;
 
-  Future<void> sendMessage(String chatId, String text) async {
+  Future<void> sendMessage(
+    String chatId,
+    String text, {
+    Message? replyTo,
+  }) async {
     final trimmed = text.trim();
     if (!_isValidMessageText(trimmed)) {
       throw ArgumentError('Invalid message');
     }
 
-    await _sendOutgoing(chatId, trimmed);
+    await _sendOutgoing(chatId, trimmed, replyTo: replyTo);
   }
 
   Future<void> sendDailySongReply(AppUser owner, String text) async {
@@ -543,6 +547,7 @@ class ChatService with AuthenticatedService {
     String text, {
     Track? track,
     Map<String, dynamic>? dailySongReply,
+    Message? replyTo,
   }) async {
     final uid = currentUid;
     final key = (uid, chatId);
@@ -562,6 +567,7 @@ class ChatService with AuthenticatedService {
       dailySongReply: dailySongReply == null
           ? null
           : DailySongReply.tryFromMap({...dailySongReply, 'formatVersion': 2}),
+      replyTo: replyTo?.toReply(),
       isPending: true,
     );
     _outgoingChanges.add(key);
@@ -576,6 +582,8 @@ class ChatService with AuthenticatedService {
             : 'track',
         if (track == null) 'text': text else 'trackData': track.toMap(),
         'dailySongReply': ?dailySongReply,
+        // El backend reconstruye la cita a partir del mensaje original.
+        'replyToMessageId': ?replyTo?.id,
       });
       // Se conserva hasta que el listener confirma el mismo ID, incluso si la
       // respuesta de la callable llega antes que el snapshot.
@@ -814,13 +822,17 @@ class ChatService with AuthenticatedService {
   }
 
   /// Envía una canción como mensaje en un chat.
-  Future<void> sendTrackMessage(String chatId, Track track) async {
+  Future<void> sendTrackMessage(
+    String chatId,
+    Track track, {
+    Message? replyTo,
+  }) async {
     final text = '${track.title} - ${track.artist}'.trim();
     if (!_isValidMessageText(text)) {
       throw ArgumentError('Invalid message');
     }
 
-    await _sendOutgoing(chatId, text, track: track);
+    await _sendOutgoing(chatId, text, track: track, replyTo: replyTo);
   }
 
   /// Añade o quita una reacción del usuario actual en un mensaje.

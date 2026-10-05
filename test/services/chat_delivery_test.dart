@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/services/chat_service.dart';
 
@@ -117,6 +118,31 @@ void main() {
       },
     );
   }
+
+  test(
+    'optimistic reply quotes the original before the backend confirms',
+    () async {
+      final events = StreamIterator(service.getMessages('chat'));
+      snapshots.add(snapshot([]));
+      await events.moveNext();
+      final original = Message(
+        id: 'original',
+        senderId: 'friend',
+        text: 'question',
+        timestamp: DateTime(2026),
+      );
+      final sending = service.sendMessage('chat', 'answer', replyTo: original);
+      await events.moveNext();
+      expect(events.current.single.isPending, isTrue);
+      expect(
+        events.current.single.replyTo!.toMap(),
+        original.toReply().toMap(),
+      );
+      response.complete(MockHttpsCallableResult<void>());
+      await sending;
+      await events.cancel();
+    },
+  );
 
   test(
     'failed send rolls back only the optimistic message and propagates error',
