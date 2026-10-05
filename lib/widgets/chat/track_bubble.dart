@@ -6,6 +6,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/spotify_url.dart';
+import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
 import 'package:musi_link/widgets/chat/reaction_picker.dart';
 import 'package:musi_link/widgets/track_artwork.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,6 +21,7 @@ class TrackBubble extends ConsumerStatefulWidget {
   final bool reactionsEnabled;
   final bool showReceipts;
   final VoidCallback? onReport;
+  final MessageSenderAvatar? senderAvatar;
 
   const TrackBubble({
     super.key,
@@ -32,6 +34,7 @@ class TrackBubble extends ConsumerStatefulWidget {
     this.reactionsEnabled = true,
     this.showReceipts = true,
     this.onReport,
+    this.senderAvatar,
   });
 
   @override
@@ -95,6 +98,8 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
 
     final cs = widget.colorScheme;
     final tt = Theme.of(context).textTheme;
+    final senderAvatar = widget.senderAvatar;
+    final avatarInset = senderAvatar == null ? 0.0 : MessageSenderAvatar.extent;
     final track = widget.message.trackData!;
     final spotifyUri = parseSpotifyTrackUri(track.spotifyUrl);
     final time =
@@ -111,7 +116,7 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
         alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
+            maxWidth: MediaQuery.of(context).size.width * 0.75 + avatarInset,
           ),
           child: Column(
             crossAxisAlignment: widget.isMe
@@ -121,128 +126,145 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(top: AppTokens.spaceXS),
-                child: CompositedTransformTarget(
-                  link: _layerLink,
-                  child: GestureDetector(
-                    onTap: spotifyUri != null
-                        ? () async {
-                            if (await canLaunchUrl(spotifyUri)) {
-                              await launchUrl(
-                                spotifyUri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          }
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: widget.isMe
-                            ? cs.primary
-                            : cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(AppTokens.radiusLG),
-                          topRight: const Radius.circular(AppTokens.radiusLG),
-                          bottomLeft: Radius.circular(
-                            widget.isMe ? AppTokens.radiusLG : 4,
-                          ),
-                          bottomRight: Radius.circular(
-                            widget.isMe ? 4 : AppTokens.radiusLG,
-                          ),
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TrackArtwork(
-                            imageUrl: track.imageUrl,
-                            width: double.infinity,
-                            height: 160,
-                            iconSize: 56,
-                          ),
-
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppTokens.spaceMD,
-                              AppTokens.spaceSM + 2,
-                              AppTokens.spaceMD,
-                              AppTokens.spaceXS,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ?senderAvatar,
+                    Flexible(
+                      child: CompositedTransformTarget(
+                        link: _layerLink,
+                        child: GestureDetector(
+                          onTap: spotifyUri != null
+                              ? () async {
+                                  if (await canLaunchUrl(spotifyUri)) {
+                                    await launchUrl(
+                                      spotifyUri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                }
+                              : null,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: widget.isMe
+                                  ? cs.primary
+                                  : cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(
+                                  AppTokens.radiusLG,
+                                ),
+                                topRight: const Radius.circular(
+                                  AppTokens.radiusLG,
+                                ),
+                                bottomLeft: Radius.circular(
+                                  widget.isMe ? AppTokens.radiusLG : 4,
+                                ),
+                                bottomRight: Radius.circular(
+                                  widget.isMe ? 4 : AppTokens.radiusLG,
+                                ),
+                              ),
                             ),
+                            clipBehavior: Clip.antiAlias,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  track.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: tt.titleSmall?.copyWith(
-                                    color: widget.isMe
-                                        ? cs.onPrimary
-                                        : cs.onSurface,
-                                  ),
+                                TrackArtwork(
+                                  imageUrl: track.imageUrl,
+                                  width: double.infinity,
+                                  height: 160,
+                                  iconSize: 56,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  track.artist,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: tt.bodySmall?.copyWith(
-                                    color: widget.isMe
-                                        ? cs.onPrimary.withAlpha(
-                                            AppTokens.alphaMedium,
-                                          )
-                                        : cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
 
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppTokens.spaceMD,
-                              0,
-                              AppTokens.spaceMD,
-                              AppTokens.spaceSM,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  time,
-                                  style: tt.labelSmall?.copyWith(
-                                    fontSize: 11,
-                                    color: widget.isMe
-                                        ? cs.onPrimary.withAlpha(
-                                            AppTokens.alphaMedium,
-                                          )
-                                        : cs.onSurface.withAlpha(
-                                            AppTokens.alphaLow,
-                                          ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppTokens.spaceMD,
+                                    AppTokens.spaceSM + 2,
+                                    AppTokens.spaceMD,
+                                    AppTokens.spaceXS,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        track.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: tt.titleSmall?.copyWith(
+                                          color: widget.isMe
+                                              ? cs.onPrimary
+                                              : cs.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        track.artist,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: tt.bodySmall?.copyWith(
+                                          color: widget.isMe
+                                              ? cs.onPrimary.withAlpha(
+                                                  AppTokens.alphaMedium,
+                                                )
+                                              : cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                if (widget.isMe && widget.showReceipts) ...[
-                                  const SizedBox(width: AppTokens.spaceXS),
-                                  Icon(
-                                    (widget.message.read ||
-                                            widget.message.delivered)
-                                        ? LucideIcons.checkCheck
-                                        : LucideIcons.check,
-                                    size: 14,
-                                    color: widget.message.read
-                                        ? AppTokens.readReceiptColor
-                                        : cs.onPrimary.withAlpha(
-                                            AppTokens.alphaMedium,
-                                          ),
+
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppTokens.spaceMD,
+                                    0,
+                                    AppTokens.spaceMD,
+                                    AppTokens.spaceSM,
                                   ),
-                                ],
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        time,
+                                        style: tt.labelSmall?.copyWith(
+                                          fontSize: 11,
+                                          color: widget.isMe
+                                              ? cs.onPrimary.withAlpha(
+                                                  AppTokens.alphaMedium,
+                                                )
+                                              : cs.onSurface.withAlpha(
+                                                  AppTokens.alphaLow,
+                                                ),
+                                        ),
+                                      ),
+                                      if (widget.isMe &&
+                                          widget.showReceipts) ...[
+                                        const SizedBox(
+                                          width: AppTokens.spaceXS,
+                                        ),
+                                        Icon(
+                                          (widget.message.read ||
+                                                  widget.message.delivered)
+                                              ? LucideIcons.checkCheck
+                                              : LucideIcons.check,
+                                          size: 14,
+                                          color: widget.message.read
+                                              ? AppTokens.readReceiptColor
+                                              : cs.onPrimary.withAlpha(
+                                                  AppTokens.alphaMedium,
+                                                ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
 
@@ -250,7 +272,10 @@ class _TrackBubbleState extends ConsumerState<TrackBubble> {
                 Transform.translate(
                   offset: const Offset(0, -6),
                   child: Padding(
-                    padding: const EdgeInsets.only(bottom: AppTokens.spaceXS),
+                    padding: EdgeInsets.only(
+                      left: avatarInset,
+                      bottom: AppTokens.spaceXS,
+                    ),
                     child: ReactionRow(
                       reactions: widget.message.reactions,
                       currentUid: widget.currentUid,

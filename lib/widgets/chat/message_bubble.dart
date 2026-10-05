@@ -6,6 +6,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
 import 'package:musi_link/widgets/chat/reaction_picker.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
@@ -18,6 +19,7 @@ class MessageBubble extends ConsumerStatefulWidget {
   final bool reactionsEnabled;
   final bool showReceipts;
   final VoidCallback? onReport;
+  final MessageSenderAvatar? senderAvatar;
 
   const MessageBubble({
     super.key,
@@ -30,6 +32,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.reactionsEnabled = true,
     this.showReceipts = true,
     this.onReport,
+    this.senderAvatar,
   });
 
   @override
@@ -93,6 +96,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
     final cs = widget.colorScheme;
     final tt = Theme.of(context).textTheme;
+    final senderAvatar = widget.senderAvatar;
+    final avatarInset = senderAvatar == null ? 0.0 : MessageSenderAvatar.extent;
     final time =
         '${widget.message.timestamp.hour.toString().padLeft(2, '0')}:${widget.message.timestamp.minute.toString().padLeft(2, '0')}';
 
@@ -113,9 +118,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           children: [
             if (widget.message.dailySongReply != null)
               Padding(
-                padding: const EdgeInsets.only(
+                padding: EdgeInsets.only(
                   top: AppTokens.spaceSM,
-                  left: AppTokens.spaceSM,
+                  left: AppTokens.spaceSM + avatarInset,
                   right: AppTokens.spaceSM,
                 ),
                 child: Text(
@@ -127,77 +132,91 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ),
             Padding(
               padding: const EdgeInsets.only(top: AppTokens.spaceXS),
-              child: CompositedTransformTarget(
-                link: _layerLink,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTokens.spaceMD,
-                    vertical: AppTokens.spaceSM + 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.isMe
-                        ? cs.primary
-                        : cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(AppTokens.radiusLG),
-                      topRight: const Radius.circular(AppTokens.radiusLG),
-                      bottomLeft: Radius.circular(
-                        widget.isMe ? AppTokens.radiusLG : 4,
-                      ),
-                      bottomRight: Radius.circular(
-                        widget.isMe ? 4 : AppTokens.radiusLG,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ?senderAvatar,
+                  Flexible(
+                    child: CompositedTransformTarget(
+                      link: _layerLink,
+                      child: Container(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.75,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppTokens.spaceMD,
+                          vertical: AppTokens.spaceSM + 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.isMe
+                              ? cs.primary
+                              : cs.surfaceContainerHighest,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(AppTokens.radiusLG),
+                            topRight: const Radius.circular(AppTokens.radiusLG),
+                            bottomLeft: Radius.circular(
+                              widget.isMe ? AppTokens.radiusLG : 4,
+                            ),
+                            bottomRight: Radius.circular(
+                              widget.isMe ? 4 : AppTokens.radiusLG,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: widget.isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.message.bodyText,
+                              style: tt.bodyMedium?.copyWith(
+                                color: widget.isMe
+                                    ? cs.onPrimary
+                                    : cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: AppTokens.spaceXS),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  time,
+                                  style: tt.labelSmall?.copyWith(
+                                    fontSize: 11,
+                                    color: widget.isMe
+                                        ? cs.onPrimary.withAlpha(
+                                            AppTokens.alphaMedium,
+                                          )
+                                        : cs.onSurface.withAlpha(
+                                            AppTokens.alphaLow,
+                                          ),
+                                  ),
+                                ),
+                                if (widget.isMe && widget.showReceipts) ...[
+                                  const SizedBox(width: AppTokens.spaceXS),
+                                  Icon(
+                                    (widget.message.read ||
+                                            widget.message.delivered)
+                                        ? LucideIcons.checkCheck
+                                        : LucideIcons.check,
+                                    size: 14,
+                                    color: widget.message.read
+                                        ? AppTokens.readReceiptColor
+                                        : cs.onPrimary.withAlpha(
+                                            AppTokens.alphaMedium,
+                                          ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: widget.isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.message.bodyText,
-                        style: tt.bodyMedium?.copyWith(
-                          color: widget.isMe ? cs.onPrimary : cs.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: AppTokens.spaceXS),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            time,
-                            style: tt.labelSmall?.copyWith(
-                              fontSize: 11,
-                              color: widget.isMe
-                                  ? cs.onPrimary.withAlpha(
-                                      AppTokens.alphaMedium,
-                                    )
-                                  : cs.onSurface.withAlpha(AppTokens.alphaLow),
-                            ),
-                          ),
-                          if (widget.isMe && widget.showReceipts) ...[
-                            const SizedBox(width: AppTokens.spaceXS),
-                            Icon(
-                              (widget.message.read || widget.message.delivered)
-                                  ? LucideIcons.checkCheck
-                                  : LucideIcons.check,
-                              size: 14,
-                              color: widget.message.read
-                                  ? AppTokens.readReceiptColor
-                                  : cs.onPrimary.withAlpha(
-                                      AppTokens.alphaMedium,
-                                    ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
             ),
 
@@ -205,7 +224,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               Transform.translate(
                 offset: const Offset(0, -6),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: AppTokens.spaceXS),
+                  padding: EdgeInsets.only(
+                    left: avatarInset,
+                    bottom: AppTokens.spaceXS,
+                  ),
                   child: ReactionRow(
                     reactions: widget.message.reactions,
                     currentUid: widget.currentUid,

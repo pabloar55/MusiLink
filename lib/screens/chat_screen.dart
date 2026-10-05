@@ -18,6 +18,7 @@ import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
+import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
@@ -704,6 +705,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     msg.timestamp,
                     _allMessages[messageIndex - 1].timestamp,
                   );
+              // Mensajes seguidos de una misma persona en el mismo día forman
+              // un bloque: nombre en el primero y foto en el último.
+              final startsSenderRun =
+                  showDateSeparator ||
+                  _allMessages[messageIndex - 1].senderId != msg.senderId;
+              final next = messageIndex + 1 < _allMessages.length
+                  ? _allMessages[messageIndex + 1]
+                  : null;
+              final endsSenderRun =
+                  next == null ||
+                  next.senderId != msg.senderId ||
+                  !_isSameCalendarDay(msg.timestamp, next.timestamp);
+              final senderAvatar = isMe
+                  ? null
+                  : !endsSenderRun
+                  ? const MessageSenderAvatar.spacer()
+                  : MessageSenderAvatar(
+                      userFuture: _isGroup
+                          ? getUserFuture(msg.senderId)
+                          : _otherUserFuture,
+                      fallbackName: _isGroup
+                          ? l10n.socialUser
+                          : widget.otherUserName,
+                    );
 
               final messageBubble = msg.isTrack
                   ? TrackBubble(
@@ -718,6 +743,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       onReport: !isMe && !msg.isPending
                           ? () => _reportMessage(msg)
                           : null,
+                      senderAvatar: senderAvatar,
                     )
                   : MessageBubble(
                       message: msg,
@@ -731,6 +757,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       onReport: !isMe && !msg.isPending
                           ? () => _reportMessage(msg)
                           : null,
+                      senderAvatar: senderAvatar,
                     );
 
               return Column(
@@ -739,9 +766,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 children: [
                   if (showDateSeparator)
                     _buildDateSeparator(context, msg.timestamp, colorScheme),
-                  if (_isGroup && !isMe)
+                  if (_isGroup && !isMe && startsSenderRun)
                     Padding(
-                      padding: const EdgeInsets.only(left: 8, top: 8),
+                      padding: const EdgeInsets.only(
+                        left: MessageSenderAvatar.extent + 8,
+                        top: 8,
+                      ),
                       child: FutureBuilder<AppUser?>(
                         future: getUserFuture(msg.senderId),
                         builder: (context, snapshot) => Text(
