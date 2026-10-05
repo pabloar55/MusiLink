@@ -44,20 +44,24 @@ class GroupCircleAvatar extends StatelessWidget {
 class GroupPhotoButton extends StatelessWidget {
   final String photoUrl;
   final Uint8List? localBytes;
+  final double radius;
   final String tooltip;
   final bool isUploading;
+
+  /// Insignia de cámara; se oculta cuando el avatar es demasiado pequeño.
+  final bool showBadge;
   final VoidCallback? onTap;
 
   const GroupPhotoButton({
     super.key,
     this.photoUrl = '',
     this.localBytes,
+    this.radius = 40,
     required this.tooltip,
     this.isUploading = false,
+    this.showBadge = true,
     required this.onTap,
   });
-
-  static const double _radius = 40;
 
   @override
   Widget build(BuildContext context) {
@@ -69,10 +73,15 @@ class GroupPhotoButton extends StatelessWidget {
         child: Stack(
           alignment: Alignment.bottomRight,
           children: [
-            GroupCircleAvatar(
-              photoUrl: photoUrl,
-              localBytes: localBytes,
-              radius: _radius,
+            // El tamaño fijo evita la transición implícita de CircleAvatar
+            // cuando el radio cambia en cada fotograma.
+            SizedBox.square(
+              dimension: radius * 2,
+              child: GroupCircleAvatar(
+                photoUrl: photoUrl,
+                localBytes: localBytes,
+                radius: radius,
+              ),
             ),
             if (isUploading)
               const Positioned.fill(
@@ -92,7 +101,7 @@ class GroupPhotoButton extends StatelessWidget {
                   ),
                 ),
               )
-            else
+            else if (showBadge)
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(

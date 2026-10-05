@@ -13,6 +13,7 @@ import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
 import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
+import 'package:musi_link/widgets/collapsible_avatar_header.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/image_source_picker.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
@@ -116,102 +117,125 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen>
         ? current
         : null;
 
+    if (group == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: chat.isLoading
+              ? const CircularProgressIndicator()
+              : Text(l10n.groupChatUnavailable),
+        ),
+      );
+    }
+
+    final padding = MediaQuery.paddingOf(context);
     return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        child: group == null
-            ? Center(
-                child: chat.isLoading
-                    ? const CircularProgressIndicator()
-                    : Text(l10n.groupChatUnavailable),
-              )
-            : ListView(
-                padding: const EdgeInsets.only(bottom: 16),
-                children: [
-                  const SizedBox(height: 8),
-                  Center(
-                    child: GroupPhotoButton(
-                      photoUrl: group.photoUrl,
-                      localBytes: _photoBytes,
-                      tooltip: l10n.groupChatChangePhoto,
-                      isUploading: _isUploadingPhoto,
-                      onTap: _changePhoto,
-                    ),
-                  ),
-                  if (_photoFailed)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Text(
-                        l10n.groupChatPhotoError,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: colorScheme.error),
-                      ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    child: Column(
-                      children: [
-                        Text(
-                          group.name,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
+      body: LayoutBuilder(
+        builder: (context, constraints) => CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              expandedHeight: CollapsibleAvatarHeader.expandedHeight(
+                context,
+                group.name,
+              ),
+              flexibleSpace: CollapsibleAvatarHeader(
+                name: group.name,
+                avatarBuilder: (size, progress) => GroupPhotoButton(
+                  photoUrl: group.photoUrl,
+                  localBytes: _photoBytes,
+                  radius: size / 2,
+                  tooltip: l10n.groupChatChangePhoto,
+                  isUploading: _isUploadingPhoto,
+                  showBadge: progress == 0,
+                  onTap: _changePhoto,
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: ConstrainedBox(
+                // Un grupo pequeño también puede plegar la cabecera por
+                // completo, sin quedarse a medias con el nombre casi invisible.
+                constraints: BoxConstraints(
+                  minHeight:
+                      constraints.maxHeight - kToolbarHeight - padding.top,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 24 + padding.bottom),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Text(
                           l10n.groupChatMembers(group.participants.length),
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  if (group.participants.length <
-                      ChatService.maxGroupParticipants)
-                    ListTile(
-                      leading: const CircleAvatar(
-                        radius: 20,
-                        child: Icon(LucideIcons.userPlus, size: 20),
                       ),
-                      title: Text(l10n.groupChatAddMembers),
-                      onTap: () => context.push(
-                        '/group-chat/${Uri.encodeComponent(widget.chatId)}/add-members',
-                      ),
-                    ),
-                  for (final memberId in group.participants)
-                    FutureBuilder<AppUser?>(
-                      key: ValueKey(memberId),
-                      future: getUserFuture(memberId),
-                      builder: (context, snapshot) {
-                        final user = snapshot.data;
-                        return ListTile(
-                          leading: UserCircleAvatar(
-                            photoUrl: user?.photoUrl ?? '',
-                            name: user?.displayName ?? '',
-                            radius: 20,
+                      if (_photoFailed)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Text(
+                            l10n.groupChatPhotoError,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: colorScheme.error),
                           ),
-                          title: Text(user?.displayName ?? l10n.socialUser),
-                          onTap: user == null || user.isDeleted
-                              ? null
-                              : () => context.push(
-                                  userProfileLocation(user.uid),
-                                  extra: user,
-                                ),
-                        );
-                      },
-                    ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: Icon(LucideIcons.logOut, color: colorScheme.error),
-                    title: Text(
-                      l10n.groupChatLeave,
-                      style: TextStyle(color: colorScheme.error),
-                    ),
-                    onTap: _leaveGroup,
+                        ),
+                      if (group.participants.length <
+                          ChatService.maxGroupParticipants)
+                        ListTile(
+                          leading: const CircleAvatar(
+                            radius: 20,
+                            child: Icon(LucideIcons.userPlus, size: 20),
+                          ),
+                          title: Text(l10n.groupChatAddMembers),
+                          onTap: () => context.push(
+                            '/group-chat/${Uri.encodeComponent(widget.chatId)}/add-members',
+                          ),
+                        ),
+                      for (final memberId in group.participants)
+                        FutureBuilder<AppUser?>(
+                          key: ValueKey(memberId),
+                          future: getUserFuture(memberId),
+                          builder: (context, snapshot) {
+                            final user = snapshot.data;
+                            return ListTile(
+                              leading: UserCircleAvatar(
+                                photoUrl: user?.photoUrl ?? '',
+                                name: user?.displayName ?? '',
+                                radius: 20,
+                              ),
+                              title: Text(user?.displayName ?? l10n.socialUser),
+                              onTap: user == null || user.isDeleted
+                                  ? null
+                                  : () => context.push(
+                                      userProfileLocation(user.uid),
+                                      extra: user,
+                                    ),
+                            );
+                          },
+                        ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: Icon(
+                          LucideIcons.logOut,
+                          color: colorScheme.error,
+                        ),
+                        title: Text(
+                          l10n.groupChatLeave,
+                          style: TextStyle(color: colorScheme.error),
+                        ),
+                        onTap: _leaveGroup,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
+            ),
+          ],
+        ),
       ),
     );
   }
