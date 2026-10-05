@@ -18,10 +18,8 @@ import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
-import 'package:musi_link/widgets/chat/group_info_sheet.dart';
 import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
-import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/report_reason_dialog.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
@@ -518,60 +516,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  void _showGroupInfo() {
-    showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      // La altura por defecto oculta las acciones del final en grupos pequeños.
-      isScrollControlled: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
-      ),
-      builder: (_) => GroupInfoSheet(
-        group: widget.group!,
-        getUser: getUserFuture,
-        onOpenProfile: (user) {
-          if (!mounted) return;
-          context.push(
-            userProfileLocation(user.uid, fromChat: true),
-            extra: user,
-          );
-        },
-        onAddMembers: () {
-          if (!mounted) return;
-          context.push(
-            '/group-chat/${Uri.encodeComponent(widget.chatId)}/add-members',
-          );
-        },
-        onLeave: _leaveGroup,
-      ),
-    );
-  }
-
-  /// Vuelve a la lista sin esperar al backend: al confirmarse la salida, el
-  /// grupo deja de ser legible y esta pantalla ya no podría mostrarlo.
-  Future<void> _leaveGroup() async {
-    if (!mounted) return;
-    final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showAdaptiveConfirmationDialog(
-      context: context,
-      title: l10n.groupChatLeaveTitle,
-      content: l10n.groupChatLeaveBody,
-      cancelLabel: l10n.chatDeleteCancel,
-      confirmLabel: l10n.groupChatLeave,
-      destructive: true,
-    );
-    if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    final service = ref.read(chatServiceProvider);
-    final chatId = widget.chatId;
-    _leaveChat();
-    try {
-      await service.leaveGroupChat(chatId);
-    } catch (_) {
-      if (!messenger.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(l10n.groupChatLeaveError)));
-    }
+  void _openGroupInfo() {
+    context.push('/group-chat/${Uri.encodeComponent(widget.chatId)}/info');
   }
 
   Future<void> _openOtherUserProfile() async {
@@ -631,7 +577,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           preferredSize: const Size.fromHeight(kToolbarHeight),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _isGroup ? _showGroupInfo : _openOtherUserProfile,
+            onTap: _isGroup ? _openGroupInfo : _openOtherUserProfile,
             child: AppBar(
               backgroundColor: colorScheme.surfaceContainerLow,
               leading: canPop ? null : BackButton(onPressed: _leaveChat),

@@ -15,6 +15,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/screens/create_group_chat_screen.dart';
 import 'package:musi_link/screens/group_chat_screen.dart';
+import 'package:musi_link/screens/group_info_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 
@@ -40,6 +41,7 @@ Future<_MockChatService> _openGroup(
   WidgetTester tester,
   Stream<Chat?> groups, {
   Chat? initialGroup,
+  bool fromChatList = false,
 }) async {
   final service = _MockChatService();
   final auth = MockFirebaseAuth();
@@ -59,7 +61,7 @@ Future<_MockChatService> _openGroup(
   when(() => notifications.cancelChatNotifications('group-1'))
       .thenAnswer((_) async {});
   final router = GoRouter(
-    initialLocation: '/group-chat/group-1',
+    initialLocation: fromChatList ? '/' : '/group-chat/group-1',
     routes: [
       GoRoute(path: '/', builder: (_, _) => const Text('Messages')),
       GoRoute(
@@ -69,6 +71,11 @@ Future<_MockChatService> _openGroup(
           initialGroup: initialGroup,
         ),
         routes: [
+          GoRoute(
+            path: 'info',
+            builder: (_, state) =>
+                GroupInfoScreen(chatId: state.pathParameters['chatId']!),
+          ),
           GoRoute(
             path: 'add-members',
             builder: (_, state) =>
@@ -102,6 +109,10 @@ Future<_MockChatService> _openGroup(
       ),
     ),
   );
+  if (fromChatList) {
+    unawaited(router.push('/group-chat/group-1'));
+    await tester.pumpAndSettle();
+  }
   return service;
 }
 
@@ -126,31 +137,35 @@ void main() {
     expect(find.text('My draft'), findsOneWidget);
   });
 
-  testWidgets('leaving requires confirmation and returns to the chat list', (
-    tester,
-  ) async {
-    final service = await _openGroup(
-      tester,
-      groups.stream,
-      initialGroup: _group(),
-    );
-    when(() => service.leaveGroupChat('group-1')).thenAnswer((_) async {});
+  for (final fromChatList in [true, false]) {
+    testWidgets('leaving requires confirmation and returns to the chat list '
+        '(opened from the list: $fromChatList)', (tester) async {
+      final service = await _openGroup(
+        tester,
+        groups.stream,
+        initialGroup: _group(),
+        fromChatList: fromChatList,
+      );
+      when(() => service.leaveGroupChat('group-1')).thenAnswer((_) async {});
+      groups.add(_group());
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Music friends'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Leave group'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Leave group'));
-    await tester.pumpAndSettle();
-    expect(find.text('Leave this group?'), findsOneWidget);
-    verifyNever(() => service.leaveGroupChat(any()));
+      await tester.tap(find.text('Music friends'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupInfoScreen), findsOneWidget);
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave this group?'), findsOneWidget);
+      verifyNever(() => service.leaveGroupChat(any()));
 
-    await tester.tap(find.text('Leave group'));
-    await tester.pumpAndSettle();
-    verify(() => service.leaveGroupChat('group-1')).called(1);
-    expect(find.byType(ChatScreen), findsNothing);
-    expect(find.text('Messages'), findsOneWidget);
-  });
+      await tester.tap(find.text('Leave group').last);
+      await tester.pumpAndSettle();
+      verify(() => service.leaveGroupChat('group-1')).called(1);
+      expect(find.byType(GroupInfoScreen), findsNothing);
+      expect(find.byType(ChatScreen), findsNothing);
+      expect(find.text('Messages'), findsOneWidget);
+    });
+  }
 
   testWidgets('adding members offers only friends outside the group', (
     tester,
@@ -180,6 +195,10 @@ void main() {
     await tester.pumpAndSettle();
     verify(() => service.addGroupMembers('group-1', ['new-friend'])).called(1);
     expect(find.byType(AddGroupMembersScreen), findsNothing);
+    expect(find.byType(GroupInfoScreen), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.byType(ChatScreen), findsOneWidget);
   });
 

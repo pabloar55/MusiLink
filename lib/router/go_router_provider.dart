@@ -16,6 +16,7 @@ import 'package:musi_link/screens/auth_screen.dart';
 import 'package:musi_link/screens/terms_acceptance_screen.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/screens/group_chat_screen.dart';
+import 'package:musi_link/screens/group_info_screen.dart';
 import 'package:musi_link/screens/create_group_chat_screen.dart';
 import 'package:musi_link/screens/main_screen.dart';
 import 'package:musi_link/screens/onboarding_screen.dart';
@@ -185,6 +186,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           initialGroup: state.extra is Chat ? state.extra! as Chat : null,
         ),
         routes: [
+          GoRoute(
+            path: 'info',
+            builder: (context, state) =>
+                GroupInfoScreen(chatId: state.pathParameters['chatId']!),
+          ),
           GoRoute(
             path: 'add-members',
             builder: (context, state) =>
