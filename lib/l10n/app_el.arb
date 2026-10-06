@@ -103,6 +103,7 @@
   "chatDateYesterday": "Χθες",
   "chatReply": "Απάντηση",
   "chatReplyCancel": "Ακύρωση απάντησης",
+  "chatReplyOriginalUnavailable": "Το αρχικό μήνυμα δεν είναι πλέον διαθέσιμο.",
 
   "statsArtists": "Καλλιτέχνες",
   "statsGenres": "Είδη",

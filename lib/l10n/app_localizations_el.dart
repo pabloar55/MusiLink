@@ -288,6 +288,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatReplyCancel => 'Ακύρωση απάντησης';
 
   @override
+  String get chatReplyOriginalUnavailable =>
+      'Το αρχικό μήνυμα δεν είναι πλέον διαθέσιμο.';
+
+  @override
   String get statsArtists => 'Καλλιτέχνες';
 
   @override

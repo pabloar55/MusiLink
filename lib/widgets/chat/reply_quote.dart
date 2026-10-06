@@ -14,6 +14,7 @@ class ReplyQuote extends StatelessWidget {
     required this.backgroundColor,
     this.isTrack = false,
     this.maxLines = 2,
+    this.onTap,
     this.onClose,
   });
 
@@ -25,12 +26,23 @@ class ReplyQuote extends StatelessWidget {
   final bool isTrack;
   final int maxLines;
 
+  /// Lleva al mensaje citado.
+  final VoidCallback? onTap;
+
   /// Muestra el botón para descartar la respuesta en curso.
   final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: _buildQuote(context, tt),
+    );
+  }
+
+  Widget _buildQuote(BuildContext context, TextTheme tt) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppTokens.radiusSM),
       child: DecoratedBox(

@@ -748,6 +748,22 @@ class ChatService with AuthenticatedService {
         : query.endAt([Timestamp.fromDate(from)]);
   }
 
+  /// Lee un mensaje concreto, o null si ya no existe. Permite localizar en el
+  /// historial un mensaje citado que la pantalla aún no ha cargado.
+  Future<Message?> getMessage(String chatId, String messageId) async {
+    try {
+      final doc = await _chatsRef
+          .doc(chatId)
+          .collection(FirestoreCollections.messages)
+          .doc(messageId)
+          .get();
+      return Message.fromFirestore(doc);
+    } catch (e, stack) {
+      await reportError(e, stack);
+      rethrow;
+    }
+  }
+
   /// Localiza la siguiente página anterior a [before]. El llamador debe ampliar
   /// [getMessages] con su primer timestamp para mantenerla actualizada.
   /// Devuelve hasta [messagesPageSize] mensajes en orden cronológico ascendente.

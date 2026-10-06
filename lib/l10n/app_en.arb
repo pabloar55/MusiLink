@@ -103,6 +103,7 @@
   "chatDateYesterday": "Yesterday",
   "chatReply": "Reply",
   "chatReplyCancel": "Cancel reply",
+  "chatReplyOriginalUnavailable": "The original message is no longer available.",
 
   "statsArtists": "Artists",
   "statsGenres": "Genres",

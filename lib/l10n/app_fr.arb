@@ -98,6 +98,7 @@
   "chatDateYesterday": "Hier",
   "chatReply": "Répondre",
   "chatReplyCancel": "Annuler la réponse",
+  "chatReplyOriginalUnavailable": "Le message d'origine n'est plus disponible.",
 
   "statsArtists": "Artistes",
   "statsGenres": "Genres",

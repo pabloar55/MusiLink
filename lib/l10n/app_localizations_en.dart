@@ -287,6 +287,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatReplyCancel => 'Cancel reply';
 
   @override
+  String get chatReplyOriginalUnavailable =>
+      'The original message is no longer available.';
+
+  @override
   String get statsArtists => 'Artists';
 
   @override

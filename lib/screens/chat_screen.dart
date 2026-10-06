@@ -17,6 +17,7 @@ import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
 import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
@@ -60,6 +61,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Mensaje al que responderá el próximo envío.
   Message? _replyingTo;
+
+  // Ir al mensaje citado: búsqueda en curso, espera del historial y resaltado.
+  bool _isLocatingMessage = false;
+  ({String messageId, Completer<bool?> loaded})? _awaitedMessage;
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
   final _scrollController = ScrollController(keepScrollOffset: false);
   StreamSubscription<List<Message>>? _messagesSubscription;
   DateTime? _oldestLiveTimestamp;
@@ -242,6 +249,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       },
       onError: (Object error, StackTrace stack) {
         if (!mounted || generation != _messagesGeneration) return;
+        _awaitedMessage?.loaded.complete(null);
+        _awaitedMessage = null;
         setState(() {
           if (awaitingPage) _hasMoreMessages = true;
           awaitingPage = false;
@@ -293,6 +302,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (shouldScroll && _isRouteVisible) {
       // Los envíos locales también desplazan la lista inmediatamente.
       _scrollToBottom(animate: !isFirst);
+    }
+    final awaited = _awaitedMessage;
+    if (awaited != null && _indexOfMessage(awaited.messageId) >= 0) {
+      _awaitedMessage = null;
+      awaited.loaded.complete(true);
     }
   }
 
@@ -346,6 +360,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _activeChatNotifier.clearChat(widget.chatId);
     });
     _messagesSubscription?.cancel();
+    _awaitedMessage?.loaded.complete(null);
+    _highlightTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _messageController.dispose();
     _inputFocusNode.dispose();
@@ -454,6 +470,142 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final replyTo = _replyingTo;
     if (replyTo != null && mounted) setState(() => _replyingTo = null);
     return replyTo;
+  }
+
+  int _indexOfMessage(String messageId) =>
+      _allMessages.indexWhere((message) => message.id == messageId);
+
+  /// Lleva la lista hasta el mensaje citado y lo resalta un instante.
+  Future<void> _showOriginalMessage(MessageReply reply) async {
+    if (_isLocatingMessage) return;
+    _isLocatingMessage = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final loaded = _indexOfMessage(reply.messageId) >= 0
+          ? true
+          : await _loadHistoryThrough(reply.messageId);
+      // Sin resultado, el error ya se ha mostrado.
+      if (!mounted || loaded == null) return;
+      if (loaded && await _scrollToMessage(reply.messageId)) {
+        if (mounted) _highlightMessage(reply.messageId);
+        return;
+      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.chatReplyOriginalUnavailable)),
+      );
+    } finally {
+      _isLocatingMessage = false;
+    }
+  }
+
+  /// Amplía el historial en vivo hasta un mensaje anterior al cargado.
+  /// Devuelve false si ya no existe o quedó fuera del historial del usuario,
+  /// y null si la carga falla.
+  Future<bool?> _loadHistoryThrough(String messageId) async {
+    setState(() => _isLoadingMore = true);
+    final Message? original;
+    try {
+      original = await ref
+          .read(chatServiceProvider)
+          .getMessage(widget.chatId, messageId);
+    } catch (_) {
+      if (!mounted) return null;
+      setState(() => _isLoadingMore = false);
+      _showWriteError(null);
+      return null;
+    }
+    if (!mounted) return null;
+    // Una página cargada entretanto puede haberlo traído ya.
+    if (_indexOfMessage(messageId) >= 0) {
+      setState(() => _isLoadingMore = false);
+      return true;
+    }
+    final since = _deletedSince;
+    if (original == null ||
+        (since != null && !original.timestamp.isAfter(since))) {
+      setState(() => _isLoadingMore = false);
+      return false;
+    }
+
+    final loaded = Completer<bool?>();
+    _awaitedMessage = (messageId: messageId, loaded: loaded);
+    _listenToMessages(from: original.timestamp, completesPagination: true);
+    return loaded.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        _awaitedMessage = null;
+        if (!mounted) return null;
+        setState(() => _isLoadingMore = false);
+        _showWriteError(null);
+        return null;
+      },
+    );
+  }
+
+  /// Los mensajes tienen altura variable y solo se construyen los cercanos a
+  /// la pantalla: se salta estimando la distancia por el número de mensajes y
+  /// se corrige en cada fotograma hasta que el buscado está construido.
+  Future<bool> _scrollToMessage(String messageId) async {
+    // Posiciones entre las que ya se sabe que está el mensaje.
+    var lower = double.negativeInfinity;
+    var upper = double.infinity;
+    for (var attempt = 0; attempt < 30; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scrollController.hasClients) return false;
+      final target = _MessageKey(this, messageId).currentContext;
+      if (target != null && target.mounted) {
+        await Scrollable.ensureVisible(
+          target,
+          alignment: 0.5,
+          duration: AppTokens.durationMedium,
+          curve: Curves.easeOut,
+        );
+        return mounted;
+      }
+
+      final index = _indexOfMessage(messageId);
+      int? oldestBuilt;
+      int? newestBuilt;
+      for (var i = 0; i < _allMessages.length; i++) {
+        if (_MessageKey(this, _allMessages[i].id).currentContext == null) {
+          continue;
+        }
+        oldestBuilt ??= i;
+        newestBuilt = i;
+      }
+      if (index < 0 || oldestBuilt == null || newestBuilt == null) return false;
+
+      final position = _scrollController.position;
+      final perMessage =
+          position.viewportDimension / (newestBuilt - oldestBuilt + 1);
+      // Con la lista invertida, los mensajes antiguos quedan en offsets altos.
+      final isOlder = index < oldestBuilt;
+      double next;
+      if (isOlder) {
+        lower = position.pixels;
+        next = position.pixels + (oldestBuilt - index) * perMessage;
+      } else {
+        upper = position.pixels;
+        next = position.pixels - (index - newestBuilt) * perMessage;
+      }
+      if (next <= lower || next >= upper) next = (lower + upper) / 2;
+      next = next
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      if (next == position.pixels) return false;
+      _scrollController.jumpTo(next);
+    }
+    return false;
+  }
+
+  void _highlightMessage(String messageId) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightedMessageId = messageId);
+    _highlightTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _highlightedMessageId = null);
+    });
   }
 
   void _showWriteError(FirebaseException? error) {
@@ -780,6 +932,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       backgroundColor:
                           (isMe ? colorScheme.onPrimary : colorScheme.onSurface)
                               .withAlpha(28),
+                      onTap: () => _showOriginalMessage(replyTo),
                     );
 
               final messageBubble = msg.isTrack
@@ -835,12 +988,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         ),
                       ),
                     ),
-                  SwipeToReply(
-                    onReply:
-                        canInteract && !_isOtherUserDeleted && !msg.isPending
-                        ? () => _startReply(msg)
-                        : null,
-                    child: messageBubble,
+                  AnimatedContainer(
+                    key: _MessageKey(this, msg.id),
+                    duration: AppTokens.durationSlow,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(
+                        msg.id == _highlightedMessageId ? 40 : 0,
+                      ),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusMD),
+                    ),
+                    child: SwipeToReply(
+                      onReply:
+                          canInteract && !_isOtherUserDeleted && !msg.isPending
+                          ? () => _startReply(msg)
+                          : null,
+                      child: messageBubble,
+                    ),
                   ),
                 ],
               );
@@ -932,6 +1095,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     required Color textColor,
     required Color backgroundColor,
     int maxLines = 2,
+    VoidCallback? onTap,
     VoidCallback? onClose,
   }) {
     final isMine = reply.senderId == _currentUid;
@@ -952,6 +1116,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         textColor: textColor,
         backgroundColor: backgroundColor,
         maxLines: maxLines,
+        onTap: onTap,
         onClose: onClose,
       ),
     );
@@ -1004,4 +1169,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ),
     );
   }
+}
+
+/// Localiza la fila de un mensaje en una pantalla de chat concreta, de modo
+/// que dos pantallas abiertas sobre el mismo chat no compartan claves.
+class _MessageKey extends GlobalKey {
+  const _MessageKey(this.owner, this.messageId) : super.constructor();
+
+  final Object owner;
+  final String messageId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _MessageKey &&
+      identical(other.owner, owner) &&
+      other.messageId == messageId;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(owner), messageId);
 }

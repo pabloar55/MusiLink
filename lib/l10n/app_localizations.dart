@@ -624,6 +624,12 @@ abstract class AppLocalizations {
   /// **'Cancel reply'**
   String get chatReplyCancel;
 
+  /// No description provided for @chatReplyOriginalUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The original message is no longer available.'**
+  String get chatReplyOriginalUnavailable;
+
   /// No description provided for @statsArtists.
   ///
   /// In en, this message translates to:

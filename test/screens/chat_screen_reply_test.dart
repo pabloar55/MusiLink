@@ -37,9 +37,10 @@ Message _incoming(String id, String text, {MessageReply? replyTo}) => Message(
 /// Opens a direct chat showing [messages] and returns its mocked service.
 Future<_MockChatService> _pumpChat(
   WidgetTester tester,
-  List<Message> messages,
-) async {
-  final events = StreamController<List<Message>>.broadcast();
+  List<Message> messages, {
+  StreamController<List<Message>>? history,
+}) async {
+  final events = history ?? StreamController<List<Message>>.broadcast();
   final service = _MockChatService();
   final auth = MockFirebaseAuth();
   final user = MockUser();
@@ -129,6 +130,40 @@ Finder _draftQuote(String text) => find.ancestor(
   of: find.byTooltip('Cancel reply'),
   matching: find.widgetWithText(ReplyQuote, text),
 );
+
+/// A conversation long enough for its first messages to be off screen, ending
+/// with a reply that quotes [quoted].
+List<Message> _longChat(MessageReply quoted) => [
+  for (var i = 0; i < 60; i++)
+    Message(
+      id: 'm$i',
+      senderId: 'other-user',
+      text: 'Message $i',
+      timestamp: _serverTime.add(Duration(minutes: i)),
+    ),
+  Message(
+    id: 'answer',
+    senderId: 'other-user',
+    text: 'Answer',
+    timestamp: _serverTime.add(const Duration(hours: 2)),
+    replyTo: quoted,
+  ),
+];
+
+bool _isOnScreen(WidgetTester tester, String text) {
+  final list = tester.getRect(find.byType(ListView));
+  return find.text(text).evaluate().isNotEmpty &&
+      list.contains(tester.getCenter(find.text(text)));
+}
+
+bool _isHighlighted(WidgetTester tester, String text) {
+  final row = tester.widget<AnimatedContainer>(
+    find
+        .ancestor(of: find.text(text), matching: find.byType(AnimatedContainer))
+        .first,
+  );
+  return (row.decoration! as BoxDecoration).color!.a > 0;
+}
 
 void main() {
   testWidgets(
@@ -268,5 +303,92 @@ void main() {
     await _fail(tester, request);
     expect(_draftQuote('Second'), findsOneWidget);
     expect(_draftQuote('First'), findsNothing);
+  });
+
+  testWidgets('tapping a quote scrolls to the original message', (
+    tester,
+  ) async {
+    final service = await _pumpChat(
+      tester,
+      _longChat(
+        const MessageReply(
+          messageId: 'm0',
+          senderId: 'other-user',
+          text: 'Quoted',
+        ),
+      ),
+    );
+    expect(_isOnScreen(tester, 'Message 0'), isFalse);
+
+    await tester.tap(find.widgetWithText(ReplyQuote, 'Quoted'));
+    await tester.pumpAndSettle();
+    expect(_isOnScreen(tester, 'Message 0'), isTrue);
+    expect(_isHighlighted(tester, 'Message 0'), isTrue);
+    verifyNever(() => service.getMessage(any(), any()));
+
+    // The highlight is only a brief cue.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(_isHighlighted(tester, 'Message 0'), isFalse);
+  });
+
+  testWidgets('a quote from older history loads it before scrolling', (
+    tester,
+  ) async {
+    final history = StreamController<List<Message>>.broadcast();
+    final original = Message(
+      id: 'old',
+      senderId: 'other-user',
+      text: 'Long ago',
+      timestamp: _serverTime.subtract(const Duration(days: 30)),
+    );
+    final loaded = _longChat(
+      const MessageReply(
+        messageId: 'old',
+        senderId: 'other-user',
+        text: 'Quoted',
+      ),
+    );
+    final service = await _pumpChat(tester, loaded, history: history);
+    when(() => service.getMessage('chat-1', 'old'))
+        .thenAnswer((_) async => original);
+
+    await tester.tap(find.widgetWithText(ReplyQuote, 'Quoted'));
+    await tester.pump();
+    verify(() => service.getMessages('chat-1', from: original.timestamp))
+        .called(1);
+    history.add([original, ...loaded]);
+    await tester.pumpAndSettle();
+    expect(_isOnScreen(tester, 'Long ago'), isTrue);
+    expect(_isHighlighted(tester, 'Long ago'), isTrue);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a quote whose original is gone says so and stays in place', (
+    tester,
+  ) async {
+    final service = await _pumpChat(
+      tester,
+      _longChat(
+        const MessageReply(
+          messageId: 'gone',
+          senderId: 'other-user',
+          text: 'Quoted',
+        ),
+      ),
+    );
+    when(() => service.getMessage('chat-1', 'gone'))
+        .thenAnswer((_) async => null);
+
+    await tester.tap(find.widgetWithText(ReplyQuote, 'Quoted'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('The original message is no longer available.'),
+      findsOneWidget,
+    );
+    expect(_isOnScreen(tester, 'Answer'), isTrue);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 }
