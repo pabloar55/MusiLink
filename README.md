@@ -19,7 +19,7 @@
 
 ## Tecnologías
 
-- **Framework:** Flutter 3.47.4 (Dart SDK ^3.13.0)
+- **Framework:** Flutter 3.47.6 (Dart SDK ^3.13.0)
 - **Versión de app:** 1.0.29+34
 - **Backend:** Firebase Auth, Firestore, Cloud Functions, Remote Config, Storage, Crashlytics y FCM
 - **Búsqueda musical:** Spotify Web API vía Cloud Functions, con apoyo de Last.fm para géneros y artistas similares
