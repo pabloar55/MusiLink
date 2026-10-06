@@ -22,5 +22,9 @@
   "devDependencies": {
     "typescript": "^7.0.0"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "@firebase/util@1.15.3": true,
+    "protobufjs@7.6.6": true
+  }
 }
