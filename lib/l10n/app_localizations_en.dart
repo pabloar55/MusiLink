@@ -134,9 +134,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get termsAcceptAndContinue => 'Accept and continue';
 
   @override
-  String get termsAccepting => 'Accepting…';
-
-  @override
   String get termsSaveError =>
       'We could not save your acceptance. Please try again.';
 

@@ -36,7 +36,10 @@ void main() {
     when(() => auth.currentUser).thenReturn(user);
     when(() => auth.authStateChanges()).thenAnswer((_) => authStream.stream);
     when(() => user.uid).thenReturn('alice');
-    notifier = AppRouterNotifier(auth: auth);
+    notifier = AppRouterNotifier(
+      auth: auth,
+      submitTermsAcceptance: service.submitAcceptance,
+    );
   });
 
   tearDown(() async {
@@ -64,10 +67,10 @@ void main() {
   );
 
   testWidgets(
-    'exige marcar la casilla y confirmar el registro en el servidor',
+    'exige marcar la casilla y avanza sin esperar al registro en el servidor',
     (tester) async {
-      final acceptance = Completer<void>();
-      when(() => service.acceptCurrentVersion())
+      final acceptance = Completer<bool>();
+      when(() => service.submitAcceptance('alice'))
           .thenAnswer((_) => acceptance.future);
 
       await tester.pumpWidget(app());
@@ -92,15 +95,16 @@ void main() {
       await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
-      expect(find.text('Accepting…'), findsOneWidget);
+      expect(notifier.termsAccepted, isTrue);
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
-      acceptance.complete();
+      acceptance.complete(true);
       await tester.pumpAndSettle();
 
-      verify(() => service.acceptCurrentVersion()).called(1);
+      verify(() => service.submitAcceptance('alice')).called(1);
       verifyNever(() => service.hasAcceptedCurrentVersion('alice'));
       expect(notifier.termsAccepted, isTrue);
+      expect(find.byType(SnackBar), findsNothing);
     },
   );
 
@@ -165,10 +169,10 @@ void main() {
   }
 
   testWidgets(
-    'un fallo al guardar no confirma la aceptación y permite reintentar',
+    'un rechazo del servidor retira la aceptación y permite reintentar',
     (tester) async {
-      when(() => service.acceptCurrentVersion())
-          .thenThrow(StateError('offline'));
+      when(() => service.submitAcceptance('alice'))
+          .thenAnswer((_) async => false);
 
       await tester.pumpWidget(app());
       await tester.pump();
@@ -179,6 +183,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(
+        find.text('We could not save your acceptance. Please try again.'),
+        findsOneWidget,
+      );
       expect(
         tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNotNull,

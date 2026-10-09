@@ -595,10 +595,12 @@ void main() {
     AppRouterNotifier cachedNotifier(
       Future<bool> Function(String) refresh, {
       bool cached = true,
+      Future<bool> Function(String)? submit,
     }) => AppRouterNotifier(
       auth: mockAuth,
       readCachedTermsAcceptance: (uid) => cached && uid == 'uid123',
       refreshTermsAcceptance: refresh,
+      submitTermsAcceptance: submit,
       initialState: const AppRouterBootstrapState(
         usernameSet: true,
         artistsSelected: true,
@@ -739,6 +741,85 @@ void main() {
       pending.complete(false);
       await Future<void>.delayed(Duration.zero);
       expect(notifier.termsAccepted, isTrue);
+    });
+
+    testWidgets(
+      'aceptar avanza al instante y reintenta el registro en segundo plano',
+      (tester) async {
+        var submissions = 0;
+        final notifier = cachedNotifier(
+          (_) async => false,
+          cached: false,
+          submit: (_) async {
+            submissions++;
+            if (submissions == 1) throw StateError('offline');
+            return true;
+          },
+        );
+        addTearDown(notifier.dispose);
+        authStream.add(mockUser);
+        await tester.pump();
+        expect(appRedirect(notifier, '/'), '/terms');
+
+        notifier.acceptTerms('uid123');
+        expect(appRedirect(notifier, '/terms'), '/');
+        notifier.acceptTerms('uid123');
+        await tester.pump();
+        expect(submissions, 1);
+
+        // El servidor todavía no refleja la aceptación pendiente.
+        authStream.add(mockUser);
+        await tester.pump();
+        expect(notifier.termsAccepted, isTrue);
+
+        await tester.pump(const Duration(seconds: 2));
+        expect(submissions, 2);
+        expect(notifier.termsAccepted, isTrue);
+        expect(notifier.takeTermsSaveError(), isFalse);
+      },
+    );
+
+    test('un rechazo del registro vuelve a exigir la aceptación', () async {
+      final notifier = cachedNotifier(
+        (_) async => false,
+        cached: false,
+        submit: (_) async => false,
+      );
+      addTearDown(notifier.dispose);
+      authStream.add(mockUser);
+      await Future<void>.delayed(Duration.zero);
+
+      notifier.acceptTerms('uid123');
+      expect(appRedirect(notifier, '/terms'), '/');
+      await Future<void>.delayed(Duration.zero);
+      expect(appRedirect(notifier, '/'), '/terms');
+      expect(notifier.takeTermsSaveError(), isTrue);
+      expect(notifier.takeTermsSaveError(), isFalse);
+    });
+
+    testWidgets('cerrar sesión cancela el registro pendiente', (tester) async {
+      var submissions = 0;
+      final notifier = cachedNotifier(
+        (_) async => false,
+        cached: false,
+        submit: (_) async {
+          submissions++;
+          throw StateError('offline');
+        },
+      );
+      addTearDown(notifier.dispose);
+      authStream.add(mockUser);
+      await tester.pump();
+      notifier.acceptTerms('uid123');
+      await tester.pump();
+      expect(submissions, 1);
+
+      when(() => mockAuth.currentUser).thenReturn(null);
+      authStream.add(null);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 30));
+      expect(submissions, 1);
+      expect(notifier.takeTermsSaveError(), isFalse);
     });
 
     test(

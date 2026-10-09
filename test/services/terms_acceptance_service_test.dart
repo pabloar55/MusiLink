@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/services/terms_acceptance_service.dart';
@@ -157,6 +158,32 @@ void main() {
     await expectLater(service.acceptCurrentVersion(), throwsStateError);
     expect(service.hasCachedAcceptance('alice'), isFalse);
   });
+
+  test(
+    'distingue el rechazo definitivo del fallo que conviene reintentar',
+    () async {
+      final callable = MockHttpsCallable();
+      when(() => functions.httpsCallable('acceptTerms')).thenReturn(callable);
+      when(() => callable.call<Map<String, dynamic>>(any())).thenThrow(
+        FirebaseFunctionsException(code: 'unavailable', message: 'offline'),
+      );
+      await expectLater(
+        service.submitAcceptance('alice'),
+        throwsA(isA<FirebaseFunctionsException>()),
+      );
+
+      when(() => callable.call<Map<String, dynamic>>(any())).thenThrow(
+        FirebaseFunctionsException(
+          code: 'invalid-argument',
+          message: 'Unsupported terms version.',
+        ),
+      );
+      expect(await service.submitAcceptance('alice'), isFalse);
+      expect(await service.submitAcceptance('bob'), isFalse);
+      expect(service.hasCachedAcceptance('alice'), isFalse);
+      verify(() => callable.call<Map<String, dynamic>>(any())).called(2);
+    },
+  );
 
   test(
     'una lectura antigua no borra una aceptación recién confirmada',

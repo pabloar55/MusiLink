@@ -45,6 +45,7 @@ final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
     termsAcceptanceRequired: true,
     readCachedTermsAcceptance: termsService.hasCachedAcceptance,
     refreshTermsAcceptance: termsService.hasAcceptedCurrentVersion,
+    submitTermsAcceptance: termsService.submitAcceptance,
     initialState: ref.watch(routerBootstrapStateProvider),
     readCachedUserState: (loginUid) {
       final cached = UserSetupCache.read(prefs, loginUid);

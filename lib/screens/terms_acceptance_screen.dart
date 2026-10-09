@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
-import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/utils/terms_and_conditions.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,31 +16,37 @@ class TermsAcceptanceScreen extends ConsumerStatefulWidget {
 }
 
 class _TermsAcceptanceScreenState extends ConsumerState<TermsAcceptanceScreen> {
-  bool _busy = false;
+  late final AppRouterNotifier _routerNotifier;
   bool _accepted = false;
 
-  Future<void> _acceptTerms() async {
-    if (!_accepted || _busy) return;
+  @override
+  void initState() {
+    super.initState();
+    _routerNotifier = ref.read(appRouterNotifierProvider)
+      ..addListener(_showSaveError);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showSaveError());
+  }
+
+  @override
+  void dispose() {
+    _routerNotifier.removeListener(_showSaveError);
+    super.dispose();
+  }
+
+  void _acceptTerms() {
+    if (!_accepted) return;
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
     if (uid == null) return;
-    setState(() => _busy = true);
-    try {
-      // La callable responde únicamente después de persistir la aceptación y
-      // devuelve la versión confirmada. No hace falta una segunda lectura.
-      await ref.read(termsAcceptanceServiceProvider).acceptCurrentVersion();
-      if (!mounted || ref.read(firebaseAuthProvider).currentUser?.uid != uid) {
-        return;
-      }
-      ref.read(appRouterNotifierProvider).setTermsAccepted(uid);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.termsSaveError)),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    // El router avanza al instante; el registro se confirma en segundo plano.
+    _routerNotifier.acceptTerms(uid);
+  }
+
+  /// Si el servidor rechazó el registro, el router vuelve a esta pantalla.
+  void _showSaveError() {
+    if (!mounted || !_routerNotifier.takeTermsSaveError()) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.termsSaveError)),
+    );
   }
 
   Future<void> _open(Uri uri) async {
@@ -94,10 +100,8 @@ class _TermsAcceptanceScreenState extends ConsumerState<TermsAcceptanceScreen> {
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _accepted,
-                      onChanged: _busy
-                          ? null
-                          : (value) =>
-                                setState(() => _accepted = value ?? false),
+                      onChanged: (value) =>
+                          setState(() => _accepted = value ?? false),
                       title: Text(l10n.termsAcceptCheckbox),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
@@ -107,10 +111,8 @@ class _TermsAcceptanceScreenState extends ConsumerState<TermsAcceptanceScreen> {
             ),
             actions: [
               FilledButton(
-                onPressed: _accepted && !_busy ? _acceptTerms : null,
-                child: _busy
-                    ? Text(l10n.termsAccepting)
-                    : Text(l10n.termsAcceptAndContinue),
+                onPressed: _accepted ? _acceptTerms : null,
+                child: Text(l10n.termsAcceptAndContinue),
               ),
             ],
           ),

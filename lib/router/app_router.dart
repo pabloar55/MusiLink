@@ -48,6 +48,7 @@ class AppRouterNotifier extends ChangeNotifier {
     this.termsAcceptanceRequired = true,
     this.readCachedTermsAcceptance,
     this.refreshTermsAcceptance,
+    this.submitTermsAcceptance,
     AppRouterBootstrapState? initialState,
     FetchUserSetupState? fetchUserState,
     ReadCachedUserSetupState? readCachedUserState,
@@ -75,11 +76,20 @@ class AppRouterNotifier extends ChangeNotifier {
   final bool termsAcceptanceRequired;
   final bool Function(String uid)? readCachedTermsAcceptance;
   final Future<bool> Function(String uid)? refreshTermsAcceptance;
+
+  /// Registra la aceptación en el servidor. Devuelve false ante un rechazo
+  /// definitivo y lanza una excepción si conviene reintentar.
+  final Future<bool> Function(String uid)? submitTermsAcceptance;
   String? _termsAcceptedUid;
   String? _termsCheckedUid;
   int _termsRevision = 0;
   Timer? _termsRetryTimer;
   int _termsRetryAttempt = 0;
+  String? _termsSubmittingUid;
+  int _termsSubmission = 0;
+  Timer? _termsSubmitTimer;
+  int _termsSubmitAttempt = 0;
+  String? _termsSaveFailedUid;
   Timer? _retryTimer;
   static const _retryDelays = <Duration>[
     Duration(seconds: 2),
@@ -162,6 +172,7 @@ class AppRouterNotifier extends ChangeNotifier {
       _termsRetryTimer = null;
       _termsRetryAttempt = 0;
       if (_termsCheckedUid != user?.uid) _termsCheckedUid = null;
+      if (_termsSubmittingUid != user?.uid) _cancelTermsSubmission();
       if (user != null) {
         _restoreTermsAcceptance(user.uid);
         if (termsAcceptanceRequired) {
@@ -223,6 +234,8 @@ class AppRouterNotifier extends ChangeNotifier {
       if (!_isCurrentAuthUser(user, generation) || revision != _termsRevision) {
         return;
       }
+      // El servidor aún no refleja una aceptación que se está registrando.
+      if (!accepted && _termsSubmittingUid == user.uid) return;
       _termsAcceptedUid = accepted ? user.uid : null;
       _termsCheckedUid = user.uid;
       _termsRetryAttempt = 0;
@@ -242,6 +255,44 @@ class AppRouterNotifier extends ChangeNotifier {
         }
       });
     }
+  }
+
+  Future<void> _submitTermsAcceptance(String uid, int submission) async {
+    final submit = submitTermsAcceptance;
+    if (submit == null || !_isCurrentTermsSubmission(uid, submission)) return;
+    final bool confirmed;
+    try {
+      confirmed = await submit(uid);
+    } catch (_) {
+      if (!_isCurrentTermsSubmission(uid, submission)) return;
+      // Sin respuesta del servidor la aceptación sigue pendiente de registro.
+      final delay =
+          _retryDelays[_termsSubmitAttempt.clamp(0, _retryDelays.length - 1)];
+      if (_termsSubmitAttempt < _retryDelays.length - 1) _termsSubmitAttempt++;
+      _termsSubmitTimer = Timer(delay, () {
+        _termsSubmitTimer = null;
+        unawaited(_submitTermsAcceptance(uid, submission));
+      });
+      return;
+    }
+    if (!_isCurrentTermsSubmission(uid, submission)) return;
+    _termsSubmittingUid = null;
+    // Descarta cualquier lectura iniciada antes de conocer el resultado.
+    _termsRevision++;
+    if (confirmed) return;
+    _termsAcceptedUid = null;
+    _termsSaveFailedUid = uid;
+    notifyListeners();
+  }
+
+  bool _isCurrentTermsSubmission(String uid, int submission) =>
+      submission == _termsSubmission && _auth.currentUser?.uid == uid;
+
+  void _cancelTermsSubmission() {
+    _termsSubmission++;
+    _termsSubmittingUid = null;
+    _termsSubmitTimer?.cancel();
+    _termsSubmitTimer = null;
   }
 
   UserSetupState? _readCachedState(String uid) {
@@ -354,7 +405,27 @@ class AppRouterNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Solo se llama tras confirmar la versión vigente con el servidor.
+  /// Acepta de forma optimista: el router avanza al instante y el registro en
+  /// el servidor se confirma en segundo plano. Si el servidor lo rechaza, se
+  /// vuelve a exigir la aceptación.
+  void acceptTerms(String uid) {
+    if (_auth.currentUser?.uid != uid || _termsSubmittingUid == uid) return;
+    if (submitTermsAcceptance != null) {
+      _termsSubmittingUid = uid;
+      _termsSubmitAttempt = 0;
+      _termsSaveFailedUid = null;
+      unawaited(_submitTermsAcceptance(uid, ++_termsSubmission));
+    }
+    setTermsAccepted(uid);
+  }
+
+  /// Indica, una sola vez, que el último registro de aceptación fue rechazado.
+  bool takeTermsSaveError() {
+    final failedUid = _termsSaveFailedUid;
+    _termsSaveFailedUid = null;
+    return failedUid != null && failedUid == _auth.currentUser?.uid;
+  }
+
   void setTermsAccepted(String uid) {
     if (_auth.currentUser?.uid != uid) return;
     _termsRevision++;
@@ -403,6 +474,7 @@ class AppRouterNotifier extends ChangeNotifier {
     _authGeneration++;
     _retryTimer?.cancel();
     _termsRetryTimer?.cancel();
+    _cancelTermsSubmission();
     _sub?.cancel();
     super.dispose();
   }

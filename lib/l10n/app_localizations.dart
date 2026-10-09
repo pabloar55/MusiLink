@@ -330,12 +330,6 @@ abstract class AppLocalizations {
   /// **'Accept and continue'**
   String get termsAcceptAndContinue;
 
-  /// No description provided for @termsAccepting.
-  ///
-  /// In en, this message translates to:
-  /// **'Accepting…'**
-  String get termsAccepting;
-
   /// No description provided for @termsSaveError.
   ///
   /// In en, this message translates to:

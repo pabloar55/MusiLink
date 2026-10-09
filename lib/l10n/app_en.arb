@@ -47,7 +47,6 @@
   "termsOpenDocument": "Read Terms and Conditions",
   "termsAcceptCheckbox": "I have read and accept MusiLink's Terms and Conditions.",
   "termsAcceptAndContinue": "Accept and continue",
-  "termsAccepting": "Accepting…",
   "termsSaveError": "We could not save your acceptance. Please try again.",
   "termsOpenError": "Could not open the link.",
 

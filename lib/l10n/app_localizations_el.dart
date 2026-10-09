@@ -135,9 +135,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get termsAcceptAndContinue => 'Αποδοχή και συνέχεια';
 
   @override
-  String get termsAccepting => 'Αποδοχή…';
-
-  @override
   String get termsSaveError =>
       'Δεν ήταν δυνατή η αποθήκευση της αποδοχής σας. Δοκιμάστε ξανά.';
 

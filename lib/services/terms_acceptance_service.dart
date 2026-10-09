@@ -62,6 +62,32 @@ class TermsAcceptanceService {
     return accepted;
   }
 
+  static const _definitiveRejections = {
+    'invalid-argument',
+    'failed-precondition',
+    'permission-denied',
+    'unauthenticated',
+    'not-found',
+  };
+
+  /// Registra la aceptación de [uid] y devuelve false si el servidor la
+  /// rechaza de forma definitiva. Los fallos transitorios se propagan para
+  /// que quien llama pueda reintentar.
+  Future<bool> submitAcceptance(String uid) async {
+    if (_auth.currentUser?.uid != uid) return false;
+    try {
+      await acceptCurrentVersion();
+      return true;
+    } on FirebaseFunctionsException catch (error, stack) {
+      if (!_definitiveRejections.contains(error.code)) rethrow;
+      unawaited(reportError(error, stack));
+      return false;
+    } on StateError catch (error, stack) {
+      unawaited(reportError(error, stack));
+      return false;
+    }
+  }
+
   Future<void> acceptCurrentVersion() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('Authentication is required.');

@@ -137,9 +137,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get termsAcceptAndContinue => 'Accepter et continuer';
 
   @override
-  String get termsAccepting => 'Acceptation…';
-
-  @override
   String get termsSaveError =>
       'Impossible d\'enregistrer votre acceptation. Réessayez.';
 
