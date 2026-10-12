@@ -46,6 +46,8 @@ class CachedUserSetupState {
 class UserSetupCache {
   const UserSetupCache._();
 
+  // `web/index.html` busca esta clave para saber si el navegador ya ha usado
+  // la web; al cambiarla hay que actualizar también ese script.
   static const _keyPrefix = 'user_setup_state_v2_';
 
   // v1 podía contener flags globales heredados de otra cuenta.

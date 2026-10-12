@@ -18,28 +18,58 @@
 
   <script>
     // Enlaces compartidos: /invite (la app) y /u/<username> (un perfil).
-    // La app de Android abre /u/ por App Links sin pasar por aquí; si se llega
-    // desde el navegador de Android es que falta instalarla y va a Google
-    // Play. El resto continúa en la web: /invite desde la raíz, que es también
-    // el start_url de la PWA, y /u/ en la ruta de perfil del router (hash).
+    // La web continúa en la ruta del router (hash): /invite desde la raíz, que
+    // es también el start_url de la PWA, y /u/ en la ruta del perfil.
+    //
+    // En Android la app instalada abre /u/ por App Links sin pasar por aquí,
+    // pero el enlace también puede acabar en una pestaña o en un navegador
+    // integrado. Como desde la página no se sabe si la app está instalada, se
+    // le entrega el perfil con un intent: si existe lo abre y, si no, el
+    // navegador continúa en Google Play.
     (function () {
       var path = window.location.pathname;
       var profile = /^\/u\/([A-Za-z0-9_]{3,20})\/?$/.exec(path);
       if (!profile && !/^\/invite\/?$/.test(path)) return;
-      var installedPwa =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true;
-      if (/Android/i.test(window.navigator.userAgent) && !installedPwa) {
-        window.location.replace(
-          'https://play.google.com/store/apps/details?id=app.musilink',
-        );
+      var username = profile ? profile[1].toLowerCase() : null;
+      var webLocation = username ? '/#/u/' + username : '/';
+      var userAgent = window.navigator.userAgent;
+      var playUrl = 'https://play.google.com/store/apps/details?id=app.musilink';
+
+      // Quien ya usa la web en este navegador (PWA abierta o sesión iniciada
+      // alguna vez) se queda en ella. La clave es la de UserSetupCache.
+      function usesWebApp() {
+        if (
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true
+        ) {
+          return true;
+        }
+        try {
+          for (var i = 0; i < window.localStorage.length; i++) {
+            var key = window.localStorage.key(i) || '';
+            if (key.indexOf('flutter.user_setup_state_v2_') === 0) return true;
+          }
+        } catch (_) {
+          // Sin acceso al almacenamiento se trata como un navegador nuevo.
+        }
+        return false;
+      }
+
+      if (!/Android/i.test(userAgent) || usesWebApp()) {
+        window.history.replaceState(null, '', webLocation);
         return;
       }
-      window.history.replaceState(
-        null,
-        '',
-        profile ? '/#/u/' + profile[1].toLowerCase() : '/',
-      );
+      // Un WebView sin navegador no entiende los intents y mostraría un error.
+      if (!username || /\bwv\b/.test(userAgent)) {
+        window.location.replace(playUrl);
+        return;
+      }
+      // Si el navegador ignora el intent, la web sigue cargando el perfil.
+      window.history.replaceState(null, '', webLocation);
+      window.location.href =
+        'intent://musilink.app/u/' + username +
+        '#Intent;scheme=https;package=app.musilink;S.browser_fallback_url=' +
+        encodeURIComponent(playUrl) + ';end';
     })();
   </script>
 

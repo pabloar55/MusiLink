@@ -2,7 +2,9 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/router/app_router.dart';
 
@@ -912,6 +914,116 @@ void main() {
       expect(notifier.termsAccepted, isFalse);
       expect(appRedirect(notifier, '/'), '/terms');
       notifier.dispose();
+    });
+  });
+
+  // ── Enlaces de perfil abiertos antes de poder entrar ───────────
+
+  group('enlace de perfil pendiente', () {
+    test('se retoma tras iniciar sesión y solo una vez', () {
+      when(() => mockAuth.currentUser).thenReturn(null);
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
+      expect(appRedirect(n, '/u/pablo'), '/auth');
+      expect(n.pendingProfileLink, '/u/pablo');
+
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      // El router puede evaluar el redirect más de una vez antes de navegar.
+      expect(appRedirect(n, '/auth'), '/u/pablo');
+      expect(appRedirect(n, '/auth'), '/u/pablo');
+      expect(appRedirect(n, '/u/pablo'), isNull);
+      expect(n.pendingProfileLink, isNull);
+      expect(appRedirect(n, '/auth'), '/');
+      n.dispose();
+    });
+
+    test('sobrevive a todos los pasos del alta', () {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: false,
+          artistsSelected: false,
+          onboardingDone: false,
+          photoSetupDone: false,
+        );
+      expect(appRedirect(n, '/u/pablo'), '/onboarding');
+      n.setOnboardingDone();
+      expect(appRedirect(n, '/onboarding'), '/username-setup');
+      n.setUsernameSet();
+      expect(appRedirect(n, '/username-setup'), '/photo-setup');
+      n.setPhotoSetupDone();
+      expect(appRedirect(n, '/photo-setup'), '/artist-select');
+      n.setArtistsSelected();
+      expect(appRedirect(n, '/artist-select'), '/u/pablo');
+      n.dispose();
+    });
+
+    test('un usuario listo abre el enlace sin dejarlo pendiente', () {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
+      expect(appRedirect(n, '/u/pablo'), isNull);
+      expect(n.pendingProfileLink, isNull);
+      n.dispose();
+    });
+
+    testWidgets('el router vuelve al perfil al iniciar sesión', (tester) async {
+      when(() => mockAuth.currentUser).thenReturn(null);
+      final n = buildNotifier()
+        ..setInitialized(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+        );
+      addTearDown(n.dispose);
+      final router = GoRouter(
+        initialLocation: '/u/pablo',
+        refreshListenable: n,
+        redirect: (_, state) => appRedirect(n, state.matchedLocation),
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const SizedBox.shrink(),
+            routes: [
+              GoRoute(
+                path: 'u/:username',
+                builder: (_, state) => Text(
+                  'perfil ${state.pathParameters['username']}',
+                  textDirection: TextDirection.ltr,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/auth',
+            builder: (_, _) =>
+                const Text('auth', textDirection: TextDirection.ltr),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        WidgetsApp.router(color: const Color(0xFF000000), routerConfig: router),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('auth'), findsOneWidget);
+
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      authStream.add(mockUser);
+      await tester.pumpAndSettle();
+      expect(find.text('perfil pablo'), findsOneWidget);
+      expect(router.canPop(), isTrue);
     });
   });
 }

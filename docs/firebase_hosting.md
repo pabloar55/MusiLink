@@ -80,11 +80,30 @@ La card de invitación comparte dos enlaces (`AppInviteService`):
   La app lo abre en la ruta `/u/:username`, que resuelve el uid en
   `usernames/{username}` y muestra el perfil sobre la pantalla principal.
 
-Un script en línea de `web/index.html` resuelve ambos antes de cargar Flutter:
-en el navegador de Android redirige a Google Play y en el resto de plataformas
-continúa en la web: `/invite` en `/`, donde iOS muestra la instalación de la
-PWA, y `/u/<username>` en `/#/u/<username>`. Una PWA instalada nunca se
-redirige a Google Play.
+Un script en línea de `web/index.html` resuelve ambos antes de cargar Flutter.
+Fuera de Android continúa en la web: `/invite` en `/`, donde iOS muestra la
+instalación de la PWA, y `/u/<username>` en `/#/u/<username>`. En el navegador
+de Android:
+
+- Si ese navegador ya usa la web (PWA abierta, o una sesión iniciada alguna vez,
+  detectada por la clave de `UserSetupCache` en `localStorage`), continúa en la
+  web igual que el resto de plataformas.
+- `/u/<username>` se entrega a la app con un `intent://` dirigido a
+  `app.musilink`. Si la app está instalada se abre en el perfil; si no, el
+  navegador sigue el `browser_fallback_url` hacia Google Play. Cubre los
+  enlaces que acaban en una pestaña o en una Custom Tab en lugar de abrir la
+  app.
+- `/invite`, y cualquier enlace dentro de un WebView (que no entiende los
+  intents), van a Google Play.
+
+Chrome no lanza apps desde una URL escrita a mano en la barra de direcciones:
+en ese caso aplica directamente el `browser_fallback_url`.
+
+Si quien abre `/u/<username>` aún no puede entrar (sin sesión, términos
+pendientes o alta sin terminar), `appRedirect` guarda el enlace en
+`AppRouterNotifier.pendingProfileLink` y lo retoma al terminar. Se conserva en
+memoria: no sobrevive a recargar la página, a cerrar la app ni a instalarla
+desde Google Play.
 
 En Android, la app instalada abre `/u/` directamente mediante App Links
 (`intent-filter` con `autoVerify` en `AndroidManifest.xml`). La verificación usa
@@ -99,6 +118,9 @@ navegador. Comprobaciones:
 curl -s https://musilink.app/.well-known/assetlinks.json
 adb shell pm get-app-links app.musilink
 adb shell am start -a android.intent.action.VIEW -d https://musilink.app/u/<username>
+# El mismo enlace forzado dentro de una pestaña de Chrome: debe volver a la app.
+adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main \
+  -a android.intent.action.VIEW -d https://musilink.app/u/<username>
 ```
 
 iOS abre los enlaces en Safari y no en la PWA instalada, por lo que allí el

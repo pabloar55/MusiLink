@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:musi_link/router/app_locations.dart';
 
 typedef UserSetupState = ({
   bool usernameSet,
@@ -109,6 +110,11 @@ class AppRouterNotifier extends ChangeNotifier {
   bool _photoSetupDone = false;
   bool _deletionPending = false;
   bool _setupStateKnown = false;
+  String? _pendingProfileLink;
+
+  /// Enlace de perfil (`/u/:username`) abierto antes de terminar el login o
+  /// el alta. Se retoma en cuanto el usuario puede entrar en la app.
+  String? get pendingProfileLink => _pendingProfileLink;
 
   bool get isInitialized => _initialized;
   bool get isLoggedIn => _auth.currentUser != null;
@@ -483,12 +489,24 @@ class AppRouterNotifier extends ChangeNotifier {
 /// Lógica de redirect centralizada y testeable de forma independiente.
 /// Devuelve la ruta destino o null si no hay que redirigir.
 String? appRedirect(AppRouterNotifier notifier, String location) {
+  final target = _redirectFor(notifier, location);
+  // Un enlace de perfil que todavía no puede abrirse se conserva para
+  // retomarlo cuando terminen el login y el alta.
+  if (target != null && isUserProfileLinkLocation(location)) {
+    notifier._pendingProfileLink = location;
+  }
+  return target;
+}
+
+String? _redirectFor(AppRouterNotifier notifier, String location) {
+  // Destino al salir de las pantallas de acceso y alta.
+  final home = notifier._pendingProfileLink ?? '/';
   if (!notifier.isInitialized) {
     if (!notifier.isLoggedIn) return location == '/auth' ? null : '/auth';
     if (notifier.mustAcceptTerms) {
       return location == '/terms' ? null : '/terms';
     }
-    return location == '/terms' ? '/' : null;
+    return location == '/terms' ? home : null;
   }
   if (!notifier.isLoggedIn) {
     return location == '/auth' ? null : '/auth';
@@ -506,12 +524,12 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
     // resolverse. Mantener /auth durante esa espera evita montar MainScreen
     // (Discovery) antes de saber si hay que iniciar el onboarding.
     if (location == '/auth') return null;
-    if (location == '/terms') return '/';
+    if (location == '/terms') return home;
     if (location == '/onboarding' ||
         location == '/username-setup' ||
         location == '/photo-setup' ||
         location == '/artist-select') {
-      return '/';
+      return home;
     }
     return null;
   }
@@ -534,7 +552,11 @@ String? appRedirect(AppRouterNotifier notifier, String location) {
       location == '/username-setup' ||
       location == '/photo-setup' ||
       location == '/artist-select') {
-    return '/';
+    return home;
   }
+  // En una pantalla normal el enlace pendiente ya se ha retomado. No se borra
+  // al devolverlo porque el router puede evaluar el mismo redirect varias
+  // veces antes de aplicar la navegación.
+  notifier._pendingProfileLink = null;
   return null;
 }
