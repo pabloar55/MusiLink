@@ -21,10 +21,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: "6c5bcd986e06b94e3c40244af471750840a3d2341d1f9763a1100a14add517b4"
+      sha256: "58c8d17d8d589c4259f773522815115de873c397b977a29993588487d3f9acb4"
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.0"
+    version: "4.5.0"
   args:
     dependency: transitive
     description:
@@ -205,10 +205,10 @@ packages:
     dependency: "direct main"
     description:
       name: cupertino_ui
-      sha256: c23816577a1280cff409e989541767887011f8f1d8c1863a794ed308af46f2a9
+      sha256: ea0b8170b40a86262b2fc21ac0625303f52df209dbf6fccc2b98b27eff44f6ce
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.1"
+    version: "1.1.2"
   dbus:
     dependency: transitive
     description:
@@ -705,10 +705,10 @@ packages:
     dependency: "direct main"
     description:
       name: image
-      sha256: a1e7f4951e538a568e14b856702afc9ae1d2f4b202daced8d22c1b9cd211ce89
+      sha256: "89ed75b2f8231fe676808c5564f9590d728024ded7ac782a7ed8474f1c95b72a"
       url: "https://pub.dev"
     source: hosted
-    version: "4.10.1"
+    version: "4.12.0"
   image_picker:
     dependency: "direct main"
     description:
@@ -737,10 +737,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_ios
-      sha256: "815921d05ef87d64dc64e9f7f855967614a9a67086d0c60fa27d47a1cd9a8896"
+      sha256: "4fb88d4350ffc208c2a09fc321db1f80282688716b8cfe10c8c80acc5ae8934a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.13+9"
+    version: "0.8.13+10"
   image_picker_linux:
     dependency: transitive
     description:
@@ -793,10 +793,10 @@ packages:
     dependency: transitive
     description:
       name: jni_flutter
-      sha256: c399ad579bfba12eb20c924f7a23160a42902f3023a871e1cad40a8a679656a4
+      sha256: "0dd33d67797560f66e961a6053882d4df54bd345bf063b8fe7ea133f7ad8b191"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.4"
+    version: "1.0.4+1"
   jni_util:
     dependency: transitive
     description:
@@ -865,10 +865,10 @@ packages:
     dependency: "direct main"
     description:
       name: lucide_icons_flutter
-      sha256: abfff57c1f4de40204e25a15809d566b17c1a085d2aa58e00203649758c7fed4
+      sha256: ef8cac4548747b5d38da7e08868da32904df4bdc2ee6ad4caf85d30c97ef4cc9
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.22"
+    version: "3.1.24"
   matcher:
     dependency: transitive
     description:
@@ -889,10 +889,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_ui
-      sha256: "32d98f11cf5942a095a8c3e01b03e4de3b17941437713dcf36b1088fb62e23d2"
+      sha256: "98ab9eda579ecae623e4b376c603035c5def78ce706f735f30bd632af5814695"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.0"
+    version: "1.6.0"
   meta:
     dependency: transitive
     description:
