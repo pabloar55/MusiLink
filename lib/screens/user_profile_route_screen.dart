@@ -6,6 +6,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/user_profile_screen.dart';
+import 'package:musi_link/services/user_service.dart';
 
 Widget buildUserProfileRoute(BuildContext _, GoRouterState state) {
   final uid = state.pathParameters['uid'] ?? '';
@@ -25,6 +26,38 @@ Widget buildUserProfileRoute(BuildContext _, GoRouterState state) {
     initialCompatibility: initialCompatibility,
     fromChat: state.uri.queryParameters['fromChat'] == 'true',
   );
+}
+
+/// Ruta de los enlaces compartidos `https://musilink.app/u/<username>`.
+Widget buildUsernameProfileRoute(BuildContext _, GoRouterState state) {
+  return UsernameProfileRouteScreen(
+    username: UserService.normalizeUsername(
+      state.pathParameters['username'] ?? '',
+    ),
+  );
+}
+
+class UsernameProfileRouteScreen extends ConsumerWidget {
+  const UsernameProfileRouteScreen({super.key, required this.username});
+
+  final String username;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(uidByUsernameProvider(username))
+        .when(
+          data: (uid) => uid == null
+              ? _ProfileLoadFailure(
+                  message: AppLocalizations.of(context)!.userNotFound(username),
+                )
+              : UserProfileRouteScreen(uid: uid),
+          loading: () => const _ProfileLoadingScreen(),
+          error: (_, _) => _ProfileLoadFailure(
+            onRetry: () => ref.invalidate(uidByUsernameProvider(username)),
+          ),
+        );
+  }
 }
 
 class UserProfileRouteScreen extends ConsumerWidget {
@@ -85,9 +118,10 @@ class _ProfileLoadingScreen extends StatelessWidget {
 }
 
 class _ProfileLoadFailure extends StatelessWidget {
-  const _ProfileLoadFailure({this.onRetry});
+  const _ProfileLoadFailure({this.onRetry, this.message});
 
   final VoidCallback? onRetry;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +134,7 @@ class _ProfileLoadFailure extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(l10n.genericError, textAlign: TextAlign.center),
+              Text(message ?? l10n.genericError, textAlign: TextAlign.center),
               if (onRetry != null) ...[
                 const SizedBox(height: 16),
                 FilledButton(

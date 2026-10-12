@@ -948,6 +948,18 @@ abstract class AppLocalizations {
   /// **'Join me on MusiLink. {url}'**
   String inviteMessageNoUsername(String url);
 
+  /// No description provided for @shareAppButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Share the app'**
+  String get shareAppButton;
+
+  /// No description provided for @userNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t find @{username}.'**
+  String userNotFound(String username);
+
   /// No description provided for @dailySongSaveError.
   ///
   /// In en, this message translates to:

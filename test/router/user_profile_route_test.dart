@@ -53,4 +53,46 @@ void main() {
     expect(tester.takeException(), isNull);
     verify(() => userService.watchUser('user-1')).called(1);
   });
+
+  testWidgets('el enlace /u/:username abre el perfil sobre la pantalla '
+      'principal', (tester) async {
+    final userService = MockUserService();
+    final userStream = StreamController<AppUser?>();
+    addTearDown(userStream.close);
+    when(() => userService.getUidByUsername('pablo'))
+        .thenAnswer((_) async => 'user-1');
+    when(() => userService.watchUser('user-1'))
+        .thenAnswer((_) => userStream.stream);
+
+    final router = GoRouter(
+      initialLocation: '/u/Pablo',
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const SizedBox.shrink(),
+          routes: [
+            GoRoute(path: 'u/:username', builder: buildUsernameProfileRoute),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [userServiceProvider.overrideWithValue(userService)],
+        child: MaterialApp.router(
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    verify(() => userService.getUidByUsername('pablo')).called(1);
+    verify(() => userService.watchUser('user-1')).called(1);
+    expect(router.canPop(), isTrue);
+  });
 }

@@ -182,6 +182,8 @@
   "inviteLinkCopied": "Η πρόσκληση αντιγράφηκε στο πρόχειρο",
   "inviteMessage": "Έλα στο MusiLink και πρόσθεσέ με ως φίλο: είμαι ο χρήστης @{username}. {url}",
   "inviteMessageNoUsername": "Έλα στο MusiLink. {url}",
+  "shareAppButton": "Κοινοποίηση της εφαρμογής",
+  "userNotFound": "Δεν βρήκαμε τον χρήστη @{username}.",
   "dailySongSaveError": "Δεν ήταν δυνατή η δημοσίευση του τραγουδιού. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
   "dailySongRefreshError": "Δεν ήταν δυνατή η ανανέωση από τον διακομιστή. Εμφανίζονται τα προηγούμενα δεδομένα.",
   "dailySongLoadError": "Δεν ήταν δυνατή η φόρτωση των τραγουδιών της ημέρας.",

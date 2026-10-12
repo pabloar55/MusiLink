@@ -17,17 +17,30 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <script>
-    // Enlace de invitación: Android va a Google Play; el resto continúa en la
-    // web desde la raíz, que es también el start_url de la PWA.
-    if (/^\/invite\/?$/.test(window.location.pathname)) {
-      if (/Android/i.test(window.navigator.userAgent)) {
+    // Enlaces compartidos: /invite (la app) y /u/<username> (un perfil).
+    // La app de Android abre /u/ por App Links sin pasar por aquí; si se llega
+    // desde el navegador de Android es que falta instalarla y va a Google
+    // Play. El resto continúa en la web: /invite desde la raíz, que es también
+    // el start_url de la PWA, y /u/ en la ruta de perfil del router (hash).
+    (function () {
+      var path = window.location.pathname;
+      var profile = /^\/u\/([A-Za-z0-9_]{3,20})\/?$/.exec(path);
+      if (!profile && !/^\/invite\/?$/.test(path)) return;
+      var installedPwa =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+      if (/Android/i.test(window.navigator.userAgent) && !installedPwa) {
         window.location.replace(
           'https://play.google.com/store/apps/details?id=app.musilink',
         );
-      } else {
-        window.history.replaceState(null, '', '/');
+        return;
       }
-    }
+      window.history.replaceState(
+        null,
+        '',
+        profile ? '/#/u/' + profile[1].toLowerCase() : '/',
+      );
+    })();
   </script>
 
   <meta charset="UTF-8">

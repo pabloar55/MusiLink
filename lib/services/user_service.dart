@@ -232,6 +232,24 @@ class UserService {
     }
   }
 
+  /// Devuelve el uid que tiene reservado [username], o null si no existe.
+  Future<String?> getUidByUsername(String username) async {
+    final normalized = normalizeUsername(username);
+    if (!_validUsername.hasMatch(normalized) ||
+        normalized == AppUser.deletedUsername) {
+      return null;
+    }
+
+    try {
+      final reservation = await _usernamesRef.doc(normalized).get();
+      final uid = reservation.data()?['uid'];
+      return uid is String && uid.isNotEmpty ? uid : null;
+    } catch (e, stack) {
+      await reportError(e, stack);
+      rethrow;
+    }
+  }
+
   static String normalizeUsername(String username) =>
       username.trim().toLowerCase();
 

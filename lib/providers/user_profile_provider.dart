@@ -19,6 +19,12 @@ final userStreamProvider = StreamProvider.family<AppUser?, String>((ref, uid) {
   return ref.read(userServiceProvider).watchUser(uid);
 });
 
+/// Resuelve el uid de un username para los enlaces de perfil `/u/:username`.
+final uidByUsernameProvider = FutureProvider.autoDispose
+    .family<String?, String>((ref, username) {
+      return ref.read(userServiceProvider).getUidByUsername(username);
+    });
+
 final compatibilityProvider = FutureProvider.family<DiscoveryResult, AppUser>((
   ref,
   user,

@@ -9,13 +9,21 @@ import 'package:musi_link/services/app_invite_service.dart';
 class InviteFriendsCard extends ConsumerWidget {
   const InviteFriendsCard({super.key});
 
-  Future<void> _invite(BuildContext context, WidgetRef ref) async {
+  /// Con [withProfile] comparte el enlace al perfil propio; sin él, solo el
+  /// enlace de la app.
+  Future<void> _share(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool withProfile,
+  }) async {
     final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
-    final username = ref.read(currentUserProvider).asData?.value?.username;
+    final username = withProfile
+        ? ref.read(currentUserProvider).asData?.value?.username
+        : null;
     final message = username == null || username.isEmpty
         ? l10n.inviteMessageNoUsername(AppInviteService.inviteUrl)
-        : l10n.inviteMessage(username, AppInviteService.inviteUrl);
+        : l10n.inviteMessage(username, AppInviteService.profileUrl(username));
     // iPad ancla el panel de compartir a la posición del botón.
     final box = context.findRenderObject() as RenderBox?;
     final origin = box == null
@@ -63,9 +71,15 @@ class InviteFriendsCard extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () => _invite(context, ref),
-              icon: const Icon(LucideIcons.share2),
+              onPressed: () => _share(context, ref, withProfile: true),
+              icon: const Icon(LucideIcons.userPlus),
               label: Text(l10n.inviteFriendsButton),
+            ),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: () => _share(context, ref, withProfile: false),
+              icon: const Icon(LucideIcons.share2),
+              label: Text(l10n.shareAppButton),
             ),
           ],
         ),

@@ -157,6 +157,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             state.uri.queryParameters['tab'],
           ),
         ),
+        routes: [
+          // Hija de '/' para que un perfil abierto desde un enlace compartido
+          // tenga la pantalla principal detrás al volver.
+          GoRoute(path: 'u/:username', builder: buildUsernameProfileRoute),
+        ],
       ),
       GoRoute(path: '/profile/:uid', builder: buildUserProfileRoute),
       GoRoute(

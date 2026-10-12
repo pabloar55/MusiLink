@@ -155,6 +155,37 @@ void main() {
       });
     });
 
+    group('getUidByUsername', () {
+      test('devuelve el uid de la reserva del username normalizado', () async {
+        final reservationRef = MockDocumentReference();
+        final reservation = MockDocumentSnapshot();
+        when(() => mockUsernamesRef.doc('testuser')).thenReturn(reservationRef);
+        when(() => reservationRef.get()).thenAnswer((_) async => reservation);
+        when(() => reservation.data()).thenReturn({'uid': 'uid123'});
+
+        expect(await userService.getUidByUsername(' TestUser '), 'uid123');
+      });
+
+      test('devuelve null si el username no está reservado', () async {
+        final reservationRef = MockDocumentReference();
+        final reservation = MockDocumentSnapshot();
+        when(() => mockUsernamesRef.doc('testuser')).thenReturn(reservationRef);
+        when(() => reservationRef.get()).thenAnswer((_) async => reservation);
+        when(() => reservation.data()).thenReturn(null);
+
+        expect(await userService.getUidByUsername('testuser'), isNull);
+      });
+
+      test('no consulta Firestore para un username inválido', () async {
+        expect(await userService.getUidByUsername('a/b'), isNull);
+        expect(
+          await userService.getUidByUsername(AppUser.deletedUsername),
+          isNull,
+        );
+        verifyNever(() => mockUsernamesRef.doc(any()));
+      });
+    });
+
     group('getUser', () {
       test('devuelve AppUser si el documento existe', () async {
         final mockDocRef = MockDocumentReference();

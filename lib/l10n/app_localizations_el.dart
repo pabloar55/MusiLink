@@ -481,6 +481,14 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get shareAppButton => 'Κοινοποίηση της εφαρμογής';
+
+  @override
+  String userNotFound(String username) {
+    return 'Δεν βρήκαμε τον χρήστη @$username.';
+  }
+
+  @override
   String get dailySongSaveError =>
       'Δεν ήταν δυνατή η δημοσίευση του τραγουδιού. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
 

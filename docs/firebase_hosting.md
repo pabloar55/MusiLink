@@ -71,13 +71,38 @@ Antes de dar por terminado un despliegue se deben comprobar el inicio de sesión
 Firestore, Functions, Storage, App Check, FCM y la navegación directa a rutas
 internas.
 
-## Enlace de invitación
+## Enlaces compartidos
 
-`https://musilink.app/invite` es el enlace que comparte la app
-(`AppInviteService.inviteUrl`). Un script en línea de `web/index.html` lo
-resuelve antes de cargar Flutter: en Android redirige a Google Play y en el
-resto de plataformas continúa en `/`, donde iOS muestra la instalación de la
-PWA.
+La card de invitación comparte dos enlaces (`AppInviteService`):
+
+- `https://musilink.app/invite` (`inviteUrl`): solo la app.
+- `https://musilink.app/u/<username>` (`profileUrl`): el perfil de quien invita.
+  La app lo abre en la ruta `/u/:username`, que resuelve el uid en
+  `usernames/{username}` y muestra el perfil sobre la pantalla principal.
+
+Un script en línea de `web/index.html` resuelve ambos antes de cargar Flutter:
+en el navegador de Android redirige a Google Play y en el resto de plataformas
+continúa en la web: `/invite` en `/`, donde iOS muestra la instalación de la
+PWA, y `/u/<username>` en `/#/u/<username>`. Una PWA instalada nunca se
+redirige a Google Play.
+
+En Android, la app instalada abre `/u/` directamente mediante App Links
+(`intent-filter` con `autoVerify` en `AndroidManifest.xml`). La verificación usa
+`https://musilink.app/.well-known/assetlinks.json`, que Hosting sirve desde
+`web/well-known/assetlinks.json` mediante un rewrite porque `firebase.json`
+ignora las rutas que empiezan por punto. El archivo debe contener la huella
+SHA-256 de la clave de firma de Google Play (Play Console → Integridad de la
+app → Firma de apps); mientras no coincida, Android abre el enlace en el
+navegador. Comprobaciones:
+
+```bash
+curl -s https://musilink.app/.well-known/assetlinks.json
+adb shell pm get-app-links app.musilink
+adb shell am start -a android.intent.action.VIEW -d https://musilink.app/u/<username>
+```
+
+iOS abre los enlaces en Safari y no en la PWA instalada, por lo que allí el
+mensaje compartido conserva el `@username` para buscarlo a mano.
 
 La vista previa del enlace (título, descripción e imagen) sale de las etiquetas
 Open Graph de `web/index.html` y de `web/og-image.jpg` (1200×630). Las apps de

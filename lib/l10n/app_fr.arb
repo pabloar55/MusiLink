@@ -167,6 +167,8 @@
   "inviteLinkCopied": "Invitation copiée dans le presse-papiers",
   "inviteMessage": "Rejoins-moi sur MusiLink et ajoute-moi en ami : je suis @{username}. {url}",
   "inviteMessageNoUsername": "Rejoins-moi sur MusiLink. {url}",
+  "shareAppButton": "Partager l'app",
+  "userNotFound": "Nous n'avons pas trouvé @{username}.",
   "dailySongSaveError": "Impossible de publier la chanson. Vérifiez votre connexion et réessayez.",
   "dailySongRefreshError": "Impossible d'actualiser depuis le serveur. Les données précédentes restent affichées.",
   "dailySongLoadError": "Impossible de charger les chansons du jour.",

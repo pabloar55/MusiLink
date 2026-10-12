@@ -28,6 +28,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Enlaces de perfil https://musilink.app/u/<username>. Android los
+                 verifica contra https://musilink.app/.well-known/assetlinks.json
+                 (web/well-known/assetlinks.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="musilink.app"/>
+                <data android:pathPrefix="/u/"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

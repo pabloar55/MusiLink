@@ -479,6 +479,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get shareAppButton => 'Compartir la app';
+
+  @override
+  String userNotFound(String username) {
+    return 'No hemos encontrado a @$username.';
+  }
+
+  @override
   String get dailySongSaveError =>
       'No se pudo publicar la canción. Comprueba tu conexión e inténtalo de nuevo.';
 
