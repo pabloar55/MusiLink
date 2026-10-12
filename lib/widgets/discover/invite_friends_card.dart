@@ -75,8 +75,8 @@ class InviteFriendsCard extends ConsumerWidget {
               icon: const Icon(LucideIcons.userPlus),
               label: Text(l10n.inviteFriendsButton),
             ),
-            const SizedBox(height: 4),
-            TextButton.icon(
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
               onPressed: () => _share(context, ref, withProfile: false),
               icon: const Icon(LucideIcons.share2),
               label: Text(l10n.shareAppButton),
