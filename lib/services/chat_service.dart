@@ -5,7 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
+import 'package:musi_link/services/chat_history_store.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
+import 'package:musi_link/services/pending_messages.dart';
 import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/chat.dart';
@@ -37,81 +39,35 @@ class ChatService with AuthenticatedService {
       _firestore.collection(FirestoreCollections.userPrivate);
   // Cache por otherUid: evita re-query al abrir el mismo chat varias veces.
   final Map<String, Chat> _chatByOtherUid = {};
-  // Solo la última página de los 20 chats más recientes, separada por usuario.
-  final Map<(String, String), CachedChatMessages> _recentMessages = {};
-  final Map<(String, String), ({DateTime? since, Future<void> future})>
-  _prefetchingMessages = {};
-  final Map<(String, String), Object> _messageCacheTokens = {};
-
-  final Map<(String, String), Map<String, Message>> _outgoing = {};
-  final _outgoingChanges = StreamController<(String, String)>.broadcast();
+  late final _history = ChatHistoryStore(
+    _messageCache,
+    maxMessages: messagesPageSize,
+  );
+  final _outgoing = PendingMessages();
   final Map<(String, String), Future<void>> _deliveryRequests = {};
   final Set<(String, String)> _deliveryRefreshes = {};
-
-  List<Message> _withOutgoing(
-    String uid,
-    String chatId,
-    List<Message> messages,
-  ) {
-    final ids = messages.map((message) => message.id).toSet();
-    return [
-      ...messages,
-      ...?_outgoing[(uid, chatId)]?.values.where(
-        (message) => !ids.contains(message.id),
-      ),
-    ];
-  }
-
-  Object _messageCacheToken(String uid, String chatId) =>
-      _messageCacheTokens.putIfAbsent((uid, chatId), Object.new);
 
   /// Historial y filtro de borrado disponibles antes del primer snapshot.
   /// null significa que aún no se ha cargado; messages vacío es un chat vacío.
   CachedChatMessages? getCachedHistory(String chatId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return null;
-    final cached =
-        _recentMessages[(uid, chatId)] ?? _messageCache?.read(uid, chatId);
-    if (cached != null) _recentMessages[(uid, chatId)] = cached;
-    return cached;
+    return _history.read(uid, chatId);
   }
 
   List<Message>? getCachedMessages(String chatId) =>
       getCachedHistory(chatId)?.messages;
 
-  void _invalidateMessages(String uid, String chatId) {
-    _recentMessages.remove((uid, chatId));
-    _prefetchingMessages.remove((uid, chatId));
-    _messageCacheTokens.remove((uid, chatId));
-    _messageCache?.remove(uid, chatId);
-  }
-
   /// Olvida el historial guardado de [chatId] para [uid], por ejemplo al
   /// salir de un grupo.
   void forgetHistory(String uid, String chatId) =>
-      _invalidateMessages(uid, chatId);
-
-  void _checkDeletedSince(String uid, String chatId, DateTime? since) {
-    final cached =
-        _recentMessages[(uid, chatId)] ?? _messageCache?.read(uid, chatId);
-    final pending = _prefetchingMessages[(uid, chatId)];
-    if ((cached != null && cached.since != since) ||
-        (pending != null && pending.since != since)) {
-      _invalidateMessages(uid, chatId);
-    }
-  }
+      _history.invalidate(uid, chatId);
 
   /// Limpia las vistas de arranque en memoria y disco al hacer logout.
   void clearCache() {
-    for (final key in _outgoing.keys.toList()) {
-      _outgoing.remove(key);
-      _outgoingChanges.add(key);
-    }
+    _outgoing.clear();
     _chatByOtherUid.clear();
-    _recentMessages.clear();
-    _prefetchingMessages.clear();
-    _messageCacheTokens.clear();
-    _messageCache?.clear();
+    _history.clear();
   }
 
   // ─── Chats ────────────────────────────────────────────────
@@ -200,7 +156,7 @@ class ChatService with AuthenticatedService {
         .map((snapshot) {
           final chats = snapshot.docs.map(Chat.fromFirestore).where((chat) {
             final dt = chat.deletedAt[uid];
-            _checkDeletedSince(uid, chat.id, dt);
+            _history.invalidateIfSinceChanged(uid, chat.id, dt);
             if (!chat.isGroup && chat.lastMessage.isEmpty) return false;
             return dt == null || chat.lastMessageTime.isAfter(dt);
           }).toList();
@@ -226,25 +182,18 @@ class ChatService with AuthenticatedService {
     final uid = _auth.currentUser?.uid;
     if (uid == null || !chat.participants.contains(uid)) return;
     final since = chat.deletedAt[uid];
-    _checkDeletedSince(uid, chat.id, since);
+    _history.invalidateIfSinceChanged(uid, chat.id, since);
     if (chat.lastMessage.isEmpty ||
         (since != null && !chat.lastMessageTime.isAfter(since))) {
       return;
     }
-    final key = (uid, chat.id);
-    if (getCachedHistory(chat.id) != null && !refresh) return;
-    final pending = _prefetchingMessages[key];
-    if (pending != null) return pending.future;
-
-    final future = _prefetchMessages(chat.id, uid, since);
-    _prefetchingMessages[key] = (since: since, future: future);
-    try {
-      await future;
-    } finally {
-      if (identical(_prefetchingMessages[key]?.future, future)) {
-        _prefetchingMessages.remove(key);
-      }
-    }
+    if (_history.read(uid, chat.id) != null && !refresh) return;
+    await _history.prefetch(
+      uid,
+      chat.id,
+      since,
+      () => _prefetchMessages(chat.id, uid, since),
+    );
   }
 
   Future<void> _prefetchMessages(
@@ -252,17 +201,17 @@ class ChatService with AuthenticatedService {
     String uid,
     DateTime? since,
   ) async {
-    final token = _messageCacheToken(uid, chatId);
-    final previous = _recentMessages[(uid, chatId)];
+    final token = _history.token(uid, chatId);
+    final previous = _history.inMemory(uid, chatId);
     try {
       final snapshot = await _messagesQuery(chatId, since: since).get();
       // Un resultado tardío no debe reemplazar una actualización del chat abierto.
-      if (!identical(token, _messageCacheTokens[(uid, chatId)]) ||
+      if (!_history.isCurrent(uid, chatId, token) ||
           _auth.currentUser?.uid != uid ||
-          _recentMessages[(uid, chatId)] != previous) {
+          _history.inMemory(uid, chatId) != previous) {
         return;
       }
-      _cacheMessages(uid, chatId, since, _decodeMessages(snapshot));
+      _history.write(uid, chatId, since, _decodeMessages(snapshot));
     } catch (error, stack) {
       // La pantalla conserva su carga normal si falla esta optimización.
       reportError(error, stack).ignore();
@@ -274,8 +223,8 @@ class ChatService with AuthenticatedService {
   Future<void> restoreLocalHistory(String chatId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    final token = _messageCacheToken(uid, chatId);
-    final previous = _recentMessages[(uid, chatId)];
+    final token = _history.token(uid, chatId);
+    final previous = _history.inMemory(uid, chatId);
     try {
       final doc = await _chatsRef
           .doc(chatId)
@@ -289,14 +238,14 @@ class ChatService with AuthenticatedService {
         since: since,
       ).get(const GetOptions(source: Source.cache));
       if (_auth.currentUser?.uid != uid ||
-          !identical(token, _messageCacheTokens[(uid, chatId)]) ||
-          _recentMessages[(uid, chatId)] != previous) {
+          !_history.isCurrent(uid, chatId, token) ||
+          _history.inMemory(uid, chatId) != previous) {
         return;
       }
-      _checkDeletedSince(uid, chatId, since);
+      _history.invalidateIfSinceChanged(uid, chatId, since);
       final messages = _decodeMessages(snapshot);
       // Una consulta local vacía también puede significar que nunca se descargó.
-      if (messages.isNotEmpty) _cacheMessages(uid, chatId, since, messages);
+      if (messages.isNotEmpty) _history.write(uid, chatId, since, messages);
     } catch (_) {
       // Sin caché Firestore, se conserva la vista persistida o la carga normal.
     }
@@ -314,7 +263,7 @@ class ChatService with AuthenticatedService {
         (data['recipientId'] != null && data['recipientId'] != uid)) {
       return;
     }
-    final token = _messageCacheToken(uid, chatId);
+    final token = _history.token(uid, chatId);
     try {
       final doc = await _chatsRef
           .doc(chatId)
@@ -322,7 +271,7 @@ class ChatService with AuthenticatedService {
           .timeout(const Duration(seconds: 5));
       if (!doc.exists ||
           _auth.currentUser?.uid != uid ||
-          !identical(token, _messageCacheTokens[(uid, chatId)])) {
+          !_history.isCurrent(uid, chatId, token)) {
         return;
       }
       final chat = Chat.fromFirestore(doc);
@@ -343,30 +292,6 @@ class ChatService with AuthenticatedService {
           .whereType<Message>()
           .toList();
 
-  void _cacheMessages(
-    String uid,
-    String chatId,
-    DateTime? since,
-    List<Message> messages,
-  ) {
-    final key = (uid, chatId);
-    _recentMessages.remove(key);
-    _recentMessages[key] = (
-      since: since,
-      messages: List<Message>.unmodifiable(
-        messages.skip(
-          messages.length > messagesPageSize
-              ? messages.length - messagesPageSize
-              : 0,
-        ),
-      ),
-    );
-    if (_recentMessages.length > 20) {
-      _recentMessages.remove(_recentMessages.keys.first);
-    }
-    _messageCache?.write(uid, chatId, _recentMessages[key]!);
-  }
-
   static const int _deleteBatchSize = 499;
 
   /// Devuelve el timestamp de borrado suave del usuario actual para un chat,
@@ -379,7 +304,7 @@ class ChatService with AuthenticatedService {
       final since = snap.exists
           ? Chat.fromFirestore(snap).deletedAt[uid]
           : null;
-      _checkDeletedSince(uid, chatId, since);
+      _history.invalidateIfSinceChanged(uid, chatId, since);
       return since;
     } catch (e, stack) {
       await reportError(e, stack);
@@ -396,7 +321,7 @@ class ChatService with AuthenticatedService {
   /// con Admin SDK. El cliente no intenta borrar mensajes ajenos ni el chat.
   Future<void> softDeleteChat(String chatId) async {
     final uid = currentUid;
-    _invalidateMessages(uid, chatId);
+    _history.invalidate(uid, chatId);
     try {
       final chatRef = _chatsRef.doc(chatId);
 
@@ -405,7 +330,7 @@ class ChatService with AuthenticatedService {
         'unreadCounts.$uid': 0,
       });
 
-      _invalidateMessages(uid, chatId);
+      _history.invalidate(uid, chatId);
       _chatByOtherUid.removeWhere((_, c) => c.id == chatId);
     } catch (e, stack) {
       await reportError(e, stack);
@@ -461,27 +386,31 @@ class ChatService with AuthenticatedService {
     Message? replyTo,
   }) async {
     final uid = currentUid;
-    final key = (uid, chatId);
     final messageId = _chatsRef
         .doc(chatId)
         .collection(FirestoreCollections.messages)
         .doc()
         .id;
-    final pending = _outgoing.putIfAbsent(key, () => {});
-    pending[messageId] = Message(
-      id: messageId,
-      senderId: uid,
-      text: text,
-      timestamp: DateTime.now(),
-      type: track == null ? MessageType.text : MessageType.track,
-      trackData: track,
-      dailySongReply: dailySongReply == null
-          ? null
-          : DailySongReply.tryFromMap({...dailySongReply, 'formatVersion': 2}),
-      replyTo: replyTo?.toReply(),
-      isPending: true,
+    final discard = _outgoing.add(
+      uid,
+      chatId,
+      Message(
+        id: messageId,
+        senderId: uid,
+        text: text,
+        timestamp: DateTime.now(),
+        type: track == null ? MessageType.text : MessageType.track,
+        trackData: track,
+        dailySongReply: dailySongReply == null
+            ? null
+            : DailySongReply.tryFromMap({
+                ...dailySongReply,
+                'formatVersion': 2,
+              }),
+        replyTo: replyTo?.toReply(),
+        isPending: true,
+      ),
     );
-    _outgoingChanges.add(key);
     try {
       await _functions.httpsCallable('sendChatMessage').call<void>({
         'chatId': chatId,
@@ -500,9 +429,7 @@ class ChatService with AuthenticatedService {
       // respuesta de la callable llega antes que el snapshot.
     } catch (e, stack) {
       // Un snapshot confirmado prevalece sobre un error tardío de transporte.
-      if (!pending.containsKey(messageId)) return;
-      pending.remove(messageId);
-      _outgoingChanges.add(key);
+      if (!discard()) return;
       if (!isRateLimitError(e)) await reportError(e, stack);
       Error.throwWithStackTrace(toServiceException(e), stack);
     }
@@ -521,26 +448,23 @@ class ChatService with AuthenticatedService {
     DateTime? from,
   }) {
     final uid = currentUid;
-    final token = _messageCacheToken(uid, chatId);
+    final token = _history.token(uid, chatId);
     return Stream<List<Message>>.multi((controller) {
       var latest = getCachedMessages(chatId) ?? <Message>[];
-      void emit() => controller.add(_withOutgoing(uid, chatId, latest));
-      final outgoing = _outgoingChanges.stream.listen((key) {
+      void emit() => controller.add(_outgoing.merge(uid, chatId, latest));
+      final outgoing = _outgoing.changes.listen((key) {
         if (key == (uid, chatId)) emit();
       });
-      if (_outgoing[(uid, chatId)]?.isNotEmpty ?? false) emit();
+      if (_outgoing.hasAny(uid, chatId)) emit();
       final remote = _messagesQuery(chatId, since: since, from: from)
           .snapshots()
           .listen(
             (snapshot) {
               latest = _decodeMessages(snapshot);
-              final pending = _outgoing[(uid, chatId)];
-              for (final message in latest) {
-                pending?.remove(message.id);
-              }
-              if (identical(token, _messageCacheTokens[(uid, chatId)]) &&
+              _outgoing.confirm(uid, chatId, latest);
+              if (_history.isCurrent(uid, chatId, token) &&
                   _auth.currentUser?.uid == uid) {
-                _cacheMessages(uid, chatId, since, latest);
+                _history.write(uid, chatId, since, latest);
                 unawaited(_acknowledgeMessages(uid, snapshot.docs));
               }
               emit();
