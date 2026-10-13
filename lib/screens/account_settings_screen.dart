@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -132,9 +131,8 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     }
   }
 
-  Future<String> _sendCurrentUserPasswordResetEmail(User firebaseUser) async {
+  Future<String> _sendCurrentUserPasswordResetEmail(String? email) async {
     final l10n = AppLocalizations.of(context)!;
-    final email = firebaseUser.email;
     if (email == null || email.trim().isEmpty) {
       return l10n.genericError;
     }
@@ -142,11 +140,12 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     try {
       await ref.read(authServiceProvider).sendPasswordResetEmail(email);
       return l10n.authPasswordResetSent;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') return l10n.authPasswordResetSent;
-      if (e.code == 'invalid-email') return l10n.authErrorInvalidEmail;
-      if (e.code == 'too-many-requests') return l10n.authErrorTooManyRequests;
-      return l10n.genericError;
+    } on AuthException catch (e) {
+      return switch (e.reason) {
+        AuthErrorReason.invalidEmail => l10n.authErrorInvalidEmail,
+        AuthErrorReason.tooManyRequests => l10n.authErrorTooManyRequests,
+        _ => l10n.genericError,
+      };
     } catch (e, st) {
       reportError(e, st).ignore();
       return l10n.genericError;
@@ -191,16 +190,18 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
       final password = await showReauthPasswordDialog(
         context,
         onForgotPassword: () =>
-            _sendCurrentUserPasswordResetEmail(firebaseUser),
+            _sendCurrentUserPasswordResetEmail(firebaseUser.email),
       );
       if (password == null || !mounted) return; // usuario canceló
       try {
         await ref
             .read(authServiceProvider)
             .reauthenticateWithPassword(firebaseUser.email ?? '', password);
-      } on FirebaseAuthException catch (e) {
+      } on AuthException catch (e) {
         if (!mounted) return;
-        final msg = e.code == 'wrong-password' || e.code == 'invalid-credential'
+        final msg =
+            e.reason == AuthErrorReason.wrongPassword ||
+                e.reason == AuthErrorReason.invalidCredential
             ? l10n.authErrorWrongPassword
             : l10n.genericError;
         ScaffoldMessenger.of(context)

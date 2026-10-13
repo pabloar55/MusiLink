@@ -102,7 +102,7 @@ void main() {
         expect(result, isNull);
       });
 
-      test('propaga FirebaseAuthException', () async {
+      test('traduce el rechazo de Firebase a AuthException', () async {
         when(
           () => mockAuth.createUserWithEmailAndPassword(
             email: any(named: 'email'),
@@ -120,7 +120,11 @@ void main() {
             email: 'test@test.com',
             password: 'pass',
           ),
-          throwsA(isA<FirebaseAuthException>()),
+          throwsA(
+            isA<AuthException>()
+                .having((e) => e.reason, 'reason', AuthErrorReason.emailInUse)
+                .having((e) => e.code, 'code', 'email-already-in-use'),
+          ),
         );
       });
     });
@@ -171,7 +175,7 @@ void main() {
       });
 
       test(
-        'propaga FirebaseAuthException con credenciales incorrectas',
+        'traduce las credenciales incorrectas a AuthException',
         () async {
           when(
             () => mockAuth.signInWithEmailAndPassword(
@@ -190,7 +194,13 @@ void main() {
               email: 'test@test.com',
               password: 'wrong',
             ),
-            throwsA(isA<FirebaseAuthException>()),
+            throwsA(
+              isA<AuthException>().having(
+                (e) => e.reason,
+                'reason',
+                AuthErrorReason.wrongPassword,
+              ),
+            ),
           );
         },
       );
@@ -212,7 +222,7 @@ void main() {
         },
       );
 
-      test('propaga FirebaseAuthException', () async {
+      test('traduce el rechazo de Firebase a AuthException', () async {
         when(
           () => mockAuth.sendPasswordResetEmail(email: any(named: 'email')),
         ).thenAnswer(
@@ -224,7 +234,26 @@ void main() {
 
         await expectLater(
           authService.sendPasswordResetEmail('bad-email'),
-          throwsA(isA<FirebaseAuthException>()),
+          throwsA(
+            isA<AuthException>().having(
+              (e) => e.reason,
+              'reason',
+              AuthErrorReason.invalidEmail,
+            ),
+          ),
+        );
+      });
+
+      test('no revela si el email tiene cuenta', () async {
+        when(
+          () => mockAuth.sendPasswordResetEmail(email: any(named: 'email')),
+        ).thenAnswer(
+          (_) async => throw FirebaseAuthException(code: 'user-not-found'),
+        );
+
+        await expectLater(
+          authService.sendPasswordResetEmail('nobody@test.com'),
+          completes,
         );
       });
     });

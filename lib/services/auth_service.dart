@@ -12,6 +12,43 @@ class GoogleAccountMismatchException implements Exception {
   const GoogleAccountMismatchException();
 }
 
+/// Motivos de rechazo de una operación de autenticación que la interfaz
+/// distingue.
+enum AuthErrorReason {
+  emailInUse,
+  invalidEmail,
+  weakPassword,
+  userNotFound,
+  wrongPassword,
+  invalidCredential,
+  tooManyRequests,
+  accountExistsWithDifferentCredential,
+  unknown,
+}
+
+/// Rechazo de una operación de autenticación, sin tipos de Firebase.
+class AuthException implements Exception {
+  const AuthException(this.reason, {required this.code});
+
+  factory AuthException.fromCode(String code) => AuthException(switch (code) {
+    'email-already-in-use' => AuthErrorReason.emailInUse,
+    'invalid-email' => AuthErrorReason.invalidEmail,
+    'weak-password' => AuthErrorReason.weakPassword,
+    'user-not-found' => AuthErrorReason.userNotFound,
+    'wrong-password' => AuthErrorReason.wrongPassword,
+    'invalid-credential' => AuthErrorReason.invalidCredential,
+    'too-many-requests' => AuthErrorReason.tooManyRequests,
+    'account-exists-with-different-credential' =>
+      AuthErrorReason.accountExistsWithDifferentCredential,
+    _ => AuthErrorReason.unknown,
+  }, code: code);
+
+  final AuthErrorReason reason;
+
+  /// Código original del proveedor, para el mensaje de error genérico.
+  final String code;
+}
+
 /// Servicio de autenticación con Firebase Auth.
 /// Soporta email+contraseña y Google Sign-In.
 class AuthService {
@@ -68,7 +105,7 @@ class AuthService {
       return user;
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
-      rethrow;
+      Error.throwWithStackTrace(AuthException.fromCode(e.code), stack);
     }
   }
 
@@ -90,17 +127,19 @@ class AuthService {
       return user;
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
-      rethrow;
+      Error.throwWithStackTrace(AuthException.fromCode(e.code), stack);
     }
   }
 
-  /// Envía un email de Firebase Auth para restablecer la contraseña.
+  /// Envía un email de Firebase Auth para restablecer la contraseña. Un email
+  /// sin cuenta se trata como enviado para no revelar si está registrado.
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
-      rethrow;
+      if (e.code == 'user-not-found') return;
+      Error.throwWithStackTrace(AuthException.fromCode(e.code), stack);
     }
   }
 
@@ -121,7 +160,7 @@ class AuthService {
       return await _signInToFirebaseWithGoogleAccount(googleUser);
     } on FirebaseAuthException catch (e, stack) {
       await reportError(e, stack);
-      rethrow;
+      Error.throwWithStackTrace(AuthException.fromCode(e.code), stack);
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) rethrow;
       await reportError(e, StackTrace.current);
@@ -260,7 +299,7 @@ class AuthService {
   }
 
   /// Re-autentica con email y contraseña.
-  /// Lanza [FirebaseAuthException] si las credenciales son incorrectas.
+  /// Lanza [AuthException] si las credenciales son incorrectas.
   Future<void> reauthenticateWithPassword(String email, String password) async {
     try {
       final credential = EmailAuthProvider.credential(
@@ -270,7 +309,7 @@ class AuthService {
       await _auth.currentUser!.reauthenticateWithCredential(credential);
     } on FirebaseAuthException catch (e, st) {
       await reportError(e, st);
-      rethrow;
+      Error.throwWithStackTrace(AuthException.fromCode(e.code), st);
     }
   }
 }

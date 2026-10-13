@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +8,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/utils/terms_and_conditions.dart';
 import 'package:musi_link/widgets/google_sign_in_web_button.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,28 +70,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     setState(() => _isEmailLoading = true);
     try {
-      User? user;
-      if (_isLogin) {
-        user = await ref
-            .read(authServiceProvider)
-            .signInWithEmail(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
+      final authService = ref.read(authServiceProvider);
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final user = _isLogin
+          ? await authService.signInWithEmail(email: email, password: password)
+          : await authService.registerWithEmail(
+              email: email,
+              password: password,
             );
-      } else {
-        user = await ref
-            .read(authServiceProvider)
-            .registerWithEmail(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
-            );
-      }
 
       if (user == null && mounted) {
         _showError(AppLocalizations.of(context)!.authErrorCouldNotAuth);
       }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_mapFirebaseError(e.code));
+    } on AuthException catch (e) {
+      if (mounted) _showError(_authErrorMessage(e));
     } catch (e) {
       if (mounted) {
         _showError(AppLocalizations.of(context)!.authErrorUnexpected);
@@ -108,8 +101,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (user == null && mounted) {
         return;
       }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_mapFirebaseError(e.code));
+    } on AuthException catch (e) {
+      if (mounted) _showError(_authErrorMessage(e));
     } on GoogleSignInException catch (e) {
       if (!mounted || e.code == GoogleSignInExceptionCode.canceled) return;
       _showError(AppLocalizations.of(context)!.authErrorGoogleSignInGeneric);
@@ -139,13 +132,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     try {
       await ref.read(authServiceProvider).sendPasswordResetEmail(email);
       if (mounted) _showError(l10n.authPasswordResetSent);
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      if (e.code == 'user-not-found') {
-        _showError(l10n.authPasswordResetSent);
-      } else {
-        _showError(_mapFirebaseError(e.code));
-      }
+    } on AuthException catch (e) {
+      if (mounted) _showError(_authErrorMessage(e));
     } catch (_) {
       if (mounted) _showError(l10n.authErrorUnexpected);
     } finally {
@@ -173,28 +161,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
-  String _mapFirebaseError(String code) {
+  String _authErrorMessage(AuthException error) {
     final l10n = AppLocalizations.of(context)!;
-    switch (code) {
-      case 'email-already-in-use':
-        return l10n.authErrorEmailInUse;
-      case 'invalid-email':
-        return l10n.authErrorInvalidEmail;
-      case 'weak-password':
-        return l10n.authErrorWeakPassword;
-      case 'user-not-found':
-        return l10n.authErrorUserNotFound;
-      case 'wrong-password':
-        return l10n.authErrorWrongPassword;
-      case 'invalid-credential':
-        return l10n.authErrorInvalidCredential;
-      case 'too-many-requests':
-        return l10n.authErrorTooManyRequests;
-      case 'account-exists-with-different-credential':
-        return l10n.authErrorAccountExistsWithDifferentCredential;
-      default:
-        return l10n.authErrorGeneric(code);
-    }
+    return switch (error.reason) {
+      AuthErrorReason.emailInUse => l10n.authErrorEmailInUse,
+      AuthErrorReason.invalidEmail => l10n.authErrorInvalidEmail,
+      AuthErrorReason.weakPassword => l10n.authErrorWeakPassword,
+      AuthErrorReason.userNotFound => l10n.authErrorUserNotFound,
+      AuthErrorReason.wrongPassword => l10n.authErrorWrongPassword,
+      AuthErrorReason.invalidCredential => l10n.authErrorInvalidCredential,
+      AuthErrorReason.tooManyRequests => l10n.authErrorTooManyRequests,
+      AuthErrorReason.accountExistsWithDifferentCredential =>
+        l10n.authErrorAccountExistsWithDifferentCredential,
+      AuthErrorReason.unknown => l10n.authErrorGeneric(error.code),
+    };
   }
 
   @override
