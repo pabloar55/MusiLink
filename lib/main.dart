@@ -15,6 +15,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/go_router_provider.dart';
@@ -488,7 +489,7 @@ class _MainAppState extends ConsumerState<MainApp> {
       if (next.asData != null &&
           previousUid != null &&
           previousUid != next.asData?.value?.uid) {
-        ref.read(chatServiceProvider).clearCache();
+        ref.read(sessionControllerProvider).discardUserState();
       }
       if (next.asData?.value != null) {
         ref.read(notificationServiceProvider).initialize().ignore();

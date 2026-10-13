@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 
 /// Excepción lanzada cuando el usuario selecciona una cuenta de Google
@@ -20,13 +19,11 @@ class AuthService {
     this._userService, {
     required this._auth,
     required this._googleSignIn,
-    required this._notificationService,
   });
 
   final UserService _userService;
   final FirebaseAuth _auth;
   final GoogleSignIn _googleSignIn;
-  final NotificationService _notificationService;
   static Future<void>? _googleInitialization;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _googleAuthSubscription;
 
@@ -168,19 +165,17 @@ class AuthService {
     return user;
   }
 
-  /// Cierra sesión de Firebase y Google.
-  /// Limpia los avisos locales. Limpia el FCM token por defecto; durante una
-  /// eliminación lo hace el backend porque la cuenta ya está congelada para
-  /// escrituras cliente.
-  Future<void> signOut({bool clearNotificationToken = true}) async {
+  /// Cierra sesión de Firebase y Google. Antes ejecuta [cleanups]: limpiezas
+  /// de la sesión saliente que necesitan sus credenciales, como el token FCM.
+  Future<void> signOut({
+    List<Future<void> Function()> cleanups = const [],
+  }) async {
     // Give remote cleanup a short window while Firestore still has credentials.
     // Neither a pending network operation nor error reporting may block the
     // local sign-out, and independent cleanup operations share the same window.
     try {
       await Future.wait([
-        _runSignOutCleanup(_notificationService.clearLocalNotifications),
-        if (clearNotificationToken)
-          _runSignOutCleanup(_notificationService.clearToken),
+        for (final cleanup in cleanups) _runSignOutCleanup(cleanup),
         _runSignOutCleanup(_signOutGoogle),
       ]);
     } finally {

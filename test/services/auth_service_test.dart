@@ -34,7 +34,6 @@ void main() {
       mockUserService,
       auth: mockAuth,
       googleSignIn: mockGoogleSignIn,
-      notificationService: mockNotificationService,
     );
   });
 
@@ -337,7 +336,6 @@ void main() {
           mockUserService,
           auth: mockAuth,
           googleSignIn: mockGoogleSignIn,
-          notificationService: mockNotificationService,
         );
         addTearDown(() async {
           await authService.dispose();
@@ -463,7 +461,6 @@ void main() {
           mockUserService,
           auth: mockAuth,
           googleSignIn: mockGoogleSignIn,
-          notificationService: mockNotificationService,
         );
         addTearDown(() async {
           await authService.dispose();
@@ -516,7 +513,6 @@ void main() {
             mockUserService,
             auth: mockAuth,
             googleSignIn: mockGoogleSignIn,
-            notificationService: mockNotificationService,
           );
           addTearDown(() async {
             await authService.dispose();
@@ -580,7 +576,12 @@ void main() {
             .thenAnswer((_) => googleCleanup.future);
         when(() => mockAuth.signOut()).thenAnswer((_) async {});
 
-        final signOut = authService.signOut();
+        final signOut = authService.signOut(
+          cleanups: [
+            mockNotificationService.clearLocalNotifications,
+            mockNotificationService.clearToken,
+          ],
+        );
         await Future<void>.delayed(Duration.zero);
         verify(() => mockNotificationService.clearToken()).called(1);
         verify(() => mockNotificationService.clearLocalNotifications())
@@ -602,7 +603,12 @@ void main() {
             .thenThrow(StateError('Google failed'));
         when(() => mockAuth.signOut()).thenAnswer((_) async {});
 
-        await authService.signOut();
+        await authService.signOut(
+          cleanups: [
+            mockNotificationService.clearLocalNotifications,
+            mockNotificationService.clearToken,
+          ],
+        );
 
         verify(() => mockAuth.signOut()).called(1);
       });
@@ -614,7 +620,15 @@ void main() {
         final failure = StateError('local sign-out failed');
         when(() => mockAuth.signOut()).thenThrow(failure);
 
-        await expectLater(authService.signOut(), throwsA(same(failure)));
+        await expectLater(
+          authService.signOut(
+            cleanups: [
+              mockNotificationService.clearLocalNotifications,
+              mockNotificationService.clearToken,
+            ],
+          ),
+          throwsA(same(failure)),
+        );
       });
 
       test('cierra sesión en Google y Firebase, limpia FCM token', () async {
@@ -624,19 +638,26 @@ void main() {
         when(() => mockNotificationService.clearToken())
             .thenAnswer((_) async {});
 
-        await authService.signOut();
+        await authService.signOut(
+          cleanups: [
+            mockNotificationService.clearLocalNotifications,
+            mockNotificationService.clearToken,
+          ],
+        );
 
         verify(() => mockNotificationService.clearToken()).called(1);
         verify(() => mockGoogleSignIn.signOut()).called(1);
         verify(() => mockAuth.signOut()).called(1);
       });
 
-      test('permite omitir la limpieza cliente del token FCM', () async {
+      test('ejecuta solo las limpiezas recibidas', () async {
         when(() => mockGoogleSignIn.initialize()).thenAnswer((_) async {});
         when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async {});
         when(() => mockAuth.signOut()).thenAnswer((_) async {});
 
-        await authService.signOut(clearNotificationToken: false);
+        await authService.signOut(
+          cleanups: [mockNotificationService.clearLocalNotifications],
+        );
 
         verifyNever(() => mockNotificationService.clearToken());
         verify(() => mockNotificationService.clearLocalNotifications())

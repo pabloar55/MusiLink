@@ -16,7 +16,15 @@ class SessionController {
   /// Cierra la sesión y descarta el estado del usuario saliente. Si el cierre
   /// falla, propaga el error y conserva el estado de la sesión.
   Future<void> signOut() async {
-    await _ref.read(authServiceProvider).signOut();
+    final notifications = _ref.read(notificationServiceProvider);
+    await _ref
+        .read(authServiceProvider)
+        .signOut(
+          cleanups: [
+            notifications.clearLocalNotifications,
+            notifications.clearToken,
+          ],
+        );
     _clearState();
   }
 
@@ -26,9 +34,12 @@ class SessionController {
   /// cliente ya está bloqueado por las reglas tras crear el job.
   Future<void> signOutAfterDeletionRequest() async {
     final authService = _ref.read(authServiceProvider);
+    final notifications = _ref.read(notificationServiceProvider);
     _clearState();
     try {
-      await authService.signOut(clearNotificationToken: false);
+      await authService.signOut(
+        cleanups: [notifications.clearLocalNotifications],
+      );
     } catch (error, stack) {
       reportError(error, stack).ignore();
       try {
@@ -37,7 +48,10 @@ class SessionController {
     }
   }
 
-  void _clearState() {
+  /// Descarta las cachés y el estado en memoria del usuario saliente. MainApp
+  /// lo invoca al cambiar el uid, de modo que también cubre las sesiones que
+  /// terminan sin pasar por este controlador (p. ej. una cuenta ya eliminada).
+  void discardUserState() {
     _ref.read(chatServiceProvider).clearCache();
     _ref.read(musicProfileServiceProvider).clearCache();
     _ref.read(userServiceProvider).clearCache();
@@ -45,7 +59,6 @@ class SessionController {
     _ref.read(pendingNotificationProvider.notifier).setValue(null);
     _ref.read(activeReactionPickerProvider.notifier).close();
 
-    _ref.invalidate(authStateProvider);
     _ref.invalidate(profilePhotoUploadProvider);
     _ref.invalidate(currentUserProvider);
     _ref.invalidate(userStreamProvider);
@@ -57,6 +70,11 @@ class SessionController {
     _ref.invalidate(chatsProvider);
     _ref.invalidate(unreadChatsCountProvider);
     _ref.invalidate(discoverProvider);
+  }
+
+  void _clearState() {
+    discardUserState();
+    _ref.invalidate(authStateProvider);
   }
 }
 

@@ -142,7 +142,6 @@ final authServiceProvider = Provider<AuthService>((ref) {
     ref.watch(userServiceProvider),
     auth: ref.watch(firebaseAuthProvider),
     googleSignIn: ref.watch(googleSignInProvider),
-    notificationService: ref.watch(notificationServiceProvider),
   );
   ref.onDispose(() => unawaited(service.dispose()));
   return service;

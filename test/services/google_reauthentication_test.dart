@@ -30,7 +30,6 @@ void main() {
       MockUserService(),
       auth: auth,
       googleSignIn: googleSignIn,
-      notificationService: MockNotificationService(),
     );
   });
 
