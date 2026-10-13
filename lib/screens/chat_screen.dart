@@ -8,6 +8,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/router/app_locations.dart';
+import 'package:musi_link/services/chat_composer_controller.dart';
 import 'package:musi_link/services/chat_history_controller.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
@@ -56,11 +57,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   UserService get userService => ref.read(userServiceProvider);
 
   bool get _isGroup => widget.group != null;
-  final _messageController = TextEditingController();
   final _inputFocusNode = FocusNode();
-
-  /// Mensaje al que responderá el próximo envío.
-  Message? _replyingTo;
 
   // Ir al mensaje citado: búsqueda en curso y resaltado.
   bool _isLocatingMessage = false;
@@ -68,6 +65,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _highlightTimer;
   final _scrollController = ScrollController(keepScrollOffset: false);
   late final ChatHistoryController _history;
+  late final ChatComposerController _composer;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
   ModalRoute<void>? _route;
@@ -120,8 +118,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       chatId: widget.chatId,
       onMessages: _onMessagesUpdated,
       onError: _onHistoryError,
-    )..addListener(_onHistoryChanged);
+    )..addListener(_rebuild);
     unawaited(_history.start());
+    _composer = ChatComposerController(
+      service: ref.read(chatServiceProvider),
+      chatId: widget.chatId,
+      onSent: _scrollToBottom,
+      onError: _showWriteError,
+    )..addListener(_rebuild);
     _scrollController.addListener(_onScroll);
   }
 
@@ -176,7 +180,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  void _onHistoryChanged() {
+  void _rebuild() {
     if (mounted) setState(() {});
   }
 
@@ -267,7 +271,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _history.dispose();
     _highlightTimer?.cancel();
     _scrollController.removeListener(_onScroll);
-    _messageController.dispose();
+    _composer.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -283,54 +287,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> _sendMessage() async {
+  void _sendMessage() {
     if (_isOtherUserDeleted || !_canInteractInChat) return;
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    final replyTo = _takeReply();
-    _messageController.clear();
-    try {
-      await ref
-          .read(chatServiceProvider)
-          .sendMessage(widget.chatId, text, replyTo: replyTo);
-    } catch (error) {
-      if (!mounted) return;
-      _restoreDraft(replyTo, text: text);
-      _showWriteError(error);
-      return;
-    }
-
-    // Scroll al final tras enviar
-    _scrollToBottom();
-  }
-
-  /// Un envío fallido devuelve su texto y su cita juntos, y solo si el
-  /// compositor sigue como quedó al enviar ([remaining]): un error tardío no
-  /// se mezcla con el texto o la cita de un borrador posterior.
-  void _restoreDraft(Message? replyTo, {String? text, String remaining = ''}) {
-    if (_replyingTo != null || _messageController.text != remaining) return;
-    if (text != null) {
-      _messageController.text = text;
-      _messageController.selection = TextSelection.collapsed(
-        offset: text.length,
-      );
-    }
-    if (replyTo != null) setState(() => _replyingTo = replyTo);
+    unawaited(_composer.sendText());
   }
 
   void _startReply(Message message) {
-    setState(() => _replyingTo = message);
+    _composer.startReply(message);
     _inputFocusNode.requestFocus();
-  }
-
-  void _cancelReply() => setState(() => _replyingTo = null);
-
-  /// La respuesta en curso se consume con el mensaje que la envía.
-  Message? _takeReply() {
-    final replyTo = _replyingTo;
-    if (replyTo != null && mounted) setState(() => _replyingTo = null);
-    return replyTo;
   }
 
   /// Lleva la lista hasta el mensaje citado y lo resalta un instante.
@@ -459,21 +423,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => TrackSearchSheet(
-        onTrackSelected: (track) async {
+        onTrackSelected: (track) {
           Navigator.of(context).pop();
-          // La canción no consume el texto que hubiera a medio escribir.
-          final remaining = _messageController.text;
-          final replyTo = _takeReply();
-          try {
-            await ref
-                .read(chatServiceProvider)
-                .sendTrackMessage(widget.chatId, track, replyTo: replyTo);
-            _scrollToBottom();
-          } catch (error) {
-            if (!mounted) return;
-            _restoreDraft(replyTo, remaining: remaining);
-            _showWriteError(error);
-          }
+          unawaited(_composer.sendTrack(track));
         },
       ),
     );
@@ -870,10 +822,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildInputBar({bool canSend = true}) {
-    final replyingTo = _replyingTo;
+    final replyingTo = _composer.replyingTo;
     final colorScheme = Theme.of(context).colorScheme;
     return ChatInputBar(
-      controller: _messageController,
+      controller: _composer.textController,
       focusNode: _inputFocusNode,
       canSend: canSend,
       onSend: _sendMessage,
@@ -887,7 +839,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               textColor: colorScheme.onSurfaceVariant,
               backgroundColor: colorScheme.surfaceContainerHighest,
               maxLines: 1,
-              onClose: _cancelReply,
+              onClose: _composer.cancelReply,
             ),
     );
   }
