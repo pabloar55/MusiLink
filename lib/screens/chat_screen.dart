@@ -9,7 +9,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/router/app_locations.dart';
-import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/chat_history_controller.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/message_reply.dart';
@@ -62,15 +62,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// Mensaje al que responderá el próximo envío.
   Message? _replyingTo;
 
-  // Ir al mensaje citado: búsqueda en curso, espera del historial y resaltado.
+  // Ir al mensaje citado: búsqueda en curso y resaltado.
   bool _isLocatingMessage = false;
-  ({String messageId, Completer<bool?> loaded})? _awaitedMessage;
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   final _scrollController = ScrollController(keepScrollOffset: false);
-  StreamSubscription<List<Message>>? _messagesSubscription;
-  DateTime? _oldestLiveTimestamp;
-  int _messagesGeneration = 0;
+  late final ChatHistoryController _history;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
   ModalRoute<void>? _route;
@@ -79,18 +76,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _isRouteVisible = true;
   bool _isAppResumed = true;
 
-  /// Timestamp de borrado suave derivado del documento del chat en Firestore.
-  /// Se restaura junto al historial y se comprueba en _initMessagesStream.
-  DateTime? _deletedSince;
-
   bool _isOtherUserDeleted = false;
-
-  // Paginación: lista única de mensajes acumulados.
-  List<Message> _allMessages = [];
-  bool _isInitialLoading = true;
-  bool _hasReceivedMessages = false;
-  bool _isLoadingMore = false;
-  bool _hasMoreMessages = true;
   bool _isAtBottom = true;
 
   /// UID of the authenticated user from the Riverpod provider.
@@ -130,14 +116,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (!mounted) return;
       setState(() => _isOtherUserDeleted = user?.isDeleted ?? false);
     });
-    final cached = ref
-        .read(chatServiceProvider)
-        .getCachedMessages(widget.chatId);
-    if (cached != null) {
-      _allMessages = cached;
-      _isInitialLoading = false;
-    }
-    unawaited(_initMessagesStream());
+    _history = ChatHistoryController(
+      service: ref.read(chatServiceProvider),
+      chatId: widget.chatId,
+      onMessages: _onMessagesUpdated,
+      onError: _onHistoryError,
+    )..addListener(_onHistoryChanged);
+    unawaited(_history.start());
     _scrollController.addListener(_onScroll);
   }
 
@@ -192,84 +177,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  /// El historial persistido incluye el filtro de borrado: permite escuchar
-  /// inmediatamente y comprobar el documento actualizado en segundo plano.
-  Future<void> _initMessagesStream() async {
-    final service = ref.read(chatServiceProvider);
-    final history = service.getCachedHistory(widget.chatId);
-    final startedFromCache = history != null;
-    if (history != null) {
-      _deletedSince = history.since;
-      _listenToMessages();
-    }
-
-    final DateTime? verifiedSince;
-    try {
-      verifiedSince = await service.getDeletedSince(widget.chatId);
-    } catch (_) {
-      if (!mounted || startedFromCache) return;
-      setState(() => _isInitialLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
-      );
-      _leaveChat();
-      return;
-    }
-    if (!mounted) return;
-    if (startedFromCache && verifiedSince == _deletedSince) return;
-
-    final cached = service.getCachedMessages(widget.chatId);
-    setState(() {
-      _deletedSince = verifiedSince;
-      _hasReceivedMessages = false;
-      _isLoadingMore = false;
-      _hasMoreMessages = true;
-      _allMessages = cached ?? [];
-      if (cached != null || startedFromCache) _isInitialLoading = false;
-    });
-    _listenToMessages();
+  void _onHistoryChanged() {
+    if (mounted) setState(() {});
   }
 
-  void _listenToMessages({DateTime? from, bool completesPagination = false}) {
-    final generation = ++_messagesGeneration;
-    var awaitingPage = completesPagination;
-    _oldestLiveTimestamp = from;
-    _messagesSubscription?.cancel();
-    final stream = ref
-        .read(chatServiceProvider)
-        .getMessages(widget.chatId, since: _deletedSince, from: from);
-    _messagesSubscription = stream.listen(
-      (messages) {
-        if (!mounted || generation != _messagesGeneration) return;
-        if (awaitingPage) {
-          awaitingPage = false;
-          _isLoadingMore = false;
-        }
-        _onMessagesUpdated(messages);
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!mounted || generation != _messagesGeneration) return;
-        _awaitedMessage?.loaded.complete(null);
-        _awaitedMessage = null;
-        setState(() {
-          if (awaitingPage) _hasMoreMessages = true;
-          awaitingPage = false;
-          _isInitialLoading = false;
-          _isLoadingMore = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.genericError)),
-        );
-      },
-    );
+  void _onHistoryError({required bool unavailable}) {
+    if (!mounted) return;
+    _showWriteError(null);
+    if (unavailable) _leaveChat();
   }
 
-  void _onMessagesUpdated(List<Message> streamMessages) {
+  /// Reacciona a cada actualización del historial: lectura y desplazamiento.
+  void _onMessagesUpdated({required bool isFirst}) {
     if (!mounted) return;
-    final isFirst = !_hasReceivedMessages;
-    final confirmed = streamMessages.where((message) => !message.isPending);
+    final messages = _history.messages;
+    final confirmed = messages.where((message) => !message.isPending);
     final latestTimestamp = confirmed.isEmpty ? null : confirmed.last.timestamp;
-    final lastVisibleId = streamMessages.lastOrNull?.id;
+    final lastVisibleId = messages.lastOrNull?.id;
     final shouldScroll =
         lastVisibleId != null && lastVisibleId != _lastVisibleMessageId;
     _lastVisibleMessageId = lastVisibleId;
@@ -277,22 +201,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         latestTimestamp != null &&
         (_lastSeenTimestamp == null ||
             latestTimestamp.isAfter(_lastSeenTimestamp!));
-    setState(() {
-      _allMessages = streamMessages;
-      _isInitialLoading = false;
-      _hasReceivedMessages =
-          streamMessages.isEmpty ||
-          streamMessages.any((message) => !message.isPending);
-      // Si la primera carga tiene menos del límite de página, no hay mensajes más antiguos.
-      if (isFirst) {
-        _hasMoreMessages = confirmed.length >= ChatService.messagesPageSize;
-      }
-    });
-    // Fijar el límite por timestamp evita que los mensajes ya visibles salgan
-    // de la consulta de 30 al llegar mensajes nuevos y dejen de actualizarse.
-    if (_oldestLiveTimestamp == null && confirmed.isNotEmpty) {
-      _listenToMessages(from: confirmed.first.timestamp);
-    }
     if (hasNewMessages) {
       _lastSeenTimestamp = latestTimestamp;
       if (_canMarkMessagesRead && _canInteractInChat) {
@@ -303,17 +211,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Los envíos locales también desplazan la lista inmediatamente.
       _scrollToBottom(animate: !isFirst);
     }
-    final awaited = _awaitedMessage;
-    if (awaited != null && _indexOfMessage(awaited.messageId) >= 0) {
-      _awaitedMessage = null;
-      awaited.loaded.complete(true);
-    }
   }
 
   void _markMessagesAsRead() {
     final service = ref.read(chatServiceProvider);
     if (_isGroup) {
-      final latest = _allMessages
+      final latest = _history.messages
           .where((message) => !message.isPending)
           .lastOrNull;
       if (latest != null) {
@@ -359,8 +262,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _activeChatNotifier.clearChat(widget.chatId);
     });
-    _messagesSubscription?.cancel();
-    _awaitedMessage?.loaded.complete(null);
+    _history.dispose();
     _highlightTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _messageController.dispose();
@@ -373,47 +275,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     _isAtBottom = pos.pixels <= pos.minScrollExtent + 80;
-    if (pos.pixels >= pos.maxScrollExtent - 100 &&
-        !_isLoadingMore &&
-        _hasMoreMessages) {
-      _loadMoreMessages();
-    }
-  }
-
-  Future<void> _loadMoreMessages() async {
-    if (!_hasReceivedMessages || _allMessages.isEmpty) return;
-    final cursor = _allMessages.first.timestamp;
-    final generation = _messagesGeneration;
-
-    setState(() => _isLoadingMore = true);
-
-    try {
-      final older = await ref
-          .read(chatServiceProvider)
-          .loadOlderMessages(
-            widget.chatId,
-            before: cursor,
-            since: _deletedSince,
-          );
-
-      if (!mounted || generation != _messagesGeneration) return;
-
-      if (older.isEmpty) {
-        setState(() {
-          _isLoadingMore = false;
-          _hasMoreMessages = false;
-        });
-        return;
-      }
-
-      if (older.length < ChatService.messagesPageSize) {
-        _hasMoreMessages = false;
-      }
-      // La nueva suscripción reemplaza toda la ventana, incluidas reacciones,
-      // lecturas y borrados. Mantener el offset: reverse añade al extremo alto.
-      _listenToMessages(from: older.first.timestamp, completesPagination: true);
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingMore = false);
+    // La página nueva mantiene el offset: reverse añade al extremo alto.
+    if (pos.pixels >= pos.maxScrollExtent - 100) {
+      unawaited(_history.loadMore());
     }
   }
 
@@ -472,9 +336,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return replyTo;
   }
 
-  int _indexOfMessage(String messageId) =>
-      _allMessages.indexWhere((message) => message.id == messageId);
-
   /// Lleva la lista hasta el mensaje citado y lo resalta un instante.
   Future<void> _showOriginalMessage(MessageReply reply) async {
     if (_isLocatingMessage) return;
@@ -482,9 +343,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context)!;
     try {
-      final loaded = _indexOfMessage(reply.messageId) >= 0
+      final loaded = _history.indexOf(reply.messageId) >= 0
           ? true
-          : await _loadHistoryThrough(reply.messageId);
+          : await _history.loadThrough(reply.messageId);
       // Sin resultado, el error ya se ha mostrado.
       if (!mounted || loaded == null) return;
       if (loaded && await _scrollToMessage(reply.messageId)) {
@@ -498,50 +359,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } finally {
       _isLocatingMessage = false;
     }
-  }
-
-  /// Amplía el historial en vivo hasta un mensaje anterior al cargado.
-  /// Devuelve false si ya no existe o quedó fuera del historial del usuario,
-  /// y null si la carga falla.
-  Future<bool?> _loadHistoryThrough(String messageId) async {
-    setState(() => _isLoadingMore = true);
-    final Message? original;
-    try {
-      original = await ref
-          .read(chatServiceProvider)
-          .getMessage(widget.chatId, messageId);
-    } catch (_) {
-      if (!mounted) return null;
-      setState(() => _isLoadingMore = false);
-      _showWriteError(null);
-      return null;
-    }
-    if (!mounted) return null;
-    // Una página cargada entretanto puede haberlo traído ya.
-    if (_indexOfMessage(messageId) >= 0) {
-      setState(() => _isLoadingMore = false);
-      return true;
-    }
-    final since = _deletedSince;
-    if (original == null ||
-        (since != null && !original.timestamp.isAfter(since))) {
-      setState(() => _isLoadingMore = false);
-      return false;
-    }
-
-    final loaded = Completer<bool?>();
-    _awaitedMessage = (messageId: messageId, loaded: loaded);
-    _listenToMessages(from: original.timestamp, completesPagination: true);
-    return loaded.future.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        _awaitedMessage = null;
-        if (!mounted) return null;
-        setState(() => _isLoadingMore = false);
-        _showWriteError(null);
-        return null;
-      },
-    );
   }
 
   /// Los mensajes tienen altura variable y solo se construyen los cercanos a
@@ -565,11 +382,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return mounted;
       }
 
-      final index = _indexOfMessage(messageId);
+      final messages = _history.messages;
+      final index = _history.indexOf(messageId);
       int? oldestBuilt;
       int? newestBuilt;
-      for (var i = 0; i < _allMessages.length; i++) {
-        if (_MessageKey(this, _allMessages[i].id).currentContext == null) {
+      for (var i = 0; i < messages.length; i++) {
+        if (_MessageKey(this, messages[i].id).currentContext == null) {
           continue;
         }
         oldestBuilt ??= i;
@@ -738,7 +556,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (!couldInteract &&
             canInteractNow &&
             _canMarkMessagesRead &&
-            _allMessages.isNotEmpty) {
+            _history.messages.isNotEmpty) {
           _markMessagesAsRead();
         }
       });
@@ -853,11 +671,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     AppLocalizations l10n,
     bool canInteract,
   ) {
-    if (_isInitialLoading) {
+    if (_history.isInitialLoading) {
       return const SkeletonShimmer(child: SkeletonChatMessages());
     }
 
-    if (_allMessages.isEmpty) {
+    final messages = _history.messages;
+    if (messages.isEmpty) {
       return Center(
         child: Text(
           l10n.chatSendFirst,
@@ -868,7 +687,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     return Column(
       children: [
-        if (_isLoadingMore)
+        if (_history.isLoadingMore)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: SizedBox(
@@ -882,24 +701,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             controller: _scrollController,
             reverse: true,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: _allMessages.length,
+            itemCount: messages.length,
             itemBuilder: (context, index) {
-              final messageIndex = _allMessages.length - 1 - index;
-              final msg = _allMessages[messageIndex];
+              final messageIndex = messages.length - 1 - index;
+              final msg = messages[messageIndex];
               final isMe = msg.senderId == _currentUid;
               final showDateSeparator =
                   messageIndex == 0 ||
                   !_isSameCalendarDay(
                     msg.timestamp,
-                    _allMessages[messageIndex - 1].timestamp,
+                    messages[messageIndex - 1].timestamp,
                   );
               // Mensajes seguidos de una misma persona en el mismo día forman
               // un bloque: nombre en el primero y foto en el último.
               final startsSenderRun =
                   showDateSeparator ||
-                  _allMessages[messageIndex - 1].senderId != msg.senderId;
-              final next = messageIndex + 1 < _allMessages.length
-                  ? _allMessages[messageIndex + 1]
+                  messages[messageIndex - 1].senderId != msg.senderId;
+              final next = messageIndex + 1 < messages.length
+                  ? messages[messageIndex + 1]
                   : null;
               final endsSenderRun =
                   next == null ||
