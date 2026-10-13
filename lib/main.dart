@@ -194,7 +194,8 @@ void main() async {
     functions: FirebaseFunctions.instanceFor(region: 'europe-southwest1'),
     messageCache: ChatMessageCache(prefs),
   );
-  // El hash contiene la ruta de notificación al arrancar la PWA.
+  // En web el hash contiene la ruta con la que arranca la app: la de una
+  // notificación o la de un enlace compartido.
   final initialLocation =
       notificationLocation ??
       (kIsWeb && Uri.base.fragment.startsWith('/') ? Uri.base.fragment : null);
@@ -227,9 +228,10 @@ void main() async {
           localLaunch != null,
         ),
         routerBootstrapStateProvider.overrideWithValue(routerBootstrapState),
-        initialRouterLocationProvider.overrideWithValue(
-          notificationLocation ?? '/',
-        ),
+        // Las pantallas previas al router (instalación de la PWA,
+        // actualización obligatoria) dejan la URL en `/`, así que el router no
+        // puede leer de ella la ruta inicial al crearse después.
+        initialRouterLocationProvider.overrideWithValue(initialLocation ?? '/'),
       ],
       child: const AppBootstrap(),
     ),

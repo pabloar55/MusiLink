@@ -105,6 +105,12 @@ pendientes o alta sin terminar), `appRedirect` guarda el enlace en
 memoria: no sobrevive a recargar la página, a cerrar la app ni a instalarla
 desde Google Play.
 
+En iOS, Safari muestra antes la pantalla de instalación de la PWA, que no usa
+el router y deja la URL en `/`. `main.dart` lee la ruta del hash al arrancar y
+se la entrega al router (`initialRouterLocationProvider`), de modo que
+«Continuar en el navegador» abre el enlace original. Instalar la PWA desde esa
+pantalla sí lo pierde: se abre en su `start_url` con un almacenamiento propio.
+
 En Android, la app instalada abre `/u/` directamente mediante App Links
 (`intent-filter` con `autoVerify` en `AndroidManifest.xml`). La verificación usa
 `https://musilink.app/.well-known/assetlinks.json`, que Hosting sirve desde
