@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +10,7 @@ import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/service_error_snackbar.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:go_router/go_router.dart';
@@ -114,21 +114,9 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
       if (mounted) {
         setState(() => _relationships[uid] = rel);
       }
-    } on FirebaseException catch (e) {
-      if (mounted) _showWriteError(e);
-    } catch (_) {
-      if (mounted) _showWriteError(null);
+    } catch (error) {
+      if (mounted) showServiceError(context, error);
     }
-  }
-
-  void _showWriteError(FirebaseException? error) {
-    final l10n = AppLocalizations.of(context)!;
-    final message = error?.code == 'resource-exhausted'
-        ? l10n.authErrorTooManyRequests
-        : l10n.genericError;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _cancelRequest(String uid, String requestId) async {

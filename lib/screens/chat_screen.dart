@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
@@ -27,6 +26,7 @@ import 'package:musi_link/widgets/chat/track_bubble.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/report_reason_dialog.dart';
+import 'package:musi_link/widgets/service_error_snackbar.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';
@@ -292,15 +292,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       await ref
           .read(chatServiceProvider)
           .sendMessage(widget.chatId, text, replyTo: replyTo);
-    } on FirebaseException catch (e) {
+    } catch (error) {
       if (!mounted) return;
       _restoreDraft(replyTo, text: text);
-      _showWriteError(e);
-      return;
-    } catch (_) {
-      if (!mounted) return;
-      _restoreDraft(replyTo, text: text);
-      _showWriteError(null);
+      _showWriteError(error);
       return;
     }
 
@@ -426,16 +421,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  void _showWriteError(FirebaseException? error) {
+  void _showWriteError(Object? error) {
     final l10n = AppLocalizations.of(context)!;
-    final message = switch (error?.code) {
-      'permission-denied' =>
-        _isGroup ? l10n.groupChatCannotSend : l10n.chatNotFriendsCannotSend,
-      'resource-exhausted' => l10n.authErrorTooManyRequests,
-      _ => l10n.genericError,
-    };
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showServiceError(
+      context,
+      error,
+      notAllowedMessage: _isGroup
+          ? l10n.groupChatCannotSend
+          : l10n.chatNotFriendsCannotSend,
+    );
   }
 
   void _scrollToBottom({bool animate = true}) {
@@ -473,14 +467,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 .read(chatServiceProvider)
                 .sendTrackMessage(widget.chatId, track, replyTo: replyTo);
             _scrollToBottom();
-          } on FirebaseException catch (e) {
+          } catch (error) {
             if (!mounted) return;
             _restoreDraft(replyTo, remaining: remaining);
-            _showWriteError(e);
-          } catch (_) {
-            if (!mounted) return;
-            _restoreDraft(replyTo, remaining: remaining);
-            _showWriteError(null);
+            _showWriteError(error);
           }
         },
       ),
@@ -510,16 +500,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
         ),
       );
-    } on FirebaseException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      final text = error.code == 'resource-exhausted'
-          ? l10n.authErrorTooManyRequests
-          : l10n.reportSubmitError;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.reportSubmitError)));
+      showServiceError(context, error, fallbackMessage: l10n.reportSubmitError);
     }
   }
 

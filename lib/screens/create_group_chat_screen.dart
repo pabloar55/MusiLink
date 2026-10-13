@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +13,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
@@ -295,9 +295,7 @@ class _AddGroupMembersScreenState extends ConsumerState<AddGroupMembersScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error =
-            error is FirebaseFunctionsException &&
-                error.code == 'resource-exhausted'
+        _error = error is RateLimitedException
             ? l10n.authErrorTooManyRequests
             : l10n.groupChatAddMembersError;
       });
@@ -479,8 +477,7 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
       setState(() {
         _error = error is TimeoutException || isNetworkError(error)
             ? l10n.groupChatConnectionError
-            : error is FirebaseFunctionsException &&
-                  error.code == 'resource-exhausted'
+            : error is RateLimitedException
             ? l10n.authErrorTooManyRequests
             : l10n.groupChatCreateError;
       });

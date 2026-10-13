@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
@@ -48,7 +49,7 @@ class FriendService with AuthenticatedService {
       await callable.call<void>({'receiverId': receiverUid});
     } catch (e, stack) {
       if (!isRateLimitError(e)) await reportError(e, stack);
-      rethrow;
+      Error.throwWithStackTrace(toServiceException(e), stack);
     }
   }
 

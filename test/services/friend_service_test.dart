@@ -1,10 +1,10 @@
 // ignore_for_file: subtype_of_sealed_class, unnecessary_lambdas, avoid_redundant_argument_values
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 
 import '../helpers/mocks.dart';
 
@@ -286,10 +286,10 @@ void main() {
         expect(
           () => friendService.sendRequest('receiver_uid'),
           throwsA(
-            isA<FirebaseFunctionsException>().having(
-              (error) => error.code,
-              'code',
-              'resource-exhausted',
+            isA<RateLimitedException>().having(
+              (error) => error.cause,
+              'cause',
+              same(exception),
             ),
           ),
         );

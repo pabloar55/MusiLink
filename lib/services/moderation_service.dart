@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 
 enum ReportReason {
   spam('spam'),
@@ -39,9 +40,13 @@ class ModerationService {
   });
 
   Future<bool> _submit(Map<String, dynamic> payload) async {
-    final result = await _functions
-        .httpsCallable('submitModerationReport')
-        .call<Map<String, dynamic>>(payload);
-    return result.data['created'] == true;
+    try {
+      final result = await _functions
+          .httpsCallable('submitModerationReport')
+          .call<Map<String, dynamic>>(payload);
+      return result.data['created'] == true;
+    } catch (error, stack) {
+      Error.throwWithStackTrace(toServiceException(error), stack);
+    }
   }
 }

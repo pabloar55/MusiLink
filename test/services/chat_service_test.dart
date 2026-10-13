@@ -10,6 +10,7 @@ import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/mocks.dart';
@@ -748,6 +749,31 @@ void main() {
           throwsA(same(exception)),
         );
       });
+
+      for (final (code, domainError) in [
+        ('resource-exhausted', isA<RateLimitedException>()),
+        ('permission-denied', isA<NotAllowedException>()),
+      ]) {
+        test('traduce $code a un error de dominio', () async {
+          final exception = MockFirebaseFunctionsException();
+          when(() => exception.code).thenReturn(code);
+          when(() => mockSendMessageCallable.call<void>(any()))
+              .thenThrow(exception);
+          final mockChatDocRef = MockDocumentReference();
+          final mockMessagesCol = MockMessagesCollectionRef();
+          final mockMsgDocRef = MockDocumentReference();
+          when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
+          when(() => mockChatDocRef.collection('messages'))
+              .thenReturn(mockMessagesCol);
+          when(() => mockMessagesCol.doc()).thenReturn(mockMsgDocRef);
+          when(() => mockMsgDocRef.id).thenReturn('abcdefghijklmnopqrst');
+
+          expect(
+            () => chatService.sendMessage('chat_123', 'Hello!'),
+            throwsA(domainError),
+          );
+        });
+      }
     });
 
     group('sendDailySongReply', () {

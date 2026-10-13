@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -23,6 +22,7 @@ import 'package:musi_link/widgets/profile/profile_header.dart';
 import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 import 'package:musi_link/widgets/remove_friend_dialog.dart';
 import 'package:musi_link/widgets/report_reason_dialog.dart';
+import 'package:musi_link/widgets/service_error_snackbar.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -86,22 +86,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       await ref.read(friendServiceProvider).sendRequest(widget.user.uid);
       if (!mounted) return;
       ref.invalidate(relationshipProvider(widget.user.uid));
-    } on FirebaseException catch (e) {
-      if (mounted) _showWriteError(e);
-      rethrow;
-    } catch (_) {
-      if (mounted) _showWriteError(null);
+    } catch (error) {
+      if (mounted) showServiceError(context, error);
       rethrow;
     }
-  }
-
-  void _showWriteError(FirebaseException? error) {
-    final l10n = AppLocalizations.of(context)!;
-    final message = error?.code == 'resource-exhausted'
-        ? l10n.authErrorTooManyRequests
-        : l10n.genericError;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _acceptRequest(String requestId) async {
@@ -149,7 +137,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         ),
       );
     } catch (_) {
-      if (mounted) _showWriteError(null);
+      if (mounted) showServiceError(context, null);
     }
   }
 
@@ -171,7 +159,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         ),
       );
     } catch (_) {
-      if (mounted) _showWriteError(null);
+      if (mounted) showServiceError(context, null);
     }
   }
 
@@ -194,17 +182,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           ),
         ),
       );
-    } on FirebaseException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      final message = error.code == 'resource-exhausted'
-          ? l10n.authErrorTooManyRequests
-          : l10n.reportSubmitError;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.reportSubmitError)));
+      showServiceError(context, error, fallbackMessage: l10n.reportSubmitError);
     }
   }
 

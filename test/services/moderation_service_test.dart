@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/services/moderation_service.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 
 import '../helpers/mocks.dart';
 
@@ -66,5 +67,18 @@ void main() {
       'chatId': 'alice_bob',
       'messageId': 'message-1',
     });
+  });
+
+  test('traduce el límite de peticiones y propaga los demás errores', () async {
+    Future<bool> report() =>
+        service.reportProfile(reportedUserId: 'bob', reason: ReportReason.spam);
+    final throttled = MockFirebaseFunctionsException();
+    when(() => throttled.code).thenReturn('resource-exhausted');
+    when(() => callable.call<Map<String, dynamic>>(any())).thenThrow(throttled);
+    await expectLater(report(), throwsA(isA<RateLimitedException>()));
+
+    final failure = StateError('offline');
+    when(() => callable.call<Map<String, dynamic>>(any())).thenThrow(failure);
+    await expectLater(report(), throwsA(same(failure)));
   });
 }

@@ -16,6 +16,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:musi_link/widgets/chat/reply_quote.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
@@ -388,6 +389,27 @@ void main() {
       findsOneWidget,
     );
     expect(_isOnScreen(tester, 'Answer'), isTrue);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a rejected send explains why it failed', (tester) async {
+    final service = await _pumpChat(tester, [_incoming('first', 'First')]);
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    Object rejection = const NotAllowedException('denied');
+    when(
+      () =>
+          service.sendMessage('chat-1', any(), replyTo: any(named: 'replyTo')),
+    ).thenAnswer((_) async => throw rejection);
+
+    await _send(tester, 'Answer');
+    expect(find.text(l10n.chatNotFriendsCannotSend), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    rejection = const RateLimitedException('throttled');
+    await _send(tester, 'Answer');
+    expect(find.text(l10n.authErrorTooManyRequests), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });

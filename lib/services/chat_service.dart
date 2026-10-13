@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
+import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/models/app_user.dart';
@@ -200,7 +201,7 @@ class ChatService with AuthenticatedService {
       );
     } catch (error, stack) {
       reportError(error, stack).ignore();
-      rethrow;
+      Error.throwWithStackTrace(toServiceException(error), stack);
     }
   }
 
@@ -217,7 +218,7 @@ class ChatService with AuthenticatedService {
           .timeout(const Duration(seconds: 30));
     } catch (error, stack) {
       reportError(error, stack).ignore();
-      rethrow;
+      Error.throwWithStackTrace(toServiceException(error), stack);
     }
   }
 
@@ -593,7 +594,7 @@ class ChatService with AuthenticatedService {
       pending.remove(messageId);
       _outgoingChanges.add(key);
       if (!isRateLimitError(e)) await reportError(e, stack);
-      rethrow;
+      Error.throwWithStackTrace(toServiceException(e), stack);
     }
   }
 
