@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 
@@ -54,7 +55,16 @@ class DiscoverNotifier extends Notifier<DiscoverState> {
   int _visibilityRevision = 0;
 
   @override
-  DiscoverState build() => const DiscoverState(isLoading: true);
+  DiscoverState build() {
+    ref.watch(sessionScopeProvider);
+    // El notifier sobrevive a la reconstrucción: al descartar la sesión olvida
+    // los ocultos y deja sin efecto las cargas en curso del usuario saliente.
+    ref.onDispose(() {
+      _hiddenUserIds.clear();
+      _visibilityRevision++;
+    });
+    return const DiscoverState(isLoading: true);
+  }
 
   void hideBlockedUser(String uid) {
     _visibilityRevision++;

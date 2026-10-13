@@ -6,6 +6,7 @@ import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/account_deletion_service.dart';
 import 'package:musi_link/services/app_invite_service.dart';
@@ -26,7 +27,10 @@ import 'package:musi_link/services/user_service.dart';
 
 class ActiveChatNotifier extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() {
+    ref.watch(sessionScopeProvider);
+    return null;
+  }
 
   void setChat(String? chatId) {
     if (!ref.mounted) return;
@@ -47,7 +51,10 @@ final activeChatIdProvider = NotifierProvider<ActiveChatNotifier, String?>(
 
 class PendingNotificationNotifier extends Notifier<Map<String, dynamic>?> {
   @override
-  Map<String, dynamic>? build() => null;
+  Map<String, dynamic>? build() {
+    ref.watch(sessionScopeProvider);
+    return null;
+  }
 
   void setValue(Map<String, dynamic>? data) {
     state = data;
@@ -181,7 +188,10 @@ final Provider<MusicProfileService> musicProfileServiceProvider =
 /// ID del mensaje cuyo reaction picker está abierto; null = ninguno.
 class ActiveReactionPickerNotifier extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() {
+    ref.watch(sessionScopeProvider);
+    return null;
+  }
 
   void open(String messageId) => state = messageId;
   void close() => state = null;

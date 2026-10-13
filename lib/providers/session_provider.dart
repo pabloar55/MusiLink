@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
-import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/providers/user_profile_provider.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 
 /// Punto único de cierre de sesión. Vive en un provider para que la limpieza
@@ -51,25 +49,12 @@ class SessionController {
   /// Descarta las cachés y el estado en memoria del usuario saliente. MainApp
   /// lo invoca al cambiar el uid, de modo que también cubre las sesiones que
   /// terminan sin pasar por este controlador (p. ej. una cuenta ya eliminada).
+  /// Las cachés se vacían antes de que los providers se reconstruyan.
   void discardUserState() {
     _ref.read(chatServiceProvider).clearCache();
     _ref.read(musicProfileServiceProvider).clearCache();
     _ref.read(userServiceProvider).clearCache();
-    _ref.read(activeChatIdProvider.notifier).setChat(null);
-    _ref.read(pendingNotificationProvider.notifier).setValue(null);
-    _ref.read(activeReactionPickerProvider.notifier).close();
-
-    _ref.invalidate(profilePhotoUploadProvider);
-    _ref.invalidate(currentUserProvider);
-    _ref.invalidate(userStreamProvider);
-    _ref.invalidate(compatibilityProvider);
-    _ref.invalidate(relationshipProvider);
-    _ref.invalidate(receivedRequestsProvider);
-    _ref.invalidate(sentRequestsProvider);
-    _ref.invalidate(friendsStreamProvider);
-    _ref.invalidate(chatsProvider);
-    _ref.invalidate(unreadChatsCountProvider);
-    _ref.invalidate(discoverProvider);
+    _ref.read(sessionScopeProvider.notifier).reset();
   }
 
   void _clearState() {

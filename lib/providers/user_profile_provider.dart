@@ -3,6 +3,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
 
 final currentUserProvider = StreamProvider<AppUser?>((ref) {
@@ -16,6 +17,7 @@ final currentUserProvider = StreamProvider<AppUser?>((ref) {
 });
 
 final userStreamProvider = StreamProvider.family<AppUser?, String>((ref, uid) {
+  ref.watch(sessionScopeProvider);
   return ref.read(userServiceProvider).watchUser(uid);
 });
 
@@ -49,5 +51,6 @@ final relationshipProvider = StreamProvider.family<RelationshipResult, String>((
   ref,
   userUid,
 ) {
+  ref.watch(sessionScopeProvider);
   return ref.read(friendServiceProvider).watchRelationship(userUid);
 });

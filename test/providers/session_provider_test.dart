@@ -4,8 +4,10 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_provider.dart';
+import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 
 import '../helpers/mocks.dart';
@@ -15,6 +17,8 @@ class MockAuthService extends Mock implements AuthService {}
 class MockChatService extends Mock implements ChatService {}
 
 class MockMusicProfileService extends Mock implements MusicProfileService {}
+
+class MockFriendService extends Mock implements FriendService {}
 
 void main() {
   late MockAuthService authService;
@@ -129,6 +133,55 @@ void main() {
 
       verify(() => firebaseAuth.signOut()).called(1);
       verifyCachesCleared();
+    });
+  });
+
+  group('SessionController.discardUserState', () {
+    test('reinicia el estado ligado a la sesión tras vaciar las cachés', () {
+      final friendService = MockFriendService();
+      when(() => userService.watchUser('bob'))
+          .thenAnswer((_) => const Stream.empty());
+      when(() => friendService.watchRelationship('bob'))
+          .thenAnswer((_) => const Stream.empty());
+      final container = ProviderContainer(
+        overrides: [
+          chatServiceProvider.overrideWithValue(chatService),
+          musicProfileServiceProvider.overrideWithValue(musicProfileService),
+          userServiceProvider.overrideWithValue(userService),
+          friendServiceProvider.overrideWithValue(friendService),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(userStreamProvider('bob'), (_, _) {});
+      container.listen(relationshipProvider('bob'), (_, _) {});
+      container.read(activeChatIdProvider.notifier).setChat('chat_1');
+      container.read(pendingNotificationProvider.notifier).setValue({
+        'chatId': 'chat_1',
+      });
+      container.read(activeReactionPickerProvider.notifier).open('message_1');
+
+      container.read(sessionControllerProvider).discardUserState();
+
+      expect(container.read(activeChatIdProvider), isNull);
+      expect(container.read(pendingNotificationProvider), isNull);
+      expect(container.read(activeReactionPickerProvider), isNull);
+      container.read(userStreamProvider('bob'));
+      container.read(relationshipProvider('bob'));
+      verifyInOrder([
+        () => userService.watchUser('bob'),
+        () => userService.clearCache(),
+        () => userService.watchUser('bob'),
+      ]);
+      verify(() => friendService.watchRelationship('bob')).called(2);
+    });
+
+    test('conserva el estado fijado después del descarte', () {
+      container.read(activeChatIdProvider.notifier).setChat('chat_1');
+
+      container.read(sessionControllerProvider).discardUserState();
+      container.read(activeChatIdProvider.notifier).setChat('chat_2');
+
+      expect(container.read(activeChatIdProvider), 'chat_2');
     });
   });
 }

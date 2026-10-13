@@ -7,6 +7,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 
 class _MockMusicProfileService extends Mock implements MusicProfileService {}
@@ -104,7 +105,7 @@ void main() {
       final loadMore = notifier.loadMore();
 
       notifier.hideBlockedUser('blocked');
-    pending.complete((const <DiscoveryResult>[], false));
+      pending.complete((const <DiscoveryResult>[], false));
       await loadMore;
 
       final state = container.read(discoverProvider);
@@ -113,4 +114,30 @@ void main() {
       expect(state.isLoadingMore, isFalse);
     },
   );
+
+  test('a session reset forgets hidden users and in-flight reads', () async {
+    final notifier = container.read(discoverProvider.notifier);
+    when(() => service.readStoredDiscoveryUsers())
+        .thenAnswer((_) async => [blocked, visible]);
+    await notifier.refresh();
+    notifier.hideBlockedUser('blocked');
+
+    final pending = Completer<List<DiscoveryResult>>();
+    when(() => service.readStoredDiscoveryUsers())
+        .thenAnswer((_) => pending.future);
+    final refresh = notifier.refresh();
+
+    container.read(sessionScopeProvider.notifier).reset();
+    pending.complete([visible]);
+    await refresh;
+
+    final state = container.read(discoverProvider);
+    expect(state.results, isEmpty);
+    expect(state.isLoading, isTrue);
+
+    when(() => service.readStoredDiscoveryUsers())
+        .thenAnswer((_) async => [blocked, visible]);
+    await container.read(discoverProvider.notifier).refresh();
+    expect(container.read(discoverProvider).results, [blocked, visible]);
+  });
 }

@@ -3,6 +3,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/daily_song_interaction_service.dart';
 
 final dailySongInteractionServiceProvider =
@@ -72,7 +73,10 @@ class DailySongSaveState {
 
 class DailySongSaveNotifier extends Notifier<DailySongSaveState> {
   @override
-  DailySongSaveState build() => const DailySongSaveState.idle();
+  DailySongSaveState build() {
+    ref.watch(sessionScopeProvider);
+    return const DailySongSaveState.idle();
+  }
 
   Future<bool> save(String uid, Track track) async {
     if (state.isSaving) return false;

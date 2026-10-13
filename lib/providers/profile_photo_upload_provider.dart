@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 
 class ProfilePhotoUpload {
@@ -21,7 +22,10 @@ class ProfilePhotoUpload {
 /// Keeps the preview and upload alive when the originating screen is closed.
 class ProfilePhotoUploadNotifier extends Notifier<ProfilePhotoUpload?> {
   @override
-  ProfilePhotoUpload? build() => null;
+  ProfilePhotoUpload? build() {
+    ref.watch(sessionScopeProvider);
+    return null;
+  }
 
   Future<void> upload({
     required String uid,
