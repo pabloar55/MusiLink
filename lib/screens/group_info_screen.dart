@@ -11,7 +11,7 @@ import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/services/user_service.dart';
-import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_future_cache.dart';
 import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
 import 'package:musi_link/widgets/collapsible_avatar_header.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';

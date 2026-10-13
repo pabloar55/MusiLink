@@ -7,7 +7,7 @@ import 'package:musi_link/models/friend_request.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/user_service.dart';
-import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_future_cache.dart';
 import 'package:musi_link/widgets/friends/section_header.dart';
 import 'package:musi_link/widgets/friends/empty_message.dart';
 import 'package:musi_link/widgets/friends/request_tile.dart';

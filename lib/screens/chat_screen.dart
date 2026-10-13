@@ -13,7 +13,7 @@ import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
 import 'package:musi_link/models/message_reply.dart';
 import 'package:musi_link/models/chat.dart';
-import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_future_cache.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/theme/app_theme.dart';

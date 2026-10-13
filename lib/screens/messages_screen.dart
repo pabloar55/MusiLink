@@ -11,7 +11,7 @@ import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
-import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_future_cache.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';

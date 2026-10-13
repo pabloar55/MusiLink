@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/services/user_service.dart';
-import 'package:musi_link/utils/user_future_cache.dart';
+import 'package:musi_link/services/user_future_cache.dart';
 
 import '../helpers/mocks.dart';
 
