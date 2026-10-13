@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/go_router_provider.dart';
@@ -51,7 +51,7 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
     if (_isContinuing) return;
     final image = _selectedImage;
     if (image != null) {
-      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+      final uid = ref.read(sessionUidProvider);
       if (uid == null) return;
       final messenger = ScaffoldMessenger.of(context);
       final errorMessage = AppLocalizations.of(context)!.photoSetupError;

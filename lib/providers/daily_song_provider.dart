@@ -16,7 +16,7 @@ final dailySongInteractionServiceProvider =
 
 final dailySongLikesProvider = StreamProvider.autoDispose
     .family<Set<String>, DailySongPublication>((ref, publication) {
-      ref.watch(authStateProvider);
+      ref.watch(sessionUidProvider);
       return ref
           .watch(dailySongInteractionServiceProvider)
           .watchLikes(publication);
@@ -24,7 +24,7 @@ final dailySongLikesProvider = StreamProvider.autoDispose
 
 final dailySongMyLikeProvider = StreamProvider.autoDispose
     .family<bool, DailySongPublication>((ref, publication) {
-      ref.watch(authStateProvider);
+      ref.watch(sessionUidProvider);
       return ref
           .watch(dailySongInteractionServiceProvider)
           .watchMyLike(publication);

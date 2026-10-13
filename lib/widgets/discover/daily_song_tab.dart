@@ -7,7 +7,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/providers/daily_song_provider.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_locations.dart';
@@ -36,8 +36,7 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
 
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string on session loss; actions stop until routing completes.
-  String get _currentUid =>
-      ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+  String get _currentUid => ref.read(sessionUidProvider) ?? '';
 
   @override
   bool get wantKeepAlive => true;

@@ -6,7 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/services/chat_service.dart';
@@ -109,7 +109,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final chat = ref.watch(groupChatProvider(widget.chatId));
-    final uid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final uid = ref.watch(sessionUidProvider);
     // Un grupo ausente o un error de permisos nunca muestran datos anteriores.
     final current = chat.hasError ? null : chat.value;
     final group =

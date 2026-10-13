@@ -7,6 +7,7 @@ import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/daily_song_reply_provider.dart';
 import 'package:musi_link/widgets/discover/daily_song_reply_sheet.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
@@ -242,9 +243,7 @@ class _DailySongActionsState extends ConsumerState<DailySongActions> {
   @override
   Widget build(BuildContext context) {
     final owner = widget.owner;
-    final uid =
-        ref.watch(authStateProvider).asData?.value?.uid ??
-        ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final uid = ref.watch(sessionUidProvider);
     final own = uid == owner.uid;
     final friends =
         ref.watch(friendsStreamProvider).asData?.value ?? const <String>[];

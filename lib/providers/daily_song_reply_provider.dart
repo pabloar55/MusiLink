@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 
 class FailedDailySongReply {
   const FailedDailySongReply({required this.owner, required this.text});
@@ -19,12 +20,7 @@ class DailySongReplyNotifier extends Notifier<List<FailedDailySongReply>> {
 
   @override
   List<FailedDailySongReply> build() {
-    final auth = ref.watch(firebaseAuthProvider);
-    ref.watch(
-      authStateProvider.select(
-        (value) => value.asData?.value?.uid ?? auth.currentUser?.uid,
-      ),
-    );
+    ref.watch(sessionUidProvider);
     _session = Object();
     return const [];
   }

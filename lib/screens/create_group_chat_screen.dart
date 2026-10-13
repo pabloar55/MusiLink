@@ -9,7 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/daily_song_provider.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/chat_service.dart';
@@ -309,7 +309,7 @@ class _AddGroupMembersScreenState extends ConsumerState<AddGroupMembersScreen> {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final chat = ref.watch(groupChatProvider(widget.chatId));
-    final uid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final uid = ref.watch(sessionUidProvider);
     final group = chat.hasError ? null : chat.value;
     final members = group != null && group.isGroup
         ? group.participants.toSet()
@@ -490,7 +490,7 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
-    final currentUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final currentUid = ref.watch(sessionUidProvider);
     final currentUser = ref.watch(currentUserProvider).asData?.value;
     final hasName = _name.text.trim().isNotEmpty;
     return PopScope(

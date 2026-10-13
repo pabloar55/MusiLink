@@ -1,19 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
 
 final currentUserProvider = StreamProvider<AppUser?>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(null);
-  return ref.watch(userServiceProvider).watchUser(authUser.uid);
+  final uid = ref.watch(sessionUidProvider);
+  if (uid == null) return Stream.value(null);
+  return ref.watch(userServiceProvider).watchUser(uid);
 });
 
 final userStreamProvider = StreamProvider.family<AppUser?, String>((ref, uid) {

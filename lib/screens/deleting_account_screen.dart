@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_provider.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -23,8 +23,7 @@ class _DeletingAccountScreenState extends ConsumerState<DeletingAccountScreen> {
   }
 
   Future<void> _resumeDeletion() async {
-    final user = ref.read(firebaseAuthProvider).currentUser;
-    if (user == null) {
+    if (ref.read(sessionUidProvider) == null) {
       if (mounted) context.go('/auth?accountDeletion=pending');
       return;
     }

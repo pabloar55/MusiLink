@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/chat.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 
@@ -25,7 +25,7 @@ class GroupChatScreen extends ConsumerWidget {
         : chat.isLoading
         ? initialGroup
         : null;
-    final uid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final uid = ref.watch(sessionUidProvider);
     if (group != null &&
         group.id == chatId &&
         group.isGroup &&

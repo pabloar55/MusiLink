@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_route_observer.dart';
@@ -82,8 +82,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string if session was lost — message bubbles fall back to
   /// always showing "other" side, which is safe for the UI.
-  String get _currentUid =>
-      ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+  String get _currentUid => ref.read(sessionUidProvider) ?? '';
 
   bool get _canInteractInChat =>
       _isGroup ||

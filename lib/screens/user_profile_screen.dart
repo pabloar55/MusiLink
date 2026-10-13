@@ -7,7 +7,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/discover_provider.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
@@ -51,8 +51,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string on session loss — _isOwnProfile then evaluates to
   /// false (safe: shows the other-user view, actions are gated by GoRouter).
-  String get _currentUid =>
-      ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+  String get _currentUid => ref.read(sessionUidProvider) ?? '';
   bool get _isOwnProfile =>
       widget.user.uid == _currentUid && _currentUid.isNotEmpty;
 

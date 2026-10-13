@@ -5,7 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/providers/firebase_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/user_service.dart';
@@ -93,8 +93,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string if session was lost (GoRouter redirects before this
   /// is reached in normal flow, but race conditions are possible).
-  String get _currentUid =>
-      ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+  String get _currentUid => ref.read(sessionUidProvider) ?? '';
 
   /// Obtiene el UID del otro participante del chat.
   String _otherUid(Chat chat) {

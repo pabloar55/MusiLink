@@ -207,62 +207,43 @@ final activeReactionPickerProvider =
 // ── StreamProviders de Firestore ────────────────────────────────
 
 final receivedRequestsProvider = StreamProvider<List<FriendRequest>>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(const <FriendRequest>[]);
+  if (ref.watch(sessionUidProvider) == null) {
+    return Stream.value(const <FriendRequest>[]);
+  }
   return ref.watch(friendServiceProvider).getReceivedRequests();
 });
 
 final sentRequestsProvider = StreamProvider<List<FriendRequest>>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(const <FriendRequest>[]);
+  if (ref.watch(sessionUidProvider) == null) {
+    return Stream.value(const <FriendRequest>[]);
+  }
   return ref.watch(friendServiceProvider).getSentRequests();
 });
 
 final blockedUsersProvider = StreamProvider<List<String>>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(const <String>[]);
+  if (ref.watch(sessionUidProvider) == null) {
+    return Stream.value(const <String>[]);
+  }
   return ref.watch(friendServiceProvider).getBlockedUsersStream();
 });
 
 final friendsStreamProvider = StreamProvider<List<String>>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(const <String>[]);
+  if (ref.watch(sessionUidProvider) == null) {
+    return Stream.value(const <String>[]);
+  }
   return ref.watch(friendServiceProvider).getFriendsStream();
 });
 
 final chatsProvider = StreamProvider<List<Chat>>((ref) {
-  final authUser =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser;
-  if (authUser == null) return Stream.value(const <Chat>[]);
+  if (ref.watch(sessionUidProvider) == null) {
+    return Stream.value(const <Chat>[]);
+  }
   return ref.watch(chatServiceProvider).getChats();
 });
 
 /// Número de chats con al menos un mensaje no leído por el usuario actual.
 final unreadChatsCountProvider = Provider<int>((ref) {
-  final uid =
-      ref
-          .watch(authStateProvider)
-          .maybeWhen(data: (user) => user?.uid, orElse: () => null) ??
-      ref.watch(firebaseAuthProvider).currentUser?.uid;
+  final uid = ref.watch(sessionUidProvider);
   if (uid == null) return 0;
   return ref
       .watch(chatsProvider)
