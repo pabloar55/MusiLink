@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/track.dart';
 import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_scope_provider.dart';
 
 import '../helpers/mocks.dart';
 
@@ -19,9 +20,8 @@ void main() {
   test('expone éxito solo después de que el servicio confirme', () async {
     final service = MockUserService();
     final completer = Completer<void>();
-    when(
-      () => service.setDailySong('uid123', track),
-    ).thenAnswer((_) => completer.future);
+    when(() => service.setDailySong('uid123', track))
+        .thenAnswer((_) => completer.future);
     final container = ProviderContainer(
       overrides: [userServiceProvider.overrideWithValue(service)],
     );
@@ -73,4 +73,40 @@ void main() {
       );
     },
   );
+
+  test('un guardado de la sesión anterior no altera el de la actual', () async {
+    const otherTrack = Track(title: 'Other', artist: 'Artist', imageUrl: '');
+    final service = MockUserService();
+    final previousSave = Completer<void>();
+    final currentSave = Completer<void>();
+    when(() => service.setDailySong('alice', track))
+        .thenAnswer((_) => previousSave.future);
+    when(() => service.setDailySong('bob', otherTrack))
+        .thenAnswer((_) => currentSave.future);
+    final container = ProviderContainer(
+      overrides: [userServiceProvider.overrideWithValue(service)],
+    );
+    addTearDown(container.dispose);
+
+    final previous = container
+        .read(dailySongSaveProvider.notifier)
+        .save('alice', track);
+    container.read(sessionScopeProvider.notifier).reset();
+    final current = container
+        .read(dailySongSaveProvider.notifier)
+        .save('bob', otherTrack);
+    previousSave.completeError(StateError('offline'));
+
+    expect(await previous, isFalse);
+    final state = container.read(dailySongSaveProvider);
+    expect(state.isSaving, isTrue);
+    expect(state.pendingTrack, same(otherTrack));
+
+    currentSave.complete();
+    expect(await current, isTrue);
+    expect(
+      container.read(dailySongSaveProvider).status,
+      DailySongSaveStatus.idle,
+    );
+  });
 }

@@ -72,21 +72,31 @@ class DailySongSaveState {
 }
 
 class DailySongSaveNotifier extends Notifier<DailySongSaveState> {
+  Object _session = Object();
+
   @override
   DailySongSaveState build() {
     ref.watch(sessionScopeProvider);
+    _session = Object();
     return const DailySongSaveState.idle();
   }
 
   Future<bool> save(String uid, Track track) async {
     if (state.isSaving) return false;
+    // El notifier sobrevive al cambio de sesión: un guardado que termina
+    // después no debe tocar el estado de la sesión nueva.
+    final session = _session;
     state = DailySongSaveState.saving(track);
     try {
       await ref.read(userServiceProvider).setDailySong(uid, track);
-      state = const DailySongSaveState.idle();
+      if (identical(session, _session)) {
+        state = const DailySongSaveState.idle();
+      }
       return true;
     } catch (error) {
-      state = DailySongSaveState.error(track, error);
+      if (identical(session, _session)) {
+        state = DailySongSaveState.error(track, error);
+      }
       return false;
     }
   }
