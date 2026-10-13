@@ -213,18 +213,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _markMessagesAsRead() {
-    final service = ref.read(chatServiceProvider);
     if (_isGroup) {
       final latest = _history.messages
           .where((message) => !message.isPending)
           .lastOrNull;
       if (latest != null) {
         unawaited(
-          service.markGroupMessagesAsRead(widget.chatId, latest.timestamp),
+          ref
+              .read(groupChatServiceProvider)
+              .markGroupMessagesAsRead(widget.chatId, latest.timestamp),
         );
       }
     } else {
-      unawaited(service.markMessagesAsRead(widget.chatId));
+      unawaited(
+        ref.read(chatServiceProvider).markMessagesAsRead(widget.chatId),
+      );
     }
   }
 

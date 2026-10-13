@@ -12,7 +12,7 @@ import 'package:musi_link/providers/daily_song_provider.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
-import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -101,7 +101,7 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
         child: _FriendPicker(
           friends: friends,
           selected: _selected,
-          maxSelected: ChatService.maxGroupParticipants - 1,
+          maxSelected: GroupChatService.maxGroupParticipants - 1,
           memberCount: selectedUsers.isEmpty ? null : selectedUsers.length + 1,
           emptyMessage: l10n.groupChatNeedFriends,
           onChanged: (uid, selected) => setState(
@@ -289,7 +289,7 @@ class _AddGroupMembersScreenState extends ConsumerState<AddGroupMembersScreen> {
     });
     try {
       await ref
-          .read(chatServiceProvider)
+          .read(groupChatServiceProvider)
           .addGroupMembers(widget.chatId, participantIds);
       if (mounted) _close();
     } catch (error) {
@@ -367,7 +367,8 @@ class _AddGroupMembersScreenState extends ConsumerState<AddGroupMembersScreen> {
                         selected: selectedIds.toSet(),
                         excluded: members,
                         maxSelected:
-                            ChatService.maxGroupParticipants - members.length,
+                            GroupChatService.maxGroupParticipants -
+                            members.length,
                         memberCount: members.length + selectedIds.length,
                         emptyMessage: l10n.groupChatNoFriendsToAdd,
                         onChanged: (uid, selected) => setState(() {
@@ -403,7 +404,9 @@ class NameGroupChatScreen extends ConsumerStatefulWidget {
 
 class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
   final _name = TextEditingController();
-  late final String _chatId = ref.read(chatServiceProvider).newGroupChatId();
+  late final String _chatId = ref
+      .read(groupChatServiceProvider)
+      .newGroupChatId();
   XFile? _photo;
   Uint8List? _photoBytes;
   bool _saving = false;
@@ -446,7 +449,7 @@ class _NameGroupChatScreenState extends ConsumerState<NameGroupChatScreen> {
     });
     try {
       final chat = await ref
-          .read(chatServiceProvider)
+          .read(groupChatServiceProvider)
           .createGroupChat(
             chatId: _chatId,
             name: _name.text,

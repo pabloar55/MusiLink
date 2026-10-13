@@ -6,7 +6,7 @@ import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
-import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
@@ -175,7 +175,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               return participants is List<AppUser> &&
                       participants.map((user) => user.uid).toSet().length >=
                           2 &&
-                      participants.length < ChatService.maxGroupParticipants
+                      participants.length <
+                          GroupChatService.maxGroupParticipants
                   ? null
                   : '/new-group-chat';
             },

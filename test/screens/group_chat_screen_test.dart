@@ -17,11 +17,14 @@ import 'package:musi_link/screens/create_group_chat_screen.dart';
 import 'package:musi_link/screens/group_chat_screen.dart';
 import 'package:musi_link/screens/group_info_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 import '../helpers/mocks.dart';
 
 class _MockChatService extends Mock implements ChatService {}
+
+class _MockGroupChatService extends Mock implements GroupChatService {}
 
 Chat _group({
   String id = 'group-1',
@@ -37,13 +40,15 @@ Chat _group({
   createdAt: DateTime(2026),
 );
 
-Future<_MockChatService> _openGroup(
+/// Opens the group and returns the mocked service that administers it.
+Future<_MockGroupChatService> _openGroup(
   WidgetTester tester,
   Stream<Chat?> groups, {
   Chat? initialGroup,
   bool fromChatList = false,
 }) async {
   final service = _MockChatService();
+  final groupService = _MockGroupChatService();
   final auth = MockFirebaseAuth();
   final user = MockUser();
   final notifications = MockNotificationService();
@@ -91,6 +96,7 @@ Future<_MockChatService> _openGroup(
       overrides: [
         firebaseAuthProvider.overrideWithValue(auth),
         chatServiceProvider.overrideWithValue(service),
+        groupChatServiceProvider.overrideWithValue(groupService),
         notificationServiceProvider.overrideWithValue(notifications),
         userServiceProvider.overrideWithValue(users),
         friendProfilesStreamProvider.overrideWith(
@@ -113,7 +119,7 @@ Future<_MockChatService> _openGroup(
     unawaited(router.push('/group-chat/group-1'));
     await tester.pumpAndSettle();
   }
-  return service;
+  return groupService;
 }
 
 void main() {

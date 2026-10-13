@@ -13,6 +13,7 @@ import 'package:musi_link/services/app_invite_service.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/services/moderation_service.dart';
 import 'package:musi_link/services/notification_service.dart';
@@ -104,6 +105,16 @@ final chatServiceProvider = Provider<ChatService>((ref) {
     auth: ref.watch(firebaseAuthProvider),
     functions: ref.watch(firebaseFunctionsProvider),
     messageCache: ChatMessageCache(ref.watch(sharedPreferencesProvider)),
+  );
+});
+
+final groupChatServiceProvider = Provider<GroupChatService>((ref) {
+  return GroupChatService(
+    firestore: ref.watch(firebaseFirestoreProvider),
+    auth: ref.watch(firebaseAuthProvider),
+    functions: ref.watch(firebaseFunctionsProvider),
+    onGroupLeft: (uid, chatId) =>
+        ref.read(chatServiceProvider).forgetHistory(uid, chatId),
   );
 });
 
@@ -266,11 +277,11 @@ final groupChatProvider = StreamProvider.autoDispose.family<Chat?, String>((
 final groupPhotoUploaderProvider =
     Provider<Future<void> Function(String chatId, XFile image)>((ref) {
       final storage = ref.watch(storageServiceProvider);
-      final chats = ref.watch(chatServiceProvider);
+      final groups = ref.watch(groupChatServiceProvider);
       Future<void> upload(String chatId, XFile image) async {
         final url = await storage.uploadGroupPhoto(chatId, image);
         if (url == null) throw StateError('Group photo upload returned no URL');
-        await chats.updateGroupPhoto(chatId, url);
+        await groups.updateGroupPhoto(chatId, url);
       }
 
       return (chatId, image) =>

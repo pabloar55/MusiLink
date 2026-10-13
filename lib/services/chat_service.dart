@@ -86,6 +86,11 @@ class ChatService with AuthenticatedService {
     _messageCache?.remove(uid, chatId);
   }
 
+  /// Olvida el historial guardado de [chatId] para [uid], por ejemplo al
+  /// salir de un grupo.
+  void forgetHistory(String uid, String chatId) =>
+      _invalidateMessages(uid, chatId);
+
   void _checkDeletedSince(String uid, String chatId, DateTime? since) {
     final cached =
         _recentMessages[(uid, chatId)] ?? _messageCache?.read(uid, chatId);
@@ -177,105 +182,10 @@ class ChatService with AuthenticatedService {
     }
   }
 
-  static const maxGroupParticipants = 20;
-
-  String newGroupChatId() => _chatsRef.doc().id;
-
-  Future<Chat> createGroupChat({
-    required String chatId,
-    required String name,
-    required List<String> participantIds,
-  }) async {
-    try {
-      final data = {
-        'chatId': chatId,
-        'name': name.trim(),
-        'participantIds': participantIds,
-      };
-      await _functions
-          .httpsCallable('createGroupChat')
-          .call<void>(data)
-          .timeout(const Duration(seconds: 30));
-      return Chat.fromFirestore(
-        await _chatsRef.doc(chatId).get().timeout(const Duration(seconds: 10)),
-      );
-    } catch (error, stack) {
-      reportError(error, stack).ignore();
-      Error.throwWithStackTrace(toServiceException(error), stack);
-    }
-  }
-
-  /// El backend exige que cada persona añadida sea amiga mutua de quien llama
-  /// y que no tenga bloqueos con los miembros actuales.
-  Future<void> addGroupMembers(
-    String chatId,
-    List<String> participantIds,
-  ) async {
-    try {
-      await _functions
-          .httpsCallable('addGroupChatMembers')
-          .call<void>({'chatId': chatId, 'participantIds': participantIds})
-          .timeout(const Duration(seconds: 30));
-    } catch (error, stack) {
-      reportError(error, stack).ignore();
-      Error.throwWithStackTrace(toServiceException(error), stack);
-    }
-  }
-
-  /// La pertenencia solo la modifica el backend, que además limpia los datos
-  /// por miembro y elimina el grupo cuando se queda vacío.
-  Future<void> leaveGroupChat(String chatId) async {
-    final uid = currentUid;
-    try {
-      await _functions
-          .httpsCallable('leaveGroupChat')
-          .call<void>({'chatId': chatId})
-          .timeout(const Duration(seconds: 30));
-      _invalidateMessages(uid, chatId);
-    } catch (error, stack) {
-      reportError(error, stack).ignore();
-      rethrow;
-    }
-  }
-
-  /// [photoUrl] debe ser la URL de descarga de la foto subida para el grupo.
-  Future<void> updateGroupPhoto(String chatId, String photoUrl) async {
-    try {
-      await _chatsRef.doc(chatId).update({'photoUrl': photoUrl});
-    } catch (error, stack) {
-      reportError(error, stack).ignore();
-      rethrow;
-    }
-  }
-
   Stream<Chat?> watchChat(String chatId) => _chatsRef
       .doc(chatId)
       .snapshots()
       .map((doc) => doc.exists ? Chat.fromFirestore(doc) : null);
-
-  /// The boundary comes from confirmed messages actually displayed on screen.
-  /// A concurrent newer summary is left unread until the next message snapshot.
-  Future<void> markGroupMessagesAsRead(String chatId, DateTime through) async {
-    final uid = currentUid;
-    final readAt = Timestamp.fromDate(through);
-    try {
-      final chatRef = _chatsRef.doc(chatId);
-      await _firestore.runTransaction((tx) async {
-        final doc = await tx.get(chatRef);
-        final data = doc.data();
-        if (data == null || data['type'] != 'group') return;
-        final latest = data['lastMessageTime'] as Timestamp?;
-        final previous = (data['lastReadAt'] as Map?)?[uid] as Timestamp?;
-        if ((latest != null && latest.compareTo(readAt) > 0) ||
-            (previous != null && previous.compareTo(readAt) >= 0)) {
-          return;
-        }
-        tx.update(chatRef, {'lastReadAt.$uid': readAt, 'unreadCounts.$uid': 0});
-      });
-    } catch (error, stack) {
-      await reportError(error, stack);
-    }
-  }
 
   /// Stream de los chats del usuario actual, ordenados por último mensaje.
   /// Los chats individuales sin mensajes y los borrados suavemente

@@ -9,7 +9,7 @@ import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/router/app_locations.dart';
-import 'package:musi_link/services/chat_service.dart';
+import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/utils/user_future_cache.dart';
 import 'package:musi_link/widgets/adaptive_confirmation_dialog.dart';
@@ -86,7 +86,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen>
     );
     if (confirmed != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    final service = ref.read(chatServiceProvider);
+    final service = ref.read(groupChatServiceProvider);
     final router = GoRouter.of(context);
     // Cierra esta pantalla y el chat que queda debajo.
     if (router.canPop()) router.pop();
@@ -184,7 +184,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen>
                           ),
                         ),
                       if (group.participants.length <
-                          ChatService.maxGroupParticipants)
+                          GroupChatService.maxGroupParticipants)
                         ListTile(
                           leading: const CircleAvatar(
                             radius: 20,
