@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_provider.dart';
 import 'package:musi_link/utils/error_reporter.dart';
-import 'package:musi_link/utils/session_cleanup.dart';
 
 class DeletingAccountScreen extends ConsumerStatefulWidget {
   const DeletingAccountScreen({super.key});
@@ -30,7 +30,7 @@ class _DeletingAccountScreenState extends ConsumerState<DeletingAccountScreen> {
     }
 
     final deletionService = ref.read(accountDeletionServiceProvider);
-    final authService = ref.read(authServiceProvider);
+    final session = ref.read(sessionControllerProvider);
     try {
       // Idempotente: también reencola un job detenido en retry_wait. No se
       // espera a que termine; el backend continúa sin una sesión cliente.
@@ -41,15 +41,7 @@ class _DeletingAccountScreenState extends ConsumerState<DeletingAccountScreen> {
 
     if (!mounted) return;
     final router = GoRouter.of(context);
-    clearSessionState(ref);
-    try {
-      await authService.signOut(clearNotificationToken: false);
-    } catch (error, stack) {
-      reportError(error, stack).ignore();
-      try {
-        await ref.read(firebaseAuthProvider).signOut();
-      } catch (_) {}
-    }
+    await session.signOutAfterDeletionRequest();
     router.go('/auth?accountDeletion=pending');
   }
 

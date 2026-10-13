@@ -10,6 +10,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/session_provider.dart';
 import 'package:musi_link/providers/notification_prefs_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
@@ -17,7 +18,6 @@ import 'package:musi_link/router/app_locations.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/terms_and_conditions.dart';
-import 'package:musi_link/utils/session_cleanup.dart';
 import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/widgets/delete_account_dialog.dart';
 import 'package:musi_link/widgets/image_source_picker.dart';
@@ -218,25 +218,14 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     try {
       // El backend crea/reanuda un job durable y elimina Firebase Auth al final.
       // Cerrar sesión o la app no interrumpe el borrado.
-      final authService = ref.read(authServiceProvider);
+      final session = ref.read(sessionControllerProvider);
       final deletionService = ref.read(accountDeletionServiceProvider);
 
       await deletionService.requestDeletion();
       if (!mounted) return;
       Navigator.of(context).pop();
       final router = GoRouter.of(context);
-      clearSessionState(ref);
-
-      // Los tokens se eliminan desde el worker; intentar borrarlos desde el
-      // cliente ya está bloqueado por las reglas tras crear el job.
-      try {
-        await authService.signOut(clearNotificationToken: false);
-      } catch (e, st) {
-        reportError(e, st).ignore();
-        try {
-          await ref.read(firebaseAuthProvider).signOut();
-        } catch (_) {}
-      }
+      await session.signOutAfterDeletionRequest();
       router.go('/auth?accountDeletion=requested');
     } catch (e, st) {
       reportError(e, st).ignore();
@@ -250,10 +239,9 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   Future<void> _signOut() async {
     if (!mounted) return;
     SigningOutDialog.show(context);
-    final authService = ref.read(authServiceProvider);
-    final chatService = ref.read(chatServiceProvider);
+    final session = ref.read(sessionControllerProvider);
     try {
-      await authService.signOut();
+      await session.signOut();
     } catch (e, st) {
       reportError(e, st).ignore();
       if (!mounted) return;
@@ -263,9 +251,6 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
       );
       return;
     }
-    chatService.clearCache();
-    ref.read(musicProfileServiceProvider).clearCache();
-    clearSessionState(ref);
     if (!mounted) return;
     context.go('/auth');
   }
