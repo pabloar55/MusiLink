@@ -6,6 +6,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+/// Región en la que están desplegadas las Cloud Functions.
+const firebaseFunctionsRegion = 'europe-southwest1';
+
 // ── Providers Globales de Firebase ──────────────────────────────
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
@@ -33,5 +36,5 @@ final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
 });
 
 final firebaseFunctionsProvider = Provider<FirebaseFunctions>((ref) {
-  return FirebaseFunctions.instanceFor(region: 'europe-southwest1');
+  return FirebaseFunctions.instanceFor(region: firebaseFunctionsRegion);
 });

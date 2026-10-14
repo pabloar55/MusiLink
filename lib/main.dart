@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
+import 'package:musi_link/models/user_setup_state.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
@@ -24,9 +25,6 @@ import 'package:musi_link/screens/pwa_install_screen.dart';
 import 'package:musi_link/services/app_update_service.dart';
 import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/chat_service.dart';
-import 'package:musi_link/services/chat_message_cache.dart';
-import 'package:musi_link/services/user_service.dart';
-import 'package:musi_link/services/user_setup_repository.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
@@ -82,7 +80,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await ChatService(
         firestore: FirebaseFirestore.instance,
         auth: FirebaseAuth.instance,
-        functions: FirebaseFunctions.instanceFor(region: 'europe-southwest1'),
+        functions: FirebaseFunctions.instanceFor(
+          region: firebaseFunctionsRegion,
+        ),
       ).prepareNotificationChat(message.data);
     } catch (_) {
       // El sistema puede limitar el trabajo en segundo plano.
@@ -115,31 +115,50 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final initialMessageFuture = FirebaseMessaging.instance.getInitialMessage();
   final localLaunchFuture = NotificationService.getLocalLaunchData();
-  final userSetupBootstrapState = await UserSetupRepository(
-    firestore: FirebaseFirestore.instance,
-    userService: UserService(firestore: FirebaseFirestore.instance),
-    prefs: prefs,
-  ).loadBootstrapState(FirebaseAuth.instance.currentUser?.uid);
+
+  // Los valores de arranque se resuelven con servicios de este mismo
+  // contenedor. Se asignan antes de runApp, que es cuando se leen por primera
+  // vez al crear el router y las notificaciones.
+  late final UserSetupBootstrapState userSetupBootstrapState;
+  late final bool localLaunchHandled;
+  late final String? initialLocation;
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      localNotificationLaunchHandledProvider.overrideWith(
+        (_) => localLaunchHandled,
+      ),
+      userSetupBootstrapStateProvider.overrideWith(
+        (_) => userSetupBootstrapState,
+      ),
+      // Las pantallas previas al router (instalación de la PWA, actualización
+      // obligatoria) dejan la URL en `/`, así que el router no puede leer de
+      // ella la ruta inicial al crearse después.
+      initialRouterLocationProvider.overrideWith((_) => initialLocation ?? '/'),
+    ],
+  );
+
+  userSetupBootstrapState = await container
+      .read(userSetupRepositoryProvider)
+      .loadBootstrapState(
+        container.read(firebaseAuthProvider).currentUser?.uid,
+      );
   final initialMessage = await initialMessageFuture;
   final localLaunch = await localLaunchFuture;
+  localLaunchHandled = localLaunch != null;
   final launchData = localLaunch ?? initialMessage?.data;
   final notificationLocation = launchData == null
       ? null
       : notificationLocationFromData(launchData);
-  final chatService = ChatService(
-    firestore: FirebaseFirestore.instance,
-    auth: FirebaseAuth.instance,
-    functions: FirebaseFunctions.instanceFor(region: 'europe-southwest1'),
-    messageCache: ChatMessageCache(prefs),
-  );
   // En web el hash contiene la ruta con la que arranca la app: la de una
   // notificación o la de un enlace compartido.
-  final initialLocation = launchLocation(
+  initialLocation = launchLocation(
     notificationLocation: notificationLocation,
     webFragment: kIsWeb ? Uri.base.fragment : null,
   );
   final chatId = directChatIdOf(initialLocation);
   if (chatId != null) {
+    final chatService = container.read(chatServiceProvider);
     final cached = chatService.getCachedHistory(chatId);
     // Solo lectura local: nunca trasladar una espera de red al splash.
     final restore = chatService.restoreLocalHistory(chatId);
@@ -156,21 +175,8 @@ void main() async {
     }
   }
   runApp(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        chatServiceProvider.overrideWithValue(chatService),
-        localNotificationLaunchHandledProvider.overrideWithValue(
-          localLaunch != null,
-        ),
-        userSetupBootstrapStateProvider.overrideWithValue(
-          userSetupBootstrapState,
-        ),
-        // Las pantallas previas al router (instalación de la PWA,
-        // actualización obligatoria) dejan la URL en `/`, así que el router no
-        // puede leer de ella la ruta inicial al crearse después.
-        initialRouterLocationProvider.overrideWithValue(initialLocation ?? '/'),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const AppBootstrap(),
     ),
   );
