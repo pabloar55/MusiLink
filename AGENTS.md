@@ -45,6 +45,7 @@ Selecciona desde la raíz la validación necesaria según el alcance y el riesgo
 | Reglas Firestore | `npm run test:rules` |
 | Reglas Storage | `npm run test:storage` |
 | Shell PWA | `npm run test:web-shell` |
+| Ciclos de importación | `npm run test:import-cycles` |
 
 - Las pruebas de integración del backend están en los scripts `test:functions:*` de `package.json` y en `functions/package.json`. Estos scripts incluyen la compilación necesaria.
 - No crees tests automáticamente para cada cambio. Los ajustes visuales, colores, opacidades, espaciado, textos y cambios simples de interfaz de bajo riesgo no requieren tests nuevos por defecto; basta con revisar el diff y aplicar el formato, análisis o comprobación visual pertinente.

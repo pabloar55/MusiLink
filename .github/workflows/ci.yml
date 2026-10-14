@@ -115,6 +115,9 @@ jobs:
       - name: Test PWA viewport recovery
         run: npm --prefix .. run test:web-shell
 
+      - name: Check import cycles
+        run: npm --prefix .. run test:import-cycles
+
       - name: Test username claims
         run: npm --prefix .. run test:functions:usernames
 
