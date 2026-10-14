@@ -60,19 +60,6 @@ class Chat {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
-    return {
-      if (isGroup) ...{'type': 'group', 'name': name, 'createdBy': createdBy},
-      if (photoUrl.isNotEmpty) 'photoUrl': photoUrl,
-      'participants': participants,
-      'lastMessage': lastMessage,
-      'lastMessageTime': Timestamp.fromDate(lastMessageTime),
-      'createdAt': Timestamp.fromDate(createdAt),
-      'unreadCounts': unreadCounts,
-      'deletedAt': deletedAt.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
-    };
-  }
-
   Chat copyWith({String? lastMessage, DateTime? lastMessageTime}) {
     return Chat(
       id: id,

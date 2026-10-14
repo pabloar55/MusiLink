@@ -31,6 +31,7 @@ class AppRouterNotifier extends ChangeNotifier {
 
   /// Enlace de perfil (`/u/:username`) abierto antes de terminar el login o
   /// el alta. Se retoma en cuanto el usuario puede entrar en la app.
+  @visibleForTesting
   String? get pendingProfileLink => _pendingProfileLink;
 
   bool get isInitialized => _initialized;

@@ -49,24 +49,6 @@ void main() {
       expect(user.dailySong, isNull);
     });
 
-    test('toFirestore serializa solo campos publicos base', () {
-      final user = createTestUser(
-        displayName: 'Pablo Garcia',
-        username: 'pablo',
-        photoUrl: 'https://photo.test/u.jpg',
-      );
-
-      final map = user.toFirestore();
-
-      expect(map['displayName'], 'Pablo Garcia');
-      expect(map['username'], 'pablo');
-      expect(map['photoUrl'], 'https://photo.test/u.jpg');
-      expect(map.containsKey('uid'), false);
-      expect(map.containsKey('email'), false);
-      expect(map.containsKey('friends'), false);
-      expect(map.containsKey('lastLogin'), false);
-    });
-
     test('copyWith actualiza displayName manteniendo otros campos', () {
       final original = createTestUser(displayName: 'Original');
       final updated = original.copyWith(displayName: 'Nuevo Nombre');

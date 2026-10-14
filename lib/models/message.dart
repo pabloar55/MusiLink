@@ -93,29 +93,6 @@ class Message {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
-    final map = <String, dynamic>{
-      'senderId': senderId,
-      'text': text,
-      'timestamp': Timestamp.fromDate(timestamp),
-      'read': read,
-      'delivered': delivered,
-      'type': type == MessageType.track ? 'track' : 'text',
-    };
-
-    if (trackData != null) {
-      map['trackData'] = trackData!.toMap();
-    }
-    if (dailySongReply != null) map['dailySongReply'] = dailySongReply!.toMap();
-    if (replyTo != null) map['replyTo'] = replyTo!.toMap();
-
-    if (reactions.isNotEmpty) {
-      map['reactions'] = reactions;
-    }
-
-    return map;
-  }
-
   Message copyWith({bool? read, bool? delivered}) {
     return Message(
       id: id,

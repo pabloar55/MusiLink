@@ -1,7 +1,5 @@
 import 'package:musi_link/models/artist.dart';
 
-const artistIdentityVersion = 1;
-
 const _latinDiacriticGroups = <String, String>{
   'a': 'áàäâãåāăąæ',
   'c': 'çćčĉċ',

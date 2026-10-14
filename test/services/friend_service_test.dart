@@ -356,67 +356,6 @@ void main() {
       });
     });
 
-    group('areFriends', () {
-      test('devuelve true si otherUid está en la lista de friends', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockDocSnap = MockDocumentSnapshot();
-        when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(() => mockDocRef.get()).thenAnswer((_) async => mockDocSnap);
-        when(() => mockDocSnap.exists).thenReturn(true);
-        when(() => mockDocSnap.data()).thenReturn({
-          'friends': ['other_uid', 'another_uid'],
-        });
-
-        expect(await friendService.areFriends('other_uid'), true);
-      });
-
-      test('devuelve false si no están en la lista', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockDocSnap = MockDocumentSnapshot();
-        when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(() => mockDocRef.get()).thenAnswer((_) async => mockDocSnap);
-        when(() => mockDocSnap.exists).thenReturn(true);
-        when(() => mockDocSnap.data()).thenReturn({
-          'friends': ['another_uid'],
-        });
-
-        expect(await friendService.areFriends('other_uid'), false);
-      });
-
-      test('devuelve false si el documento no existe', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockDocSnap = MockDocumentSnapshot();
-        when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(() => mockDocRef.get()).thenAnswer((_) async => mockDocSnap);
-        when(() => mockDocSnap.exists).thenReturn(false);
-
-        expect(await friendService.areFriends('other_uid'), false);
-      });
-
-      test('devuelve false si friends es null', () async {
-        final mockDocRef = MockDocumentReference();
-        final mockDocSnap = MockDocumentSnapshot();
-        when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(() => mockDocRef.get()).thenAnswer((_) async => mockDocSnap);
-        when(() => mockDocSnap.exists).thenReturn(true);
-        when(() => mockDocSnap.data()).thenReturn({});
-
-        expect(await friendService.areFriends('other_uid'), false);
-      });
-
-      test('propaga error si Firestore falla', () async {
-        final mockDocRef = MockDocumentReference();
-        when(() => mockUsersRef.doc('current_uid')).thenReturn(mockDocRef);
-        when(() => mockDocRef.get())
-            .thenThrow(FirebaseException(plugin: 'firestore'));
-
-        expect(
-          () => friendService.areFriends('other_uid'),
-          throwsA(isA<FirebaseException>()),
-        );
-      });
-    });
-
     group('getRelationships', () {
       test('no consulta Firestore si no hay UIDs válidos', () async {
         final result = await friendService.getRelationships([

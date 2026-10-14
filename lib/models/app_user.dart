@@ -126,14 +126,6 @@ class AppUser {
         .toList(growable: false);
   }
 
-  Map<String, dynamic> toFirestore() {
-    return {
-      'displayName': displayName,
-      'username': username,
-      'photoUrl': photoUrl,
-    };
-  }
-
   bool get isDeleted =>
       displayName == deletedDisplayName &&
       username == deletedUsername &&

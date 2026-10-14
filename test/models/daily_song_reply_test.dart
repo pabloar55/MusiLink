@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/daily_song_reply.dart';
@@ -19,7 +20,13 @@ void main() {
     );
     final doc = MockDocumentSnapshot();
     when(() => doc.id).thenReturn('reply');
-    when(() => doc.data()).thenReturn(original.toFirestore());
+    when(() => doc.data()).thenReturn({
+      'senderId': original.senderId,
+      'text': original.text,
+      'timestamp': Timestamp.fromDate(original.timestamp),
+      'type': 'text',
+      'dailySongReply': original.dailySongReply!.toMap(),
+    });
     final restored = Message.fromFirestore(doc)!
         .copyWith(read: true, delivered: true);
     expect(restored.bodyText, 'Me encanta');

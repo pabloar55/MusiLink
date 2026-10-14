@@ -22,26 +22,6 @@ void main() {
         expect(request.status, FriendRequestStatus.pending);
       });
     });
-
-    group('toFirestore', () {
-      test('serializa correctamente con status pending', () {
-        final request = FriendRequest(
-          id: 'req1',
-          senderId: 'user1',
-          receiverId: 'user2',
-          status: FriendRequestStatus.pending,
-          createdAt: now,
-          updatedAt: now,
-        );
-
-        final map = request.toFirestore();
-
-        expect(map['senderId'], 'user1');
-        expect(map['receiverId'], 'user2');
-        expect(map['status'], 'pending');
-        expect(map.containsKey('id'), false);
-      });
-    });
   });
 
   group('FriendRequestStatus', () {

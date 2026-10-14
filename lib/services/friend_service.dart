@@ -143,19 +143,6 @@ class FriendService with AuthenticatedService {
 
   // ─── Consultas ──────────────────────────────────────────
 
-  /// Comprueba si el usuario actual es amigo de [otherUid].
-  Future<bool> areFriends(String otherUid) async {
-    try {
-      final doc = await _privateUsersRef.doc(currentUid).get();
-      if (!doc.exists) return false;
-      final friends = List<String>.from(doc.data()?['friends'] as List? ?? []);
-      return friends.contains(otherUid);
-    } catch (e, stack) {
-      await reportError(e, stack);
-      rethrow;
-    }
-  }
-
   /// Obtiene en bloque el estado de la relación con cada UID de [otherUids].
   ///
   /// Lee una sola vez el perfil privado actual y agrupa las solicitudes en
@@ -394,18 +381,6 @@ class FriendService with AuthenticatedService {
       await _privateUsersRef.doc(currentUid).update({
         'blockedUsers': FieldValue.arrayRemove([otherUid]),
       });
-    } catch (e, stack) {
-      await reportError(e, stack);
-      rethrow;
-    }
-  }
-
-  /// Devuelve la lista de UIDs bloqueados por el usuario actual.
-  Future<List<String>> getBlockedUsers() async {
-    try {
-      final doc = await _privateUsersRef.doc(currentUid).get();
-      if (!doc.exists) return const <String>[];
-      return List<String>.from(doc.data()?['blockedUsers'] as List? ?? []);
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;

@@ -106,8 +106,6 @@ class MusicCatalogService {
     return request;
   }
 
-  void clearRelatedArtistsCache() => _relatedArtistsCache.clear();
-
   Future<T> _withRelatedArtistRequestSlot<T>(
     Future<T> Function() action,
   ) async {

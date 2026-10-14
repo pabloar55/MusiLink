@@ -31,17 +31,4 @@ class StorageService {
       rethrow;
     }
   }
-
-  Future<void> deleteProfilePhoto(String uid) async {
-    try {
-      await _storage.ref('profile_photos/$uid').delete();
-    } on FirebaseException catch (e, st) {
-      if (e.code == 'object-not-found') return;
-      await reportError(e, st);
-      rethrow;
-    } catch (e, st) {
-      await reportError(e, st);
-      rethrow;
-    }
-  }
 }

@@ -82,6 +82,7 @@ void main() {
       final since = DateTime(2026, 9, 1);
       final time = DateTime(2026, 9, 6);
       late Chat chat;
+      late Map<String, dynamic> chatData;
 
       QuerySnapshot<Map<String, dynamic>> result(String text) {
         final snapshot = MockQuerySnapshot();
@@ -106,6 +107,13 @@ void main() {
           createdAt: since,
           deletedAt: {'current_uid': since},
         );
+        chatData = {
+          'participants': chat.participants,
+          'lastMessage': chat.lastMessage,
+          'lastMessageTime': Timestamp.fromDate(time),
+          'createdAt': Timestamp.fromDate(since),
+          'deletedAt': {'current_uid': Timestamp.fromDate(since)},
+        };
         chatRef = MockDocumentReference();
         final messagesRef = MockMessagesCollectionRef();
         ordered = MockQuery();
@@ -255,7 +263,7 @@ void main() {
           final doc = MockDocumentSnapshot();
           when(() => doc.id).thenReturn(chat.id);
           when(() => doc.exists).thenReturn(true);
-          when(() => doc.data()).thenReturn(chat.toFirestore());
+          when(() => doc.data()).thenReturn(chatData);
           when(() => chatRef.get()).thenAnswer((_) async => doc);
           final updated = result('New notification');
           when(() => window.get()).thenAnswer((_) async => updated);
@@ -309,7 +317,7 @@ void main() {
           final doc = MockDocumentSnapshot();
           when(() => doc.id).thenReturn(chat.id);
           when(() => doc.exists).thenReturn(true);
-          when(() => doc.data()).thenReturn(chat.toFirestore());
+          when(() => doc.data()).thenReturn(chatData);
           when(() => chatRef.get(const GetOptions(source: Source.cache)))
               .thenAnswer((_) async => doc);
           final cached = result('Background download');
@@ -336,7 +344,7 @@ void main() {
           when(() => doc.id).thenReturn(chat.id);
           when(() => doc.exists).thenReturn(true);
           when(() => doc.data()).thenReturn({
-            ...chat.toFirestore(),
+            ...chatData,
             'participants': ['other_uid', 'stranger'],
           });
           when(() => chatRef.get(const GetOptions(source: Source.cache)))
@@ -366,7 +374,7 @@ void main() {
             final doc = MockQueryDocumentSnapshot();
             when(() => doc.id).thenReturn('chat-$i');
             when(() => doc.data()).thenReturn({
-              ...chat.toFirestore(),
+              ...chatData,
               if (i == 0) 'lastMessage': '',
               if (i == 1)
                 'deletedAt': {'current_uid': Timestamp.fromDate(time)},

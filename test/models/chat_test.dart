@@ -48,26 +48,6 @@ void main() {
       });
     });
 
-    group('toFirestore', () {
-      test('serializa correctamente', () {
-        final chat = Chat(
-          id: 'chat1',
-          participants: ['user1', 'user2'],
-          lastMessage: 'Hola!',
-          lastMessageTime: now,
-          createdAt: now,
-          unreadCounts: {'user1': 2, 'user2': 0},
-        );
-
-        final map = chat.toFirestore();
-
-        expect(map['participants'], ['user1', 'user2']);
-        expect(map['lastMessage'], 'Hola!');
-        expect(map['unreadCounts'], {'user1': 2, 'user2': 0});
-        expect(map.containsKey('id'), false);
-      });
-    });
-
     group('copyWith', () {
       test('actualiza lastMessage y lastMessageTime', () {
         final original = Chat(
@@ -120,7 +100,6 @@ void main() {
         );
 
         expect(group.copyWith(lastMessage: 'Hola').photoUrl, group.photoUrl);
-        expect(group.toFirestore()['photoUrl'], group.photoUrl);
       });
     });
   });

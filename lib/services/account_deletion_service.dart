@@ -1,15 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:musi_link/utils/firestore_collections.dart';
 
 class AccountDeletionProgress {
   const AccountDeletionProgress({required this.status, required this.phase});
 
   final String status;
   final String phase;
-
-  bool get isCompleted => status == 'completed';
 
   factory AccountDeletionProgress.fromMap(Map<String, dynamic> data) {
     return AccountDeletionProgress(
@@ -20,14 +16,9 @@ class AccountDeletionProgress {
 }
 
 class AccountDeletionService {
-  AccountDeletionService({
-    required this._auth,
-    required this._firestore,
-    required this._functions,
-  });
+  AccountDeletionService({required this._auth, required this._functions});
 
   final FirebaseAuth _auth;
-  final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
 
   Future<AccountDeletionProgress> requestDeletion() async {
@@ -46,29 +37,5 @@ class AccountDeletionService {
       throw StateError('Invalid account deletion response.');
     }
     return AccountDeletionProgress.fromMap(Map<String, dynamic>.from(rawData));
-  }
-
-  Stream<AccountDeletionProgress> watchProgress(String uid) {
-    return _firestore
-        .collection(FirestoreCollections.accountDeletions)
-        .doc(uid)
-        .snapshots()
-        .where((snapshot) => snapshot.exists && snapshot.data() != null)
-        .map((snapshot) => AccountDeletionProgress.fromMap(snapshot.data()!));
-  }
-
-  Future<AccountDeletionProgress?> getProgress(String uid) async {
-    final snapshot = await _firestore
-        .collection(FirestoreCollections.accountDeletions)
-        .doc(uid)
-        .get();
-    final data = snapshot.data();
-    return snapshot.exists && data != null
-        ? AccountDeletionProgress.fromMap(data)
-        : null;
-  }
-
-  Future<void> waitUntilCompleted(String uid) async {
-    await watchProgress(uid).firstWhere((progress) => progress.isCompleted);
   }
 }

@@ -33,14 +33,4 @@ class FriendRequest {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
-
-  Map<String, dynamic> toFirestore() {
-    return {
-      'senderId': senderId,
-      'receiverId': receiverId,
-      'status': status.name,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
-    };
-  }
 }

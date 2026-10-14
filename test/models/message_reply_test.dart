@@ -28,7 +28,6 @@ void main() {
     expect(restored.replyTo!.senderId, 'bob');
     expect(restored.replyTo!.text, 'Song - Artist');
     expect(restored.replyTo!.isTrack, isTrue);
-    expect(restored.toFirestore()['replyTo'], restored.replyTo!.toMap());
   });
 
   test('ignora citas mal formadas sin descartar el mensaje', () {

@@ -103,7 +103,6 @@ final termsAcceptanceServiceProvider = Provider<TermsAcceptanceService>((ref) {
 final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
   return AccountDeletionService(
     auth: ref.watch(firebaseAuthProvider),
-    firestore: ref.watch(firebaseFirestoreProvider),
     functions: ref.watch(firebaseFunctionsProvider),
   );
 });

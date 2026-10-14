@@ -7,7 +7,6 @@ import '../helpers/mocks.dart';
 
 void main() {
   late MockFirebaseAuth auth;
-  late MockFirebaseFirestore firestore;
   late MockFirebaseFunctions functions;
   late MockUser user;
   late MockHttpsCallable callable;
@@ -16,7 +15,6 @@ void main() {
 
   setUp(() {
     auth = MockFirebaseAuth();
-    firestore = MockFirebaseFirestore();
     functions = MockFirebaseFunctions();
     user = MockUser();
     callable = MockHttpsCallable();
@@ -24,19 +22,13 @@ void main() {
 
     when(() => auth.currentUser).thenReturn(user);
     when(() => user.getIdToken(true)).thenAnswer((_) async => 'fresh-token');
-    when(
-      () => functions.httpsCallable('requestAccountDeletion'),
-    ).thenReturn(callable);
+    when(() => functions.httpsCallable('requestAccountDeletion'))
+        .thenReturn(callable);
     when(() => callable.call<dynamic>()).thenAnswer((_) async => result);
-    when(
-      () => result.data,
-    ).thenReturn({'status': 'requested', 'phase': 'freeze'});
+    when(() => result.data)
+        .thenReturn({'status': 'requested', 'phase': 'freeze'});
 
-    service = AccountDeletionService(
-      auth: auth,
-      firestore: firestore,
-      functions: functions,
-    );
+    service = AccountDeletionService(auth: auth, functions: functions);
   });
 
   test('refreshes auth token and starts the durable backend job', () async {

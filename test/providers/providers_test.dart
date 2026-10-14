@@ -10,6 +10,7 @@ import 'package:musi_link/services/auth_service.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../helpers/mocks.dart';
 
 class MockChatService extends Mock implements ChatService {}
@@ -17,6 +18,7 @@ class MockChatService extends Mock implements ChatService {}
 class MockFriendService extends Mock implements FriendService {}
 
 class MockAuthService extends Mock implements AuthService {}
+
 class MockSharedPreferences extends Mock implements SharedPreferences {}
 
 ProviderContainer _themeContainer({String? savedMode}) {
@@ -35,9 +37,7 @@ void main() {
     test('authServiceProvider puede ser sustituido con mock', () {
       final mockAuth = MockAuthService();
       final container = ProviderContainer(
-        overrides: [
-          authServiceProvider.overrideWithValue(mockAuth),
-        ],
+        overrides: [authServiceProvider.overrideWithValue(mockAuth)],
       );
       addTearDown(container.dispose);
 
@@ -72,25 +72,6 @@ void main() {
       expect(container.read(themeModeProvider), ThemeMode.dark);
     });
 
-    test('toggleDarkLight alterna entre dark y light', () {
-      final container = _themeContainer(savedMode: 'light');
-      addTearDown(container.dispose);
-
-      final notifier = container.read(themeModeProvider.notifier);
-
-      // light -> dark
-      notifier.toggleDarkLight();
-      expect(container.read(themeModeProvider), ThemeMode.dark);
-
-      // dark -> light
-      notifier.toggleDarkLight();
-      expect(container.read(themeModeProvider), ThemeMode.light);
-
-      // light -> dark
-      notifier.toggleDarkLight();
-      expect(container.read(themeModeProvider), ThemeMode.dark);
-    });
-
     test('setThemeMode permite seleccionar system, light y dark', () {
       final container = _themeContainer(savedMode: 'dark');
       addTearDown(container.dispose);
@@ -105,29 +86,6 @@ void main() {
 
       notifier.setThemeMode(ThemeMode.dark);
       expect(container.read(themeModeProvider), ThemeMode.dark);
-    });
-  });
-
-  group('isDarkProvider', () {
-    test('devuelve false en modo system con platform brightness light', () {
-      final container = _themeContainer(savedMode: 'system');
-      addTearDown(container.dispose);
-
-      expect(container.read(isDarkProvider), false);
-    });
-
-    test('devuelve true cuando el tema es dark', () {
-      final container = _themeContainer(savedMode: 'dark');
-      addTearDown(container.dispose);
-
-      expect(container.read(isDarkProvider), true);
-    });
-
-    test('devuelve false cuando el tema es light', () {
-      final container = _themeContainer(savedMode: 'light');
-      addTearDown(container.dispose);
-
-      expect(container.read(isDarkProvider), false);
     });
   });
 }

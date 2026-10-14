@@ -107,10 +107,6 @@ class DailySongSaveNotifier extends Notifier<DailySongSaveState> {
     state = const DailySongSaveState.idle();
     return save(uid, track);
   }
-
-  void clearError() {
-    if (state.hasError) state = const DailySongSaveState.idle();
-  }
 }
 
 final dailySongSaveProvider =

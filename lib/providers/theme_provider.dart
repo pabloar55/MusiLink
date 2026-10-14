@@ -20,22 +20,10 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
     return _values[saved] ?? (kIsWeb ? ThemeMode.system : ThemeMode.dark);
   }
 
-  bool get isDark {
-    if (state == ThemeMode.system) {
-      return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-          Brightness.dark;
-    }
-    return state == ThemeMode.dark;
-  }
-
   void setThemeMode(ThemeMode mode) {
     if (state == mode) return;
     state = mode;
     _persist(mode);
-  }
-
-  void toggleDarkLight() {
-    setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
   }
 
   void _persist(ThemeMode mode) {
@@ -44,15 +32,6 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   }
 }
 
-final themeModeProvider =
-    NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
-
-/// Provider derivado que indica si el tema actual es oscuro.
-final isDarkProvider = Provider<bool>((ref) {
-  final mode = ref.watch(themeModeProvider);
-  if (mode == ThemeMode.system) {
-    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
-  }
-  return mode == ThemeMode.dark;
-});
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
+  ThemeModeNotifier.new,
+);
