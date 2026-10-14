@@ -8,6 +8,7 @@ const firebase_1 = require("./firebase");
 const rate_limits_1 = require("./rate_limits");
 const lastfm_request_1 = require("./lastfm_request");
 const catalog_request_1 = require("./catalog_request");
+const spotify_artist_ranking_1 = require("./spotify_artist_ranking");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = (0, params_1.defineSecret)('LASTFM_API_KEY');
@@ -78,17 +79,6 @@ async function readResponseSnippet(res) {
 }
 function spotifyArtistQuery(query) {
     return `artist:${query.replace(/"/g, '').trim()}`;
-}
-function normalizeArtistName(value) {
-    return value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/'/g, '')
-        .replace(/&/g, ' and ')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
 }
 const genreAliases = new Map([
     ['alt rock', 'alternative rock'],
@@ -309,43 +299,6 @@ function isSpotifyArtistItem(value) {
     }
     return true;
 }
-function scoreArtistMatch(item, queryKey, queryTokens) {
-    const nameKey = normalizeArtistName(item.name ?? '');
-    if (!nameKey)
-        return Number.NEGATIVE_INFINITY;
-    let score = 0;
-    if (nameKey === queryKey) {
-        score += 350;
-    }
-    else if (nameKey.startsWith(`${queryKey} `)) {
-        score += 300;
-    }
-    else if (nameKey.includes(queryKey)) {
-        score += 180;
-    }
-    else {
-        const nameTokens = new Set(nameKey.split(' '));
-        const matchingTokens = queryTokens.filter((token) => nameTokens.has(token)).length;
-        if (matchingTokens === 0)
-            score -= 200;
-        score += (matchingTokens / Math.max(queryTokens.length, 1)) * 120;
-    }
-    const popularity = Math.max(0, Math.min(item.popularity ?? 0, 100));
-    const followers = Math.max(0, item.followers?.total ?? 0);
-    const hasImage = Boolean(item.images?.[0]?.url);
-    const hasGenres = Boolean(item.genres?.length);
-    score += popularity * 9;
-    score += Math.log10(followers + 1) * 45;
-    if (hasImage)
-        score += 30;
-    if (hasGenres)
-        score += 20;
-    if (nameKey !== queryKey && popularity < 10 && followers < 10_000)
-        score -= 250;
-    if (!hasImage && popularity < 20)
-        score -= 80;
-    return score;
-}
 async function getLastFmGenres(artistName, apiKey) {
     try {
         const data = await (0, lastfm_request_1.fetchLastFm)('artist.getTopTags', artistName, apiKey);
@@ -398,25 +351,8 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({
         throw new https_1.HttpsError('internal', 'Spotify search returned malformed response');
     }
     const items = data.artists.items.filter(isSpotifyArtistItem);
-    const queryKey = normalizeArtistName(query);
-    const queryTokens = queryKey.split(' ').filter(Boolean);
-    const rankedItems = items.map((item) => ({
-        item,
-        nameKey: normalizeArtistName(item.name ?? ''),
-        score: scoreArtistMatch(item, queryKey, queryTokens),
-    }));
-    const hasExactMatch = rankedItems.some(({ nameKey }) => nameKey === queryKey);
-    const filtered = rankedItems
-        .filter(({ nameKey, score }) => {
-        if (score <= 0)
-            return false;
-        if (!hasExactMatch)
-            return true;
-        return nameKey === queryKey || nameKey.startsWith(`${queryKey} `) || nameKey.includes(queryKey) || score >= 500;
-    })
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
-        .map(({ item }) => ({
+    const filtered = (0, spotify_artist_ranking_1.rankSpotifyArtists)(items, query, limit)
+        .map((item) => ({
         name: item.name ?? 'Unknown Artist',
         imageUrl: item.images?.[0]?.url ?? '',
         genres: normalizeSpotifyGenres(item.genres),

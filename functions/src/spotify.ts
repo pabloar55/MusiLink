@@ -9,6 +9,7 @@ import {
   parseSpotifyArtistSearchRequest,
   parseSpotifySearchRequest,
 } from './catalog_request';
+import { rankSpotifyArtists, SpotifyArtistItem } from './spotify_artist_ranking';
 
 const spotifyClientId = defineSecret('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = defineSecret('SPOTIFY_CLIENT_SECRET');
@@ -93,18 +94,6 @@ async function readResponseSnippet(res: Response): Promise<string> {
 
 function spotifyArtistQuery(query: string): string {
   return `artist:${query.replace(/"/g, '').trim()}`;
-}
-
-function normalizeArtistName(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/'/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 const genreAliases = new Map<string, string>([
@@ -302,15 +291,6 @@ function normalizeLastFmTags(tags: Array<{ name?: string; count?: number | strin
   return [...genres.values()];
 }
 
-interface SpotifyArtistItem {
-  id: string;
-  name: string;
-  genres?: string[];
-  images?: Array<{ url: string }>;
-  popularity?: number;
-  followers?: { total?: number };
-}
-
 function isSpotifyArtistItem(value: unknown): value is SpotifyArtistItem {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string') {
     return false;
@@ -334,40 +314,6 @@ function isSpotifyArtistItem(value: unknown): value is SpotifyArtistItem {
     return false;
   }
   return true;
-}
-
-function scoreArtistMatch(item: SpotifyArtistItem, queryKey: string, queryTokens: string[]): number {
-  const nameKey = normalizeArtistName(item.name ?? '');
-  if (!nameKey) return Number.NEGATIVE_INFINITY;
-
-  let score = 0;
-  if (nameKey === queryKey) {
-    score += 350;
-  } else if (nameKey.startsWith(`${queryKey} `)) {
-    score += 300;
-  } else if (nameKey.includes(queryKey)) {
-    score += 180;
-  } else {
-    const nameTokens = new Set(nameKey.split(' '));
-    const matchingTokens = queryTokens.filter((token) => nameTokens.has(token)).length;
-    if (matchingTokens === 0) score -= 200;
-    score += (matchingTokens / Math.max(queryTokens.length, 1)) * 120;
-  }
-
-  const popularity = Math.max(0, Math.min(item.popularity ?? 0, 100));
-  const followers = Math.max(0, item.followers?.total ?? 0);
-  const hasImage = Boolean(item.images?.[0]?.url);
-  const hasGenres = Boolean(item.genres?.length);
-
-  score += popularity * 9;
-  score += Math.log10(followers + 1) * 45;
-  if (hasImage) score += 30;
-  if (hasGenres) score += 20;
-
-  if (nameKey !== queryKey && popularity < 10 && followers < 10_000) score -= 250;
-  if (!hasImage && popularity < 20) score -= 80;
-
-  return score;
 }
 
 async function getLastFmGenres(artistName: string, apiKey: string): Promise<string[]> {
@@ -448,25 +394,8 @@ export const searchSpotifyArtists = onCall(
     }
     const items = data.artists.items.filter(isSpotifyArtistItem);
 
-    const queryKey = normalizeArtistName(query);
-    const queryTokens = queryKey.split(' ').filter(Boolean);
-
-    const rankedItems = items.map((item) => ({
-      item,
-      nameKey: normalizeArtistName(item.name ?? ''),
-      score: scoreArtistMatch(item, queryKey, queryTokens),
-    }));
-    const hasExactMatch = rankedItems.some(({ nameKey }) => nameKey === queryKey);
-
-    const filtered = rankedItems
-      .filter(({ nameKey, score }) => {
-        if (score <= 0) return false;
-        if (!hasExactMatch) return true;
-        return nameKey === queryKey || nameKey.startsWith(`${queryKey} `) || nameKey.includes(queryKey) || score >= 500;
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-      .map(({ item }) => ({
+    const filtered = rankSpotifyArtists(items, query, limit)
+      .map((item) => ({
         name: item.name ?? 'Unknown Artist',
         imageUrl: item.images?.[0]?.url ?? '',
         genres: normalizeSpotifyGenres(item.genres),
