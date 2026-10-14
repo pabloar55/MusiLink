@@ -6,7 +6,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:musi_link/models/user_setup_state.dart';
 import 'package:musi_link/router/app_router.dart';
+import 'package:musi_link/services/terms_acceptance_controller.dart';
+import 'package:musi_link/services/user_setup_controller.dart';
 
 import '../helpers/mocks.dart';
 
@@ -26,8 +29,38 @@ void main() {
 
   tearDown(() => authStream.close());
 
-  AppRouterNotifier buildNotifier() =>
-      AppRouterNotifier(auth: mockAuth, termsAcceptanceRequired: false);
+  AppRouterNotifier buildNotifier({
+    bool termsRequired = false,
+    UserSetupBootstrapState? initialState,
+    FetchUserSetupState? fetchUserState,
+    ReadCachedUserSetupState? readCachedUserState,
+    PersistUserSetupState? persistUserState,
+    bool Function(String uid)? readCachedTermsAcceptance,
+    Future<bool> Function(String uid)? refreshTermsAcceptance,
+    Future<bool> Function(String uid)? submitTermsAcceptance,
+  }) {
+    final setup = UserSetupController(
+      auth: mockAuth,
+      fetchUserState: fetchUserState,
+      readCachedUserState: readCachedUserState,
+      persistUserState: persistUserState,
+    );
+    final terms = TermsAcceptanceController(
+      auth: mockAuth,
+      acceptanceRequired: termsRequired,
+      readCachedAcceptance: readCachedTermsAcceptance,
+      refreshAcceptance: refreshTermsAcceptance,
+      submitAcceptance: submitTermsAcceptance,
+    );
+    addTearDown(setup.dispose);
+    addTearDown(terms.dispose);
+    return AppRouterNotifier(
+      auth: mockAuth,
+      setup: setup,
+      terms: terms,
+      initialState: initialState,
+    );
+  }
 
   // ── Estado 1: app no inicializada ──────────────────────────────
 
@@ -56,10 +89,12 @@ void main() {
     test('cualquier ruta → /auth', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/'), '/auth');
       n.dispose();
@@ -68,10 +103,12 @@ void main() {
     test('ya en /auth → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/auth'), isNull);
       n.dispose();
@@ -84,11 +121,13 @@ void main() {
     test('cualquier ruta queda bloqueada en progreso de eliminación', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
-          deletionPending: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+            deletionPending: true,
+          ),
         );
       expect(appRedirect(n, '/'), '/deleting-account');
       expect(appRedirect(n, '/deleting-account'), isNull);
@@ -97,10 +136,8 @@ void main() {
 
     test('conserva el bloqueo si no puede refrescar su estado', () async {
       when(() => mockUser.uid).thenReturn('uid123');
-      final n = AppRouterNotifier(
-        auth: mockAuth,
-        termsAcceptanceRequired: false,
-        initialState: const AppRouterBootstrapState(
+      final n = buildNotifier(
+        initialState: const UserSetupBootstrapState(
           usernameSet: true,
           artistsSelected: true,
           onboardingDone: true,
@@ -121,7 +158,7 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
 
-      expect(n.deletionPending, isTrue);
+      expect(n.setup.deletionPending, isTrue);
       expect(appRedirect(n, '/'), '/deleting-account');
       n.dispose();
     });
@@ -136,10 +173,12 @@ void main() {
     test('cualquier ruta → /onboarding', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/'), '/onboarding');
       expect(appRedirect(n, '/auth'), '/onboarding');
@@ -149,10 +188,12 @@ void main() {
     test('ya en /onboarding → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/onboarding'), isNull);
       n.dispose();
@@ -165,11 +206,13 @@ void main() {
     test('un fallo de red no redirige al flujo de alta', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
-          setupStateKnown: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+            setupStateKnown: false,
+          ),
         );
 
       expect(appRedirect(n, '/'), isNull);
@@ -180,10 +223,8 @@ void main() {
 
     test('conserva el snapshot válido si el refresco falla', () async {
       when(() => mockUser.uid).thenReturn('uid123');
-      final n = AppRouterNotifier(
-        auth: mockAuth,
-        termsAcceptanceRequired: false,
-        initialState: const AppRouterBootstrapState(
+      final n = buildNotifier(
+        initialState: const UserSetupBootstrapState(
           usernameSet: true,
           artistsSelected: true,
           onboardingDone: true,
@@ -198,9 +239,9 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
 
-      expect(n.setupStateKnown, isTrue);
-      expect(n.usernameSet, isTrue);
-      expect(n.artistsSelected, isTrue);
+      expect(n.setup.setupStateKnown, isTrue);
+      expect(n.setup.usernameSet, isTrue);
+      expect(n.setup.artistsSelected, isTrue);
       expect(appRedirect(n, '/'), isNull);
       n.dispose();
     });
@@ -208,10 +249,8 @@ void main() {
     test('restaura la caché del UID si el refresco tras login falla', () async {
       when(() => mockUser.uid).thenReturn('uid123');
       when(() => mockAuth.currentUser).thenReturn(null);
-      final n = AppRouterNotifier(
-        auth: mockAuth,
-        termsAcceptanceRequired: false,
-        initialState: const AppRouterBootstrapState(
+      final n = buildNotifier(
+        initialState: const UserSetupBootstrapState(
           usernameSet: false,
           artistsSelected: false,
           onboardingDone: false,
@@ -233,9 +272,9 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
 
-      expect(n.setupStateKnown, isTrue);
-      expect(n.usernameSet, isTrue);
-      expect(n.artistsSelected, isTrue);
+      expect(n.setup.setupStateKnown, isTrue);
+      expect(n.setup.usernameSet, isTrue);
+      expect(n.setup.artistsSelected, isTrue);
       expect(appRedirect(n, '/auth'), '/');
       n.dispose();
     });
@@ -243,10 +282,8 @@ void main() {
     test('sin caché un timeout mantiene el setup desconocido', () async {
       when(() => mockUser.uid).thenReturn('uid123');
       when(() => mockAuth.currentUser).thenReturn(null);
-      final n = AppRouterNotifier(
-        auth: mockAuth,
-        termsAcceptanceRequired: false,
-        initialState: const AppRouterBootstrapState(
+      final n = buildNotifier(
+        initialState: const UserSetupBootstrapState(
           usernameSet: false,
           artistsSelected: false,
           onboardingDone: false,
@@ -262,7 +299,7 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
 
-      expect(n.setupStateKnown, isFalse);
+      expect(n.setup.setupStateKnown, isFalse);
       expect(appRedirect(n, '/auth'), isNull);
       expect(appRedirect(n, '/'), isNull);
       n.dispose();
@@ -273,20 +310,24 @@ void main() {
       () {
         final n = buildNotifier()
           ..setInitialized(
-            usernameSet: false,
-            artistsSelected: false,
-            onboardingDone: false,
-            photoSetupDone: false,
-            setupStateKnown: false,
+            const UserSetupBootstrapState(
+              usernameSet: false,
+              artistsSelected: false,
+              onboardingDone: false,
+              photoSetupDone: false,
+              setupStateKnown: false,
+            ),
           );
 
         expect(appRedirect(n, '/auth'), isNull);
 
         n.setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
         expect(appRedirect(n, '/auth'), '/onboarding');
         n.dispose();
@@ -302,10 +343,12 @@ void main() {
     test('cualquier ruta → /username-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/'), '/username-setup');
       expect(appRedirect(n, '/auth'), '/username-setup');
@@ -315,10 +358,12 @@ void main() {
     test('ya en /username-setup → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/username-setup'), isNull);
       n.dispose();
@@ -333,10 +378,12 @@ void main() {
     test('cualquier ruta → /photo-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/'), '/photo-setup');
       n.dispose();
@@ -345,10 +392,12 @@ void main() {
     test('ya en /photo-setup → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/photo-setup'), isNull);
       n.dispose();
@@ -363,10 +412,12 @@ void main() {
     test('cualquier ruta → /artist-select', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/'), '/artist-select');
       n.dispose();
@@ -375,10 +426,12 @@ void main() {
     test('ya en /artist-select → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/artist-select'), isNull);
       n.dispose();
@@ -393,10 +446,12 @@ void main() {
     test('pantallas de setup → /', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/auth'), '/');
       expect(appRedirect(n, '/onboarding'), '/');
@@ -409,10 +464,12 @@ void main() {
     test('pantallas normales → sin redirect', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/'), isNull);
       expect(appRedirect(n, '/settings'), isNull);
@@ -430,12 +487,14 @@ void main() {
     test('setOnboardingDone avanza a /username-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         )
-        ..setOnboardingDone();
+        ..setup.setOnboardingDone();
       expect(appRedirect(n, '/'), '/username-setup');
       n.dispose();
     });
@@ -443,12 +502,14 @@ void main() {
     test('setUsernameSet avanza a /photo-setup', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         )
-        ..setUsernameSet();
+        ..setup.setUsernameSet();
       expect(appRedirect(n, '/'), '/photo-setup');
       n.dispose();
     });
@@ -456,12 +517,14 @@ void main() {
     test('setPhotoSetupDone avanza a /artist-select', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: false,
+          ),
         )
-        ..setPhotoSetupDone();
+        ..setup.setPhotoSetupDone();
       expect(appRedirect(n, '/photo-setup'), '/artist-select');
       expect(appRedirect(n, '/artist-select'), isNull);
       n.dispose();
@@ -470,12 +533,14 @@ void main() {
     test('setArtistsSelected desbloquea la app', () {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: false,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         )
-        ..setArtistsSelected();
+        ..setup.setArtistsSelected();
       expect(appRedirect(n, '/artist-select'), '/');
       expect(appRedirect(n, '/'), isNull);
       n.dispose();
@@ -484,24 +549,26 @@ void main() {
     test('sign-out resetea todos los flags de setup', () async {
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
 
-      expect(n.usernameSet, isTrue);
-      expect(n.artistsSelected, isTrue);
-      expect(n.onboardingDone, isTrue);
-      expect(n.photoSetupDone, isTrue);
+      expect(n.setup.usernameSet, isTrue);
+      expect(n.setup.artistsSelected, isTrue);
+      expect(n.setup.onboardingDone, isTrue);
+      expect(n.setup.photoSetupDone, isTrue);
 
       authStream.add(null);
       await Future.microtask(() {});
 
-      expect(n.usernameSet, isFalse);
-      expect(n.artistsSelected, isFalse);
-      expect(n.onboardingDone, isFalse);
-      expect(n.photoSetupDone, isFalse);
+      expect(n.setup.usernameSet, isFalse);
+      expect(n.setup.artistsSelected, isFalse);
+      expect(n.setup.onboardingDone, isFalse);
+      expect(n.setup.photoSetupDone, isFalse);
 
       when(() => mockAuth.currentUser).thenReturn(null);
       expect(appRedirect(n, '/'), '/auth');
@@ -514,21 +581,24 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(mockUser);
       final response = Completer<UserSetupState>();
       final saved = <UserSetupState>[];
-      final n = buildNotifier()
-        ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
-          setupStateUid: 'uid123',
-          fetchUserState: (_) => response.future,
-          persistUserState: (uid, state) async {
-            saved.add(state);
-          },
-        );
+      final n =
+          buildNotifier(
+            fetchUserState: (_) => response.future,
+            persistUserState: (uid, state) async {
+              saved.add(state);
+            },
+          )..setInitialized(
+            const UserSetupBootstrapState(
+              usernameSet: true,
+              artistsSelected: false,
+              onboardingDone: false,
+              photoSetupDone: false,
+              userUid: 'uid123',
+            ),
+          );
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
-      n.setOnboardingDone();
+      n.setup.setOnboardingDone();
       response.complete((
         usernameSet: true,
         artistsSelected: false,
@@ -537,8 +607,8 @@ void main() {
         deletionPending: false,
       ));
       await Future<void>.delayed(Duration.zero);
-      expect(n.onboardingDone, isTrue);
-      expect(n.photoSetupDone, isFalse);
+      expect(n.setup.onboardingDone, isTrue);
+      expect(n.setup.photoSetupDone, isFalse);
       expect(appRedirect(n, '/'), '/photo-setup');
       expect(saved.last.onboardingDone, isTrue);
       expect(saved.last.photoSetupDone, isFalse);
@@ -553,23 +623,26 @@ void main() {
       final oldResponse = Completer<UserSetupState>();
       final other = MockUser();
       when(() => other.uid).thenReturn('other');
-      final n = buildNotifier()
-        ..setInitialized(
-          usernameSet: true,
-          artistsSelected: false,
-          onboardingDone: true,
-          photoSetupDone: true,
-          setupStateUid: 'uid123',
-          fetchUserState: (uid) => uid == 'uid123'
-              ? oldResponse.future
-              : Future.value((
-                  usernameSet: false,
-                  artistsSelected: false,
-                  onboardingDone: false,
-                  photoSetupDone: false,
-                  deletionPending: false,
-                )),
-        );
+      final n =
+          buildNotifier(
+            fetchUserState: (uid) => uid == 'uid123'
+                ? oldResponse.future
+                : Future.value((
+                    usernameSet: false,
+                    artistsSelected: false,
+                    onboardingDone: false,
+                    photoSetupDone: false,
+                    deletionPending: false,
+                  )),
+          )..setInitialized(
+            const UserSetupBootstrapState(
+              usernameSet: true,
+              artistsSelected: false,
+              onboardingDone: true,
+              photoSetupDone: true,
+              userUid: 'uid123',
+            ),
+          );
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
       when(() => mockAuth.currentUser).thenReturn(other);
@@ -583,11 +656,50 @@ void main() {
         deletionPending: false,
       ));
       await Future<void>.delayed(Duration.zero);
-      expect(n.onboardingDone, isFalse);
-      expect(n.photoSetupDone, isFalse);
-      expect(n.usernameSet, isFalse);
+      expect(n.setup.onboardingDone, isFalse);
+      expect(n.setup.photoSetupDone, isFalse);
+      expect(n.setup.usernameSet, isFalse);
       expect(appRedirect(n, '/'), '/onboarding');
       n.dispose();
+    },
+  );
+
+  test(
+    'un cambio de sesión actualiza términos y alta antes de avisar',
+    () async {
+      when(() => mockAuth.currentUser).thenReturn(mockUser);
+      final other = MockUser();
+      when(() => other.uid).thenReturn('other');
+      final n = buildNotifier(
+        termsRequired: true,
+        readCachedTermsAcceptance: (_) => true,
+        fetchUserState: (_) => Completer<UserSetupState>().future,
+        readCachedUserState: (uid) => uid == 'other'
+            ? (
+                usernameSet: false,
+                artistsSelected: false,
+                onboardingDone: false,
+                photoSetupDone: false,
+                deletionPending: null,
+              )
+            : null,
+        initialState: const UserSetupBootstrapState(
+          usernameSet: true,
+          artistsSelected: true,
+          onboardingDone: true,
+          photoSetupDone: true,
+          userUid: 'uid123',
+        ),
+      );
+      addTearDown(n.dispose);
+      final redirects = <String?>[];
+      n.addListener(() => redirects.add(appRedirect(n, '/')));
+
+      when(() => mockAuth.currentUser).thenReturn(other);
+      authStream.add(other);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(redirects, ['/onboarding']);
     },
   );
 
@@ -598,12 +710,12 @@ void main() {
       Future<bool> Function(String) refresh, {
       bool cached = true,
       Future<bool> Function(String)? submit,
-    }) => AppRouterNotifier(
-      auth: mockAuth,
+    }) => buildNotifier(
+      termsRequired: true,
       readCachedTermsAcceptance: (uid) => cached && uid == 'uid123',
       refreshTermsAcceptance: refresh,
       submitTermsAcceptance: submit,
-      initialState: const AppRouterBootstrapState(
+      initialState: const UserSetupBootstrapState(
         usernameSet: true,
         artistsSelected: true,
         onboardingDone: true,
@@ -631,7 +743,7 @@ void main() {
         expect(appRedirect(notifier, '/chat'), isNull);
         pending.complete(true);
         await Future<void>.delayed(Duration.zero);
-        expect(notifier.termsAccepted, isTrue);
+        expect(notifier.terms.termsAccepted, isTrue);
       },
     );
 
@@ -641,7 +753,7 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
       expect(appRedirect(notifier, '/'), isNull);
-      expect(notifier.termsAccepted, isTrue);
+      expect(notifier.terms.termsAccepted, isTrue);
     });
 
     testWidgets('sin caché reintenta la consulta fallida sin bloquear', (
@@ -659,12 +771,12 @@ void main() {
       authStream.add(mockUser);
       await tester.pump();
       expect(checks, 1);
-      expect(notifier.termsAccepted, isFalse);
-      expect(notifier.termsCheckPending, isTrue);
+      expect(notifier.terms.termsAccepted, isFalse);
+      expect(notifier.terms.termsCheckPending, isTrue);
       expect(appRedirect(notifier, '/'), isNull);
       await tester.pump(const Duration(seconds: 2));
       expect(checks, 2);
-      expect(notifier.termsCheckPending, isFalse);
+      expect(notifier.terms.termsCheckPending, isFalse);
       expect(appRedirect(notifier, '/'), '/terms');
     });
 
@@ -697,7 +809,7 @@ void main() {
         authStream.add(mockUser);
         await Future<void>.delayed(Duration.zero);
         expect(appRedirect(notifier, '/'), '/terms');
-        expect(notifier.termsAccepted, isFalse);
+        expect(notifier.terms.termsAccepted, isFalse);
       },
     );
 
@@ -720,8 +832,8 @@ void main() {
         expect(appRedirect(notifier, '/'), isNull);
         pending.complete(true);
         await Future<void>.delayed(Duration.zero);
-        expect(notifier.termsAccepted, isFalse);
-        expect(notifier.termsCheckPending, isTrue);
+        expect(notifier.terms.termsAccepted, isFalse);
+        expect(notifier.terms.termsCheckPending, isTrue);
         otherPending.complete(false);
         await Future<void>.delayed(Duration.zero);
         expect(appRedirect(notifier, '/'), '/terms');
@@ -729,7 +841,7 @@ void main() {
         when(() => mockAuth.currentUser).thenReturn(mockUser);
         authStream.add(mockUser);
         await Future<void>.delayed(Duration.zero);
-        expect(notifier.termsAccepted, isTrue);
+        expect(notifier.terms.termsAccepted, isTrue);
       },
     );
 
@@ -739,10 +851,10 @@ void main() {
       addTearDown(notifier.dispose);
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
-      notifier.setTermsAccepted('uid123');
+      notifier.terms.setTermsAccepted('uid123');
       pending.complete(false);
       await Future<void>.delayed(Duration.zero);
-      expect(notifier.termsAccepted, isTrue);
+      expect(notifier.terms.termsAccepted, isTrue);
     });
 
     testWidgets(
@@ -763,21 +875,21 @@ void main() {
         await tester.pump();
         expect(appRedirect(notifier, '/'), '/terms');
 
-        notifier.acceptTerms('uid123');
+        notifier.terms.acceptTerms('uid123');
         expect(appRedirect(notifier, '/terms'), '/');
-        notifier.acceptTerms('uid123');
+        notifier.terms.acceptTerms('uid123');
         await tester.pump();
         expect(submissions, 1);
 
         // El servidor todavía no refleja la aceptación pendiente.
         authStream.add(mockUser);
         await tester.pump();
-        expect(notifier.termsAccepted, isTrue);
+        expect(notifier.terms.termsAccepted, isTrue);
 
         await tester.pump(const Duration(seconds: 2));
         expect(submissions, 2);
-        expect(notifier.termsAccepted, isTrue);
-        expect(notifier.takeTermsSaveError(), isFalse);
+        expect(notifier.terms.termsAccepted, isTrue);
+        expect(notifier.terms.takeTermsSaveError(), isFalse);
       },
     );
 
@@ -791,12 +903,12 @@ void main() {
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
 
-      notifier.acceptTerms('uid123');
+      notifier.terms.acceptTerms('uid123');
       expect(appRedirect(notifier, '/terms'), '/');
       await Future<void>.delayed(Duration.zero);
       expect(appRedirect(notifier, '/'), '/terms');
-      expect(notifier.takeTermsSaveError(), isTrue);
-      expect(notifier.takeTermsSaveError(), isFalse);
+      expect(notifier.terms.takeTermsSaveError(), isTrue);
+      expect(notifier.terms.takeTermsSaveError(), isFalse);
     });
 
     testWidgets('cerrar sesión cancela el registro pendiente', (tester) async {
@@ -812,7 +924,7 @@ void main() {
       addTearDown(notifier.dispose);
       authStream.add(mockUser);
       await tester.pump();
-      notifier.acceptTerms('uid123');
+      notifier.terms.acceptTerms('uid123');
       await tester.pump();
       expect(submissions, 1);
 
@@ -821,7 +933,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 30));
       expect(submissions, 1);
-      expect(notifier.takeTermsSaveError(), isFalse);
+      expect(notifier.terms.takeTermsSaveError(), isFalse);
     });
 
     test(
@@ -835,7 +947,7 @@ void main() {
         authStream.add(null);
         await Future<void>.delayed(Duration.zero);
         expect(appRedirect(notifier, '/'), '/auth');
-        expect(notifier.termsAccepted, isFalse);
+        expect(notifier.terms.termsAccepted, isFalse);
         notifier.dispose();
         pending.complete(false);
         await Future<void>.delayed(Duration.zero);
@@ -843,9 +955,9 @@ void main() {
     );
 
     test('bloquea cuentas nuevas y existentes hasta aceptar', () {
-      final notifier = AppRouterNotifier(
-        auth: mockAuth,
-        initialState: const AppRouterBootstrapState(
+      final notifier = buildNotifier(
+        termsRequired: true,
+        initialState: const UserSetupBootstrapState(
           usernameSet: true,
           artistsSelected: true,
           onboardingDone: true,
@@ -860,19 +972,19 @@ void main() {
       expect(appRedirect(notifier, '/chat'), '/terms');
       expect(appRedirect(notifier, '/terms'), isNull);
       expect(appRedirect(notifier, '/privacy-policy'), isNull);
-      notifier.setTermsAccepted('otro');
+      notifier.terms.setTermsAccepted('otro');
       expect(appRedirect(notifier, '/'), '/terms');
 
-      notifier.setTermsAccepted('uid123');
+      notifier.terms.setTermsAccepted('uid123');
       expect(appRedirect(notifier, '/terms'), '/');
       expect(appRedirect(notifier, '/chat'), isNull);
       notifier.dispose();
     });
 
     test('la cuenta nueva vuelve a onboarding tras aceptar', () {
-      final notifier = AppRouterNotifier(
-        auth: mockAuth,
-        initialState: const AppRouterBootstrapState(
+      final notifier = buildNotifier(
+        termsRequired: true,
+        initialState: const UserSetupBootstrapState(
           usernameSet: false,
           artistsSelected: false,
           onboardingDone: false,
@@ -883,15 +995,15 @@ void main() {
         ),
       );
       expect(appRedirect(notifier, '/onboarding'), '/terms');
-      notifier.setTermsAccepted('uid123');
+      notifier.terms.setTermsAccepted('uid123');
       expect(appRedirect(notifier, '/terms'), '/onboarding');
       notifier.dispose();
     });
 
     test('cambiar de cuenta invalida la aceptación en memoria', () async {
-      final notifier = AppRouterNotifier(
-        auth: mockAuth,
-        initialState: const AppRouterBootstrapState(
+      final notifier = buildNotifier(
+        termsRequired: true,
+        initialState: const UserSetupBootstrapState(
           usernameSet: true,
           artistsSelected: true,
           onboardingDone: true,
@@ -901,17 +1013,17 @@ void main() {
           userUid: 'uid123',
         ),
       );
-      notifier.setTermsAccepted('uid123');
+      notifier.terms.setTermsAccepted('uid123');
       authStream.add(mockUser);
       await Future<void>.delayed(Duration.zero);
-      expect(notifier.termsAccepted, isTrue);
+      expect(notifier.terms.termsAccepted, isTrue);
 
       final other = MockUser();
       when(() => other.uid).thenReturn('other');
       when(() => mockAuth.currentUser).thenReturn(other);
       authStream.add(other);
       await Future<void>.delayed(Duration.zero);
-      expect(notifier.termsAccepted, isFalse);
+      expect(notifier.terms.termsAccepted, isFalse);
       expect(appRedirect(notifier, '/'), '/terms');
       notifier.dispose();
     });
@@ -924,10 +1036,12 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(null);
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/u/pablo'), '/auth');
       expect(n.pendingProfileLink, '/u/pablo');
@@ -946,19 +1060,21 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(mockUser);
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: false,
-          artistsSelected: false,
-          onboardingDone: false,
-          photoSetupDone: false,
+          const UserSetupBootstrapState(
+            usernameSet: false,
+            artistsSelected: false,
+            onboardingDone: false,
+            photoSetupDone: false,
+          ),
         );
       expect(appRedirect(n, '/u/pablo'), '/onboarding');
-      n.setOnboardingDone();
+      n.setup.setOnboardingDone();
       expect(appRedirect(n, '/onboarding'), '/username-setup');
-      n.setUsernameSet();
+      n.setup.setUsernameSet();
       expect(appRedirect(n, '/username-setup'), '/photo-setup');
-      n.setPhotoSetupDone();
+      n.setup.setPhotoSetupDone();
       expect(appRedirect(n, '/photo-setup'), '/artist-select');
-      n.setArtistsSelected();
+      n.setup.setArtistsSelected();
       expect(appRedirect(n, '/artist-select'), '/u/pablo');
       n.dispose();
     });
@@ -967,10 +1083,12 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(mockUser);
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       expect(appRedirect(n, '/u/pablo'), isNull);
       expect(n.pendingProfileLink, isNull);
@@ -981,10 +1099,12 @@ void main() {
       when(() => mockAuth.currentUser).thenReturn(null);
       final n = buildNotifier()
         ..setInitialized(
-          usernameSet: true,
-          artistsSelected: true,
-          onboardingDone: true,
-          photoSetupDone: true,
+          const UserSetupBootstrapState(
+            usernameSet: true,
+            artistsSelected: true,
+            onboardingDone: true,
+            photoSetupDone: true,
+          ),
         );
       addTearDown(n.dispose);
       final router = GoRouter(

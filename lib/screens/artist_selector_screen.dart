@@ -9,7 +9,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
-import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/music_profile_limits.dart';
@@ -581,7 +581,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       ref.invalidate(currentUserProvider);
 
       if (!mounted) return;
-      ref.read(appRouterNotifierProvider).setArtistsSelected();
+      ref.read(userSetupControllerProvider).setArtistsSelected();
     } catch (e, st) {
       reportError(e, st).ignore();
       if (!mounted) return;

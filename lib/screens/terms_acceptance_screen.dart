@@ -2,8 +2,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
-import 'package:musi_link/router/app_router.dart';
-import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/providers/terms_acceptance_provider.dart';
+import 'package:musi_link/services/terms_acceptance_controller.dart';
 import 'package:musi_link/utils/terms_and_conditions.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,20 +16,20 @@ class TermsAcceptanceScreen extends ConsumerStatefulWidget {
 }
 
 class _TermsAcceptanceScreenState extends ConsumerState<TermsAcceptanceScreen> {
-  late final AppRouterNotifier _routerNotifier;
+  late final TermsAcceptanceController _terms;
   bool _accepted = false;
 
   @override
   void initState() {
     super.initState();
-    _routerNotifier = ref.read(appRouterNotifierProvider)
+    _terms = ref.read(termsAcceptanceControllerProvider)
       ..addListener(_showSaveError);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSaveError());
   }
 
   @override
   void dispose() {
-    _routerNotifier.removeListener(_showSaveError);
+    _terms.removeListener(_showSaveError);
     super.dispose();
   }
 
@@ -38,12 +38,12 @@ class _TermsAcceptanceScreenState extends ConsumerState<TermsAcceptanceScreen> {
     final uid = ref.read(sessionUidProvider);
     if (uid == null) return;
     // El router avanza al instante; el registro se confirma en segundo plano.
-    _routerNotifier.acceptTerms(uid);
+    _terms.acceptTerms(uid);
   }
 
   /// Si el servidor rechazó el registro, el router vuelve a esta pantalla.
   void _showSaveError() {
-    if (!mounted || !_routerNotifier.takeTermsSaveError()) return;
+    if (!mounted || !_terms.takeTermsSaveError()) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context)!.termsSaveError)),
     );

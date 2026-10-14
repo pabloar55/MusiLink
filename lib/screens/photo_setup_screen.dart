@@ -9,7 +9,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/widgets/image_source_picker.dart';
 
 class PhotoSetupScreen extends ConsumerStatefulWidget {
@@ -76,7 +76,7 @@ class _PhotoSetupScreenState extends ConsumerState<PhotoSetupScreen> {
       );
     }
     setState(() => _isContinuing = true);
-    ref.read(appRouterNotifierProvider).setPhotoSetupDone();
+    ref.read(userSetupControllerProvider).setPhotoSetupDone();
   }
 
   @override

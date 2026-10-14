@@ -1,11 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
-import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/providers/shared_preferences_provider.dart';
+import 'package:musi_link/providers/terms_acceptance_provider.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/router/app_router.dart';
 import 'package:musi_link/router/app_route_observer.dart';
@@ -25,83 +24,17 @@ import 'package:musi_link/screens/artist_selector_screen.dart';
 import 'package:musi_link/screens/username_setup_screen.dart';
 import 'package:musi_link/screens/user_profile_route_screen.dart';
 import 'package:musi_link/screens/user_search_screen.dart';
-import 'package:musi_link/utils/firestore_collections.dart';
-import 'package:musi_link/utils/user_setup_cache.dart';
 
 // ── Router ──────────────────────────────────────────────────────
-
-final routerBootstrapStateProvider = Provider<AppRouterBootstrapState?>(
-  (ref) => null,
-);
 
 final initialRouterLocationProvider = Provider<String>((ref) => '/');
 
 final appRouterNotifierProvider = Provider<AppRouterNotifier>((ref) {
-  final userService = ref.read(userServiceProvider);
-  final prefs = ref.read(sharedPreferencesProvider);
-  final termsService = ref.read(termsAcceptanceServiceProvider);
   final notifier = AppRouterNotifier(
     auth: ref.watch(firebaseAuthProvider),
-    termsAcceptanceRequired: true,
-    readCachedTermsAcceptance: termsService.hasCachedAcceptance,
-    refreshTermsAcceptance: termsService.hasAcceptedCurrentVersion,
-    submitTermsAcceptance: termsService.submitAcceptance,
-    initialState: ref.watch(routerBootstrapStateProvider),
-    readCachedUserState: (loginUid) {
-      final cached = UserSetupCache.read(prefs, loginUid);
-      if (cached == null) return null;
-      return (
-        usernameSet: cached.usernameSet,
-        artistsSelected: cached.artistsSelected,
-        onboardingDone: cached.onboardingDone,
-        photoSetupDone: cached.photoSetupDone,
-        deletionPending: null,
-      );
-    },
-    fetchUserState: (loginUid) async {
-      final deletionPendingFuture = (() async {
-        try {
-          final deletionJob = await ref
-              .read(firebaseFirestoreProvider)
-              .collection(FirestoreCollections.accountDeletions)
-              .doc(loginUid)
-              .get(const GetOptions(source: Source.server))
-              .timeout(const Duration(seconds: 5));
-          return deletionJob.exists;
-        } catch (_) {
-          // La disponibilidad de esta comprobación no invalida el perfil.
-          return null;
-        }
-      })();
-      final profile = await userService
-          .getSetupUser(loginUid, serverOnly: true)
-          .timeout(const Duration(seconds: 5));
-      final hasUsername = profile != null && profile.username.isNotEmpty;
-      final hasArtists = profile != null && profile.topArtistNames.isNotEmpty;
-      final setup = UserSetupCache.resolve(
-        prefs,
-        loginUid,
-        usernameSet: hasUsername,
-        artistsSelected: hasArtists,
-      );
-      return (
-        usernameSet: hasUsername,
-        artistsSelected: hasArtists,
-        onboardingDone: setup.onboardingDone,
-        photoSetupDone: setup.photoSetupDone,
-        deletionPending: await deletionPendingFuture,
-      );
-    },
-    persistUserState: (uid, state) => UserSetupCache.write(
-      prefs,
-      uid,
-      CachedUserSetupState(
-        usernameSet: state.usernameSet,
-        artistsSelected: state.artistsSelected,
-        onboardingDone: state.onboardingDone,
-        photoSetupDone: state.photoSetupDone,
-      ),
-    ),
+    setup: ref.watch(userSetupControllerProvider),
+    terms: ref.watch(termsAcceptanceControllerProvider),
+    initialState: ref.watch(userSetupBootstrapStateProvider),
   );
   ref.onDispose(notifier.dispose);
   return notifier;

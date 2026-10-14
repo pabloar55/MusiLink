@@ -2,8 +2,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/widgets/onboarding/onboarding_page.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 
 /// Pantalla de bienvenida con slider de 5 páginas explicativas.
 /// Se muestra solo la primera vez que el usuario inicia sesión.
@@ -27,7 +27,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   void _completeOnboarding() {
-    ref.read(appRouterNotifierProvider).setOnboardingDone();
+    ref.read(userSetupControllerProvider).setOnboardingDone();
   }
 
   void _nextPage() {

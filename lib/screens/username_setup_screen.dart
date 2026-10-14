@@ -7,7 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
-import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/services/user_service.dart';
 
 class UsernameSetupScreen extends ConsumerStatefulWidget {
@@ -100,7 +100,7 @@ class _UsernameSetupScreenState extends ConsumerState<UsernameSetupScreen> {
       );
 
       if (mounted && ref.read(firebaseAuthProvider).currentUser?.uid == uid) {
-        ref.read(appRouterNotifierProvider).setUsernameSet();
+        ref.read(userSetupControllerProvider).setUsernameSet();
       }
     } on UsernameAlreadyTakenException {
       if (mounted) {

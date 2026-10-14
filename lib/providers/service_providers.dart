@@ -22,6 +22,7 @@ import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/services/spotify_cloud_service.dart';
 import 'package:musi_link/services/storage_service.dart';
 import 'package:musi_link/services/terms_acceptance_service.dart';
+import 'package:musi_link/services/user_setup_repository.dart';
 import 'package:musi_link/services/user_service.dart';
 
 // ── Chat activo (suprime notificaciones del chat en pantalla) ──────
@@ -75,6 +76,14 @@ final userServiceProvider = Provider<UserService>((ref) {
   return UserService(
     firestore: ref.watch(firebaseFirestoreProvider),
     functions: ref.watch(firebaseFunctionsProvider),
+  );
+});
+
+final userSetupRepositoryProvider = Provider<UserSetupRepository>((ref) {
+  return UserSetupRepository(
+    firestore: ref.watch(firebaseFirestoreProvider),
+    userService: ref.watch(userServiceProvider),
+    prefs: ref.watch(sharedPreferencesProvider),
   );
 });
 

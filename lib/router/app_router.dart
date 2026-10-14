@@ -1,115 +1,32 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart';
+import 'package:musi_link/models/user_setup_state.dart';
 import 'package:musi_link/router/app_locations.dart';
+import 'package:musi_link/services/terms_acceptance_controller.dart';
+import 'package:musi_link/services/user_setup_controller.dart';
 
-typedef UserSetupState = ({
-  bool usernameSet,
-  bool artistsSelected,
-  bool onboardingDone,
-  bool photoSetupDone,
-  bool? deletionPending,
-});
-
-typedef FetchUserSetupState = Future<UserSetupState> Function(String uid);
-typedef ReadCachedUserSetupState = UserSetupState? Function(String uid);
-typedef PersistUserSetupState = Future<void> Function(
-  String uid,
-  UserSetupState state,
-);
-
-class AppRouterBootstrapState {
-  const AppRouterBootstrapState({
-    required this.usernameSet,
-    required this.artistsSelected,
-    required this.onboardingDone,
-    required this.photoSetupDone,
-    required this.deletionPending,
-    required this.setupStateKnown,
-    this.userUid,
-  });
-
-  final bool usernameSet;
-  final bool artistsSelected;
-  final bool onboardingDone;
-  final bool photoSetupDone;
-  final bool deletionPending;
-  final bool setupStateKnown;
-  final String? userUid;
-}
-
-/// Notifier que dispara los redirects de GoRouter cuando cambia
-/// el estado de autenticación o cuando la app termina la inicialización.
+/// Notifier que dispara los redirects de GoRouter cuando cambia la sesión, el
+/// estado del alta o la aceptación de términos, o cuando la app termina la
+/// inicialización.
 class AppRouterNotifier extends ChangeNotifier {
-  final FirebaseAuth _auth;
-
   AppRouterNotifier({
     required this._auth,
-    this.termsAcceptanceRequired = true,
-    this.readCachedTermsAcceptance,
-    this.refreshTermsAcceptance,
-    this.submitTermsAcceptance,
-    AppRouterBootstrapState? initialState,
-    FetchUserSetupState? fetchUserState,
-    ReadCachedUserSetupState? readCachedUserState,
-    PersistUserSetupState? persistUserState,
+    required this.setup,
+    required this.terms,
+    UserSetupBootstrapState? initialState,
   }) {
-    final uid = _auth.currentUser?.uid;
-    if (uid != null) _restoreTermsAcceptance(uid);
-    if (initialState != null) {
-      setInitialized(
-        usernameSet: initialState.usernameSet,
-        artistsSelected: initialState.artistsSelected,
-        onboardingDone: initialState.onboardingDone,
-        photoSetupDone: initialState.photoSetupDone,
-        deletionPending: initialState.deletionPending,
-        setupStateKnown: initialState.setupStateKnown,
-        setupStateUid: initialState.userUid,
-        fetchUserState: fetchUserState,
-        readCachedUserState: readCachedUserState,
-        persistUserState: persistUserState,
-      );
-    }
+    setup.addListener(notifyListeners);
+    terms.addListener(notifyListeners);
+    if (initialState != null) setInitialized(initialState);
   }
 
+  final FirebaseAuth _auth;
+  final UserSetupController setup;
+  final TermsAcceptanceController terms;
   StreamSubscription<User?>? _sub;
-  final bool termsAcceptanceRequired;
-  final bool Function(String uid)? readCachedTermsAcceptance;
-  final Future<bool> Function(String uid)? refreshTermsAcceptance;
-
-  /// Registra la aceptación en el servidor. Devuelve false ante un rechazo
-  /// definitivo y lanza una excepción si conviene reintentar.
-  final Future<bool> Function(String uid)? submitTermsAcceptance;
-  String? _termsAcceptedUid;
-  String? _termsCheckedUid;
-  int _termsRevision = 0;
-  Timer? _termsRetryTimer;
-  int _termsRetryAttempt = 0;
-  String? _termsSubmittingUid;
-  int _termsSubmission = 0;
-  Timer? _termsSubmitTimer;
-  int _termsSubmitAttempt = 0;
-  String? _termsSaveFailedUid;
-  Timer? _retryTimer;
-  static const _retryDelays = <Duration>[
-    Duration(seconds: 2),
-    Duration(seconds: 4),
-    Duration(seconds: 8),
-    Duration(seconds: 16),
-    Duration(seconds: 30),
-  ];
-  int _authGeneration = 0;
-  int _setupRevision = 0;
-  int _retryAttempt = 0;
-  String? _setupStateUid;
   bool _initialized = false;
-  bool _usernameSet = false;
-  bool _artistsSelected = false;
-  bool _onboardingDone = false;
-  bool _photoSetupDone = false;
-  bool _deletionPending = false;
-  bool _setupStateKnown = false;
   String? _pendingProfileLink;
 
   /// Enlace de perfil (`/u/:username`) abierto antes de terminar el login o
@@ -118,370 +35,29 @@ class AppRouterNotifier extends ChangeNotifier {
 
   bool get isInitialized => _initialized;
   bool get isLoggedIn => _auth.currentUser != null;
-  bool get usernameSet => _usernameSet;
-  bool get artistsSelected => _artistsSelected;
-  bool get onboardingDone => _onboardingDone;
-  bool get photoSetupDone => _photoSetupDone;
-  bool get deletionPending => _deletionPending;
-  bool get setupStateKnown => _setupStateKnown;
-  bool get termsAccepted {
-    if (!termsAcceptanceRequired) return true;
-    final uid = _auth.currentUser?.uid;
-    return uid != null && _termsAcceptedUid == uid;
-  }
 
-  /// La falta de caché no bloquea el arranque. Solo una respuesta negativa
-  /// del servidor exige abrir el diálogo de aceptación.
-  bool get termsCheckPending =>
-      refreshTermsAcceptance != null &&
-      isLoggedIn &&
-      _termsCheckedUid != _auth.currentUser?.uid;
-
-  bool get mustAcceptTerms => !termsAccepted && !termsCheckPending;
-
-  FetchUserSetupState? _fetchUserState;
-  ReadCachedUserSetupState? _readCachedUserState;
-  PersistUserSetupState? _persistUserState;
-
-  /// Marca el router como inicializado, inicia la escucha de authStateChanges
-  /// y dispara el primer redirect.
-  void setInitialized({
-    required bool usernameSet,
-    required bool artistsSelected,
-    required bool onboardingDone,
-    required bool photoSetupDone,
-    bool deletionPending = false,
-    bool setupStateKnown = true,
-    String? setupStateUid,
-    FetchUserSetupState? fetchUserState,
-    ReadCachedUserSetupState? readCachedUserState,
-    PersistUserSetupState? persistUserState,
-  }) {
+  /// Aplica el estado de arranque, marca el router como inicializado e inicia
+  /// la escucha de authStateChanges, que dispara el primer redirect.
+  void setInitialized(UserSetupBootstrapState state) {
     _initialized = true;
-    _usernameSet = usernameSet;
-    _artistsSelected = artistsSelected;
-    _onboardingDone = onboardingDone;
-    _photoSetupDone = photoSetupDone;
-    _deletionPending = deletionPending;
-    _setupStateKnown = setupStateKnown;
-    _setupStateUid = setupStateUid;
-    _fetchUserState = fetchUserState;
-    _readCachedUserState = readCachedUserState;
-    _persistUserState = persistUserState;
+    setup.restore(state);
     _sub?.cancel();
-    _sub = _auth.authStateChanges().listen((user) {
-      final generation = ++_authGeneration;
-      _retryTimer?.cancel();
-      _retryTimer = null;
-      _retryAttempt = 0;
-      _termsRetryTimer?.cancel();
-      _termsRetryTimer = null;
-      _termsRetryAttempt = 0;
-      if (_termsCheckedUid != user?.uid) _termsCheckedUid = null;
-      if (_termsSubmittingUid != user?.uid) _cancelTermsSubmission();
-      if (user != null) {
-        _restoreTermsAcceptance(user.uid);
-        if (termsAcceptanceRequired) {
-          unawaited(_refreshTermsAcceptance(user, generation));
-        }
-      }
-      if (user == null) {
-        _termsAcceptedUid = null;
-        _termsCheckedUid = null;
-        _usernameSet = false;
-        _artistsSelected = false;
-        _onboardingDone = false;
-        _photoSetupDone = false;
-        _deletionPending = false;
-        _setupStateKnown = true;
-        _setupStateUid = null;
-        notifyListeners();
-      } else if (_fetchUserState != null) {
-        if (_termsAcceptedUid != user.uid) _termsAcceptedUid = null;
-        // El estado anterior puede pertenecer a la pantalla sin sesión o a
-        // otra cuenta. Solo es seguro reutilizar un snapshot del mismo UID.
-        final cachedState = _readCachedState(user.uid);
-        if (cachedState != null) {
-          _deletionPending = false;
-          _applySetupState(cachedState);
-          _setupStateKnown = true;
-          _setupStateUid = user.uid;
-        } else if (!_setupStateKnown || _setupStateUid != user.uid) {
-          _usernameSet = false;
-          _artistsSelected = false;
-          _onboardingDone = false;
-          _photoSetupDone = false;
-          _deletionPending = false;
-          _setupStateKnown = false;
-          _setupStateUid = user.uid;
-        }
-        notifyListeners();
-        unawaited(_refreshUserState(user, generation));
-      } else {
-        if (_termsAcceptedUid != user.uid) _termsAcceptedUid = null;
-        notifyListeners();
-      }
-    });
+    _sub = _auth.authStateChanges().listen(_handleAuthChange);
   }
 
-  void _restoreTermsAcceptance(String uid) {
-    if (_termsAcceptedUid == uid) return;
-    _termsAcceptedUid = readCachedTermsAcceptance?.call(uid) == true
-        ? uid
-        : null;
-  }
-
-  Future<void> _refreshTermsAcceptance(User user, int generation) async {
-    final refresh = refreshTermsAcceptance;
-    if (refresh == null) return;
-    final revision = _termsRevision;
-    try {
-      final accepted = await refresh(user.uid);
-      if (!_isCurrentAuthUser(user, generation) || revision != _termsRevision) {
-        return;
-      }
-      // El servidor aún no refleja una aceptación que se está registrando.
-      if (!accepted && _termsSubmittingUid == user.uid) return;
-      _termsAcceptedUid = accepted ? user.uid : null;
-      _termsCheckedUid = user.uid;
-      _termsRetryAttempt = 0;
-      notifyListeners();
-    } catch (_) {
-      if (!_isCurrentAuthUser(user, generation) || revision != _termsRevision) {
-        return;
-      }
-      // El estado desconocido permanece en segundo plano incluso sin caché.
-      final delay =
-          _retryDelays[_termsRetryAttempt.clamp(0, _retryDelays.length - 1)];
-      if (_termsRetryAttempt < _retryDelays.length - 1) _termsRetryAttempt++;
-      _termsRetryTimer = Timer(delay, () {
-        _termsRetryTimer = null;
-        if (_isCurrentAuthUser(user, generation)) {
-          unawaited(_refreshTermsAcceptance(user, generation));
-        }
-      });
-    }
-  }
-
-  Future<void> _submitTermsAcceptance(String uid, int submission) async {
-    final submit = submitTermsAcceptance;
-    if (submit == null || !_isCurrentTermsSubmission(uid, submission)) return;
-    final bool confirmed;
-    try {
-      confirmed = await submit(uid);
-    } catch (_) {
-      if (!_isCurrentTermsSubmission(uid, submission)) return;
-      // Sin respuesta del servidor la aceptación sigue pendiente de registro.
-      final delay =
-          _retryDelays[_termsSubmitAttempt.clamp(0, _retryDelays.length - 1)];
-      if (_termsSubmitAttempt < _retryDelays.length - 1) _termsSubmitAttempt++;
-      _termsSubmitTimer = Timer(delay, () {
-        _termsSubmitTimer = null;
-        unawaited(_submitTermsAcceptance(uid, submission));
-      });
-      return;
-    }
-    if (!_isCurrentTermsSubmission(uid, submission)) return;
-    _termsSubmittingUid = null;
-    // Descarta cualquier lectura iniciada antes de conocer el resultado.
-    _termsRevision++;
-    if (confirmed) return;
-    _termsAcceptedUid = null;
-    _termsSaveFailedUid = uid;
+  void _handleAuthChange(User? user) {
+    // Ambos estados cambian antes de avisar para que GoRouter nunca evalúe un
+    // redirect con los términos de una sesión y el alta de otra.
+    terms.handleAuthChange(user);
+    setup.handleAuthChange(user);
     notifyListeners();
-  }
-
-  bool _isCurrentTermsSubmission(String uid, int submission) =>
-      submission == _termsSubmission && _auth.currentUser?.uid == uid;
-
-  void _cancelTermsSubmission() {
-    _termsSubmission++;
-    _termsSubmittingUid = null;
-    _termsSubmitTimer?.cancel();
-    _termsSubmitTimer = null;
-  }
-
-  UserSetupState? _readCachedState(String uid) {
-    try {
-      return _readCachedUserState?.call(uid);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _refreshUserState(User user, int generation) async {
-    final revision = _setupRevision;
-    try {
-      final state = await _fetchUserState!(user.uid);
-      if (!_isCurrentAuthUser(user, generation)) return;
-      // Un refresco iniciado antes de completar un paso no debe deshacerlo.
-      if (_setupStateUid == user.uid && revision != _setupRevision) {
-        _applySetupState((
-          usernameSet: state.usernameSet || _usernameSet,
-          artistsSelected: state.artistsSelected || _artistsSelected,
-          onboardingDone: state.onboardingDone || _onboardingDone,
-          photoSetupDone: state.photoSetupDone || _photoSetupDone,
-          deletionPending: state.deletionPending,
-        ));
-      } else {
-        _applySetupState(state);
-      }
-      _setupStateKnown = true;
-      _setupStateUid = user.uid;
-      _retryAttempt = 0;
-      _persistState(user.uid);
-      notifyListeners();
-    } catch (_) {
-      if (!_isCurrentAuthUser(user, generation)) return;
-      // Si no había snapshot para este UID, el perfil sigue siendo
-      // desconocido. Un fallo de red nunca equivale a un usuario nuevo.
-      _scheduleRetry(user, generation);
-    }
-  }
-
-  bool _isCurrentAuthUser(User user, int generation) =>
-      generation == _authGeneration && _auth.currentUser?.uid == user.uid;
-
-  void _applySetupState(UserSetupState state) {
-    _usernameSet = state.usernameSet;
-    _artistsSelected = state.artistsSelected;
-    _onboardingDone = state.onboardingDone;
-    _photoSetupDone = state.photoSetupDone;
-    final deletionPending = state.deletionPending;
-    if (deletionPending != null) {
-      _deletionPending = deletionPending;
-    }
-  }
-
-  void _scheduleRetry(User user, int generation) {
-    if (_retryTimer != null) return;
-    final delay = _retryDelays[_retryAttempt.clamp(0, _retryDelays.length - 1)];
-    if (_retryAttempt < _retryDelays.length - 1) _retryAttempt++;
-    _retryTimer = Timer(delay, () {
-      _retryTimer = null;
-      if (_isCurrentAuthUser(user, generation)) {
-        unawaited(_refreshUserState(user, generation));
-      }
-    });
-  }
-
-  /// Llamar desde UsernameSetupScreen tras guardar el username.
-  void setUsernameSet() {
-    if (_auth.currentUser == null) return;
-    _setupRevision++;
-    _usernameSet = true;
-    _setupStateKnown = true;
-    _setupStateUid = _auth.currentUser?.uid;
-    _persistCurrentState();
-    notifyListeners();
-  }
-
-  /// Llamar después de seleccionar artistas para que el router re-evalúe
-  /// y navegue automáticamente al siguiente paso.
-  void setArtistsSelected() {
-    if (_auth.currentUser == null) return;
-    _setupRevision++;
-    _artistsSelected = true;
-    _setupStateKnown = true;
-    _setupStateUid = _auth.currentUser?.uid;
-    _persistCurrentState();
-    notifyListeners();
-  }
-
-  /// Llamar al completar el onboarding para que el router re-evalúe
-  /// y navegue automáticamente a la pantalla de foto de perfil.
-  void setOnboardingDone() {
-    if (_auth.currentUser == null) return;
-    _setupRevision++;
-    _onboardingDone = true;
-    _setupStateKnown = true;
-    _setupStateUid = _auth.currentUser?.uid;
-    _persistCurrentState();
-    notifyListeners();
-  }
-
-  /// Llamar al completar (o saltar) la configuración de foto de perfil.
-  void setPhotoSetupDone() {
-    if (_auth.currentUser == null) return;
-    _setupRevision++;
-    _photoSetupDone = true;
-    _setupStateKnown = true;
-    _setupStateUid = _auth.currentUser?.uid;
-    _persistCurrentState();
-    notifyListeners();
-  }
-
-  /// Acepta de forma optimista: el router avanza al instante y el registro en
-  /// el servidor se confirma en segundo plano. Si el servidor lo rechaza, se
-  /// vuelve a exigir la aceptación.
-  void acceptTerms(String uid) {
-    if (_auth.currentUser?.uid != uid || _termsSubmittingUid == uid) return;
-    if (submitTermsAcceptance != null) {
-      _termsSubmittingUid = uid;
-      _termsSubmitAttempt = 0;
-      _termsSaveFailedUid = null;
-      unawaited(_submitTermsAcceptance(uid, ++_termsSubmission));
-    }
-    setTermsAccepted(uid);
-  }
-
-  /// Indica, una sola vez, que el último registro de aceptación fue rechazado.
-  bool takeTermsSaveError() {
-    final failedUid = _termsSaveFailedUid;
-    _termsSaveFailedUid = null;
-    return failedUid != null && failedUid == _auth.currentUser?.uid;
-  }
-
-  void setTermsAccepted(String uid) {
-    if (_auth.currentUser?.uid != uid) return;
-    _termsRevision++;
-    _termsAcceptedUid = uid;
-    _termsCheckedUid = uid;
-    _termsRetryTimer?.cancel();
-    _termsRetryTimer = null;
-    notifyListeners();
-  }
-
-  UserSetupState get _currentSetupState => (
-    usernameSet: _usernameSet,
-    artistsSelected: _artistsSelected,
-    onboardingDone: _onboardingDone,
-    photoSetupDone: _photoSetupDone,
-    deletionPending: _deletionPending,
-  );
-
-  void _persistCurrentState() {
-    if (_persistUserState == null) return;
-    final uid = _auth.currentUser?.uid;
-    if (uid != null) _persistState(uid);
-  }
-
-  void _persistState(String uid) {
-    final persist = _persistUserState;
-    if (persist != null) {
-      unawaited(_persistIgnoringErrors(persist, uid, _currentSetupState));
-    }
-  }
-
-  Future<void> _persistIgnoringErrors(
-    PersistUserSetupState persist,
-    String uid,
-    UserSetupState state,
-  ) async {
-    try {
-      await persist(uid, state);
-    } catch (_) {
-      // La persistencia local mejora el arranque, pero no debe bloquearlo.
-    }
   }
 
   @override
   void dispose() {
-    _authGeneration++;
-    _retryTimer?.cancel();
-    _termsRetryTimer?.cancel();
-    _cancelTermsSubmission();
     _sub?.cancel();
+    setup.removeListener(notifyListeners);
+    terms.removeListener(notifyListeners);
     super.dispose();
   }
 }
@@ -503,7 +79,7 @@ String? _redirectFor(AppRouterNotifier notifier, String location) {
   final home = notifier._pendingProfileLink ?? '/';
   if (!notifier.isInitialized) {
     if (!notifier.isLoggedIn) return location == '/auth' ? null : '/auth';
-    if (notifier.mustAcceptTerms) {
+    if (notifier.terms.mustAcceptTerms) {
       return location == '/terms' ? null : '/terms';
     }
     return location == '/terms' ? home : null;
@@ -511,15 +87,16 @@ String? _redirectFor(AppRouterNotifier notifier, String location) {
   if (!notifier.isLoggedIn) {
     return location == '/auth' ? null : '/auth';
   }
-  if (notifier.deletionPending) {
+  final setup = notifier.setup;
+  if (setup.deletionPending) {
     return location == '/deleting-account' ? null : '/deleting-account';
   }
-  if (notifier.mustAcceptTerms) {
+  if (notifier.terms.mustAcceptTerms) {
     return location == '/terms' || location == '/privacy-policy'
         ? null
         : '/terms';
   }
-  if (!notifier.setupStateKnown) {
+  if (!setup.setupStateKnown) {
     // Tras autenticar una cuenta sin caché, el perfil tarda un instante en
     // resolverse. Mantener /auth durante esa espera evita montar MainScreen
     // (Discovery) antes de saber si hay que iniciar el onboarding.
@@ -533,16 +110,16 @@ String? _redirectFor(AppRouterNotifier notifier, String location) {
     }
     return null;
   }
-  if (!notifier.onboardingDone) {
+  if (!setup.onboardingDone) {
     return location == '/onboarding' ? null : '/onboarding';
   }
-  if (!notifier.usernameSet) {
+  if (!setup.usernameSet) {
     return location == '/username-setup' ? null : '/username-setup';
   }
-  if (!notifier.photoSetupDone) {
+  if (!setup.photoSetupDone) {
     return location == '/photo-setup' ? null : '/photo-setup';
   }
-  if (!notifier.artistsSelected) {
+  if (!setup.artistsSelected) {
     return location == '/artist-select' ? null : '/artist-select';
   }
   // Usuario listo: evitar que se quede en pantallas de setup

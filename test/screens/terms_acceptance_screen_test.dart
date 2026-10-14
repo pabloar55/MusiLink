@@ -10,10 +10,13 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/models/user_setup_state.dart';
+import 'package:musi_link/providers/terms_acceptance_provider.dart';
 import 'package:musi_link/router/app_router.dart';
-import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/terms_acceptance_screen.dart';
+import 'package:musi_link/services/terms_acceptance_controller.dart';
 import 'package:musi_link/services/terms_acceptance_service.dart';
+import 'package:musi_link/services/user_setup_controller.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 import '../helpers/mocks.dart';
@@ -25,7 +28,7 @@ void main() {
   late MockFirebaseAuth auth;
   late MockUser user;
   late MockTermsAcceptanceService service;
-  late AppRouterNotifier notifier;
+  late TermsAcceptanceController terms;
   late StreamController<User?> authStream;
 
   setUp(() {
@@ -36,14 +39,14 @@ void main() {
     when(() => auth.currentUser).thenReturn(user);
     when(() => auth.authStateChanges()).thenAnswer((_) => authStream.stream);
     when(() => user.uid).thenReturn('alice');
-    notifier = AppRouterNotifier(
+    terms = TermsAcceptanceController(
       auth: auth,
-      submitTermsAcceptance: service.submitAcceptance,
+      submitAcceptance: service.submitAcceptance,
     );
   });
 
   tearDown(() async {
-    notifier.dispose();
+    terms.dispose();
     await authStream.close();
   });
 
@@ -51,7 +54,7 @@ void main() {
     overrides: [
       firebaseAuthProvider.overrideWithValue(auth),
       termsAcceptanceServiceProvider.overrideWithValue(service),
-      appRouterNotifierProvider.overrideWithValue(notifier),
+      termsAcceptanceControllerProvider.overrideWithValue(terms),
     ],
     child: router != null
         ? MaterialApp.router(
@@ -83,7 +86,7 @@ void main() {
         tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull,
       );
-      expect(notifier.termsAccepted, isFalse);
+      expect(terms.termsAccepted, isFalse);
 
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
@@ -95,7 +98,7 @@ void main() {
       await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
-      expect(notifier.termsAccepted, isTrue);
+      expect(terms.termsAccepted, isTrue);
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
       acceptance.complete(true);
@@ -103,7 +106,7 @@ void main() {
 
       verify(() => service.submitAcceptance('alice')).called(1);
       verifyNever(() => service.hasAcceptedCurrentVersion('alice'));
-      expect(notifier.termsAccepted, isTrue);
+      expect(terms.termsAccepted, isTrue);
       expect(find.byType(SnackBar), findsNothing);
     },
   );
@@ -116,21 +119,27 @@ void main() {
         when(() => service.hasCachedAcceptance('alice')).thenReturn(false);
         when(() => service.hasAcceptedCurrentVersion('alice'))
             .thenAnswer((_) => check.future);
-        notifier.dispose();
-        notifier = AppRouterNotifier(
+        terms.dispose();
+        terms = TermsAcceptanceController(
           auth: auth,
-          readCachedTermsAcceptance: service.hasCachedAcceptance,
-          refreshTermsAcceptance: service.hasAcceptedCurrentVersion,
-          initialState: const AppRouterBootstrapState(
+          readCachedAcceptance: service.hasCachedAcceptance,
+          refreshAcceptance: service.hasAcceptedCurrentVersion,
+        );
+        final setup = UserSetupController(auth: auth);
+        addTearDown(setup.dispose);
+        final notifier = AppRouterNotifier(
+          auth: auth,
+          setup: setup,
+          terms: terms,
+          initialState: const UserSetupBootstrapState(
             usernameSet: true,
             artistsSelected: true,
             onboardingDone: true,
             photoSetupDone: true,
-            deletionPending: false,
-            setupStateKnown: true,
             userUid: 'alice',
           ),
         );
+        addTearDown(notifier.dispose);
         final router = GoRouter(
           initialLocation: '/',
           refreshListenable: notifier,
@@ -153,7 +162,7 @@ void main() {
         expect(find.text('Inicio'), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(find.byType(AlertDialog), findsNothing);
-        expect(notifier.termsAccepted, isFalse);
+        expect(terms.termsAccepted, isFalse);
 
         check.complete(accepted);
         await tester.pumpAndSettle();
@@ -162,7 +171,7 @@ void main() {
           find.byType(AlertDialog),
           accepted ? findsNothing : findsOneWidget,
         );
-        expect(notifier.termsAccepted, accepted);
+        expect(terms.termsAccepted, accepted);
         verify(() => service.hasAcceptedCurrentVersion('alice')).called(1);
       },
     );
@@ -191,7 +200,7 @@ void main() {
         tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNotNull,
       );
-      expect(notifier.termsAccepted, isFalse);
+      expect(terms.termsAccepted, isFalse);
     },
   );
 }

@@ -17,7 +17,7 @@ import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_provider.dart';
 import 'package:musi_link/providers/theme_provider.dart';
-import 'package:musi_link/router/app_router.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/router/go_router_provider.dart';
 import 'package:musi_link/screens/mandatory_update_screen.dart';
 import 'package:musi_link/screens/pwa_install_screen.dart';
@@ -26,13 +26,12 @@ import 'package:musi_link/services/notification_service.dart';
 import 'package:musi_link/services/chat_service.dart';
 import 'package:musi_link/services/chat_message_cache.dart';
 import 'package:musi_link/services/user_service.dart';
+import 'package:musi_link/services/user_setup_repository.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
-import 'package:musi_link/utils/firestore_collections.dart';
 import 'package:musi_link/utils/notification_navigation.dart';
 import 'package:musi_link/utils/pwa_environment.dart';
 import 'package:musi_link/utils/pwa_install_session.dart';
-import 'package:musi_link/utils/user_setup_cache.dart';
 import 'package:musi_link/widgets/theme_environment_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -92,72 +91,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (kDebugMode) debugPrint('FCM background: ${message.messageId}');
 }
 
-Future<AppRouterBootstrapState> _loadRouterBootstrapState(
-  SharedPreferences prefs,
-) async {
-  final authUser = FirebaseAuth.instance.currentUser;
-  final uid = authUser?.uid;
-  final cachedSetup = uid == null ? null : UserSetupCache.read(prefs, uid);
-  bool usernameSet = cachedSetup?.usernameSet ?? false;
-  bool artistsSelected = cachedSetup?.artistsSelected ?? false;
-  bool onboardingDone = cachedSetup?.onboardingDone ?? false;
-  bool photoSetupDone = cachedSetup?.photoSetupDone ?? false;
-  bool deletionPending = false;
-  bool setupStateKnown = uid == null || cachedSetup != null;
-
-  if (uid != null) {
-    try {
-      final user = await UserService(firestore: FirebaseFirestore.instance)
-          .getSetupUser(uid, cacheOnly: true);
-      usernameSet = user != null && user.username.isNotEmpty;
-      artistsSelected = user != null && user.topArtistNames.isNotEmpty;
-      final resolved = UserSetupCache.resolve(
-        prefs,
-        uid,
-        usernameSet: usernameSet,
-        artistsSelected: artistsSelected,
-      );
-      onboardingDone = resolved.onboardingDone;
-      photoSetupDone = resolved.photoSetupDone;
-      setupStateKnown = true;
-    } catch (_) {
-      // Sin documento local se conserva el último snapshot persistido. La
-      // consulta de servidor se hará después de pintar la primera pantalla.
-    }
-
-    try {
-      final deletionJob = await FirebaseFirestore.instance
-          .collection(FirestoreCollections.accountDeletions)
-          .doc(uid)
-          .get(const GetOptions(source: Source.cache));
-      deletionPending = deletionJob.exists;
-    } catch (_) {}
-  }
-
-  if (uid != null && setupStateKnown) {
-    await UserSetupCache.write(
-      prefs,
-      uid,
-      CachedUserSetupState(
-        usernameSet: usernameSet,
-        artistsSelected: artistsSelected,
-        onboardingDone: onboardingDone,
-        photoSetupDone: photoSetupDone,
-      ),
-    );
-  }
-
-  return AppRouterBootstrapState(
-    usernameSet: usernameSet,
-    artistsSelected: artistsSelected,
-    onboardingDone: onboardingDone,
-    photoSetupDone: photoSetupDone,
-    deletionPending: deletionPending,
-    setupStateKnown: setupStateKnown,
-    userUid: uid,
-  );
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -182,7 +115,11 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final initialMessageFuture = FirebaseMessaging.instance.getInitialMessage();
   final localLaunchFuture = NotificationService.getLocalLaunchData();
-  final routerBootstrapState = await _loadRouterBootstrapState(prefs);
+  final userSetupBootstrapState = await UserSetupRepository(
+    firestore: FirebaseFirestore.instance,
+    userService: UserService(firestore: FirebaseFirestore.instance),
+    prefs: prefs,
+  ).loadBootstrapState(FirebaseAuth.instance.currentUser?.uid);
   final initialMessage = await initialMessageFuture;
   final localLaunch = await localLaunchFuture;
   final launchData = localLaunch ?? initialMessage?.data;
@@ -228,7 +165,9 @@ void main() async {
         localNotificationLaunchHandledProvider.overrideWithValue(
           localLaunch != null,
         ),
-        routerBootstrapStateProvider.overrideWithValue(routerBootstrapState),
+        userSetupBootstrapStateProvider.overrideWithValue(
+          userSetupBootstrapState,
+        ),
         // Las pantallas previas al router (instalación de la PWA,
         // actualización obligatoria) dejan la URL en `/`, así que el router no
         // puede leer de ella la ruta inicial al crearse después.

@@ -15,11 +15,11 @@ import 'package:musi_link/providers/profile_photo_upload_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/shared_preferences_provider.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
-import 'package:musi_link/router/app_router.dart';
-import 'package:musi_link/router/go_router_provider.dart';
+import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/screens/account_settings_screen.dart';
 import 'package:musi_link/screens/photo_setup_screen.dart';
 import 'package:musi_link/services/storage_service.dart';
+import 'package:musi_link/services/user_setup_controller.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,7 +29,7 @@ class _MockImagePicker extends Mock implements ImagePicker {}
 
 class _MockStorageService extends Mock implements StorageService {}
 
-class _MockRouterNotifier extends Mock implements AppRouterNotifier {}
+class _MockUserSetupController extends Mock implements UserSetupController {}
 
 void main() {
   late MockFirebaseAuth auth;
@@ -37,7 +37,7 @@ void main() {
   late MockUserService users;
   late _MockImagePicker picker;
   late _MockStorageService storage;
-  late _MockRouterNotifier router;
+  late _MockUserSetupController setup;
   late Completer<String?> upload;
   late ValueNotifier<Widget> screen;
   late Uint8List bytes;
@@ -53,7 +53,7 @@ void main() {
     users = MockUserService();
     picker = _MockImagePicker();
     storage = _MockStorageService();
-    router = _MockRouterNotifier();
+    setup = _MockUserSetupController();
     screen = ValueNotifier<Widget>(const PhotoSetupScreen());
     bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
@@ -76,7 +76,7 @@ void main() {
     when(() => users.updateSetupPhoto('alice', url)).thenAnswer((_) async {});
     when(() => users.updateProfile('alice', photoUrl: url))
         .thenAnswer((_) async {});
-    when(() => router.setPhotoSetupDone()).thenAnswer((_) {
+    when(() => setup.setPhotoSetupDone()).thenAnswer((_) {
       screen.value = const Scaffold(body: Text('Next step'));
     });
   });
@@ -92,7 +92,7 @@ void main() {
           userServiceProvider.overrideWithValue(users),
           storageServiceProvider.overrideWithValue(storage),
           imagePickerProvider.overrideWithValue(picker),
-          appRouterNotifierProvider.overrideWithValue(router),
+          userSetupControllerProvider.overrideWithValue(setup),
           sharedPreferencesProvider.overrideWithValue(prefs),
           currentUserProvider.overrideWith(
             (_) =>
