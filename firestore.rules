@@ -163,24 +163,13 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/usernames/$(username)).data.uid == userId;
     }
 
-    function keepsUsernameOrAnonymizes(userId) {
-      let before = resource.data.username;
-      let after = request.resource.data.username;
-      return (
-          after == before
-          && after != 'deleted_user'
-          && ownsUsernameAfter(userId, after)
-        ) || (
-          before != 'deleted_user'
-          && after == 'deleted_user'
-          // Storage uses this backend-created document as proof of signup.
-          // Legacy client anonymization must revoke it atomically.
-          && !existsAfter(/databases/$(database)/documents/user_private/$(userId))
-          && (
-            !existsAfter(/databases/$(database)/documents/usernames/$(before))
-            || getAfter(/databases/$(database)/documents/usernames/$(before)).data.uid != userId
-          )
-        );
+    // El username se reserva en el alta (callable) y solo el trabajo de baja
+    // del backend lo anonimiza o libera; el cliente nunca lo cambia.
+    function keepsUsername(userId) {
+      let username = request.resource.data.username;
+      return username == resource.data.username
+        && username != 'deleted_user'
+        && ownsUsernameAfter(userId, username);
     }
 
     function validBlockedUsers(userId, data) {
@@ -262,15 +251,9 @@ service cloud.firestore {
     // ─── Reservas únicas de username ───────────────────
     match /usernames/{username} {
       // La existencia es visible para mostrar disponibilidad. Las reservas se
-      // crean exclusivamente desde la callable privilegiada.
+      // crean desde la callable privilegiada y la baja las libera en backend.
       allow read: if request.auth != null;
-      allow create, update: if false;
-      // La baja libera la reserva en el mismo batch que anonimiza el perfil.
-      allow delete: if request.auth != null
-        && resource.data.uid == request.auth.uid
-        && getAfter(
-          /databases/$(database)/documents/users/$(request.auth.uid)
-        ).data.username == 'deleted_user';
+      allow create, update, delete: if false;
     }
 
     // ─── Usuarios ───────────────────────────────────────
@@ -294,7 +277,7 @@ service cloud.firestore {
         && validPublicProfile(userId, request.resource.data)
         && validDailySongUpdate()
         && validIdentityUpdateCooldown()
-        && keepsUsernameOrAnonymizes(userId);
+        && keepsUsername(userId);
       allow delete: if false;
 
       match /daily_song_likes/{senderId} {
@@ -386,7 +369,8 @@ service cloud.firestore {
           && resource.data.get('friends', []).hasAny([request.auth.uid])
         )
       );
-      allow delete: if request.auth != null && request.auth.uid == userId;
+      // Solo el trabajo de baja del backend elimina el perfil privado.
+      allow delete: if false;
 
       // La aceptación se escribe solo desde la callable con hora del servidor.
       // Vive aquí para que recursiveDelete la elimine junto con la cuenta.

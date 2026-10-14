@@ -9,6 +9,7 @@ const {
 } = require('@firebase/rules-unit-testing');
 const {
   collection,
+  deleteDoc,
   deleteField,
   doc,
   getDoc,
@@ -124,54 +125,22 @@ test('un usuario no puede cambiar su username activo', async () => {
   }));
 });
 
-test('la anonimización libera la reserva y revoca el perfil privado en el mismo batch', async () => {
+test('el cliente no puede anonimizar su perfil ni borrar sus datos de cuenta', async () => {
   await seedActiveUser('alice');
   const db = dbFor('alice');
-  const userRef = doc(db, 'users/alice');
-  await assertSucceeds(updateDoc(userRef, {
-    dailySong: {
-      title: 'Song',
-      artist: 'Artist',
-      imageUrl: '',
-      spotifyUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
-    },
-    dailySongUpdatedAt: serverTimestamp(),
-  }));
   const batch = writeBatch(db);
-  batch.update(userRef, {
+  batch.update(doc(db, 'users/alice'), {
     displayName: 'Deleted user',
     username: 'deleted_user',
     photoUrl: '',
     profileIdentityUpdatedAt: serverTimestamp(),
   });
   batch.delete(doc(db, 'usernames/alice_name'));
+  batch.delete(doc(db, 'user_private/alice'));
 
   await assertFails(batch.commit());
-
-  const completeBatch = writeBatch(db);
-  completeBatch.update(userRef, {
-    displayName: 'Deleted user',
-    username: 'deleted_user',
-    photoUrl: '',
-    profileIdentityUpdatedAt: serverTimestamp(),
-    dailySong: deleteField(),
-    dailySongUpdatedAt: deleteField(),
-  });
-  completeBatch.delete(doc(db, 'usernames/alice_name'));
-  completeBatch.delete(doc(db, 'user_private/alice'));
-  await assertSucceeds(completeBatch.commit());
-  const deletedProfile = (await getDoc(userRef)).data();
-  assert.equal('dailySong' in deletedProfile, false);
-  assert.equal('dailySongUpdatedAt' in deletedProfile, false);
-});
-
-test('una reserva no se puede liberar sin anonimizar el perfil', async () => {
-  await seedActiveUser('alice');
-  const db = dbFor('alice');
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'usernames/alice_name'));
-
-  await assertFails(batch.commit());
+  await assertFails(deleteDoc(doc(db, 'usernames/alice_name')));
+  await assertFails(deleteDoc(doc(db, 'user_private/alice')));
 });
 
 async function seedChat({ friends = true, read = false, reactions = {} } = {}) {
