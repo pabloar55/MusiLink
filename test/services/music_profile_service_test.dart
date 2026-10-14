@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/artist.dart' as app;
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/services/artist_selector_controller.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 
@@ -610,6 +611,54 @@ void main() {
         verifyNever(() => mockMyDocRef.update(any()));
       });
 
+      test('guarda los homónimos elegidos en el selector', () async {
+        const nirvanaUs = app.Artist(
+          name: 'Nirvana',
+          imageUrl: 'https://i.scdn.co/image/nirvana-us',
+          genres: ['grunge'],
+          spotifyId: '6olE6TJLqED3rqDCT0FyPh',
+        );
+        // El homónimo británico no tiene foto: el guardado intenta completarlo.
+        const nirvanaUk = app.Artist(
+          name: 'Nirvana',
+          imageUrl: '',
+          genres: ['psychedelic pop'],
+          spotifyId: '0V4qHDaoXjv0zj3aT7k7Sx',
+        );
+        when(() => mockMusicCatalogService.searchArtists('Nirvana', limit: 1))
+            .thenAnswer((_) async => const [nirvanaUs]);
+        final selection = ArtistSelectorController(
+          catalog: mockMusicCatalogService,
+        );
+        addTearDown(selection.dispose);
+        when(() => mockMusicCatalogService.getRelatedArtists(any()))
+            .thenAnswer((_) async => const []);
+
+        selection
+          ..toggle(nirvanaUs)
+          ..toggle(nirvanaUk);
+        await pumpEventQueue();
+        await service.saveManualArtists(selection.selected);
+
+        final payload = Map<String, dynamic>.from(
+          verify(() => mockSaveMusicProfileCallable.call<void>(captureAny()))
+                  .captured
+                  .single
+              as Map,
+        );
+        final artists = List<Map<String, dynamic>>.from(
+          (payload['artists'] as List).map(
+            (artist) => Map<String, dynamic>.from(artist as Map),
+          ),
+        );
+        expect(artists.map((artist) => artist['spotifyId']), [
+          nirvanaUs.spotifyId,
+          nirvanaUk.spotifyId,
+        ]);
+        expect(artists[1]['imageUrl'], isEmpty);
+        expect(artists[1]['genres'], ['psychedelic pop']);
+      });
+
       test('guarda como máximo los primeros 30 artistas', () async {
         final selected = List.generate(
           50,
@@ -692,7 +741,7 @@ void main() {
             FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
           );
           expect(await service.readDiscoveryUsersFromLocalCache(), isNull);
-        verify(() => mockMyDocRef.get(any())).called(2);
+          verify(() => mockMyDocRef.get(any())).called(2);
         },
       );
 

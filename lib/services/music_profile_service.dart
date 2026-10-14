@@ -129,8 +129,11 @@ class MusicProfileService with AuthenticatedService {
       if (results.isEmpty) return artist;
 
       final enriched = results.first;
+      // Un homónimo con otro spotifyId es otro artista: completarlo con él
+      // cambiaría la identidad elegida y podría duplicar otra del perfil.
       if (_normalizedMusicKey(enriched.name) !=
-          _normalizedMusicKey(artist.name)) {
+              _normalizedMusicKey(artist.name) ||
+          !isSameArtist(enriched, artist)) {
         return artist;
       }
 
