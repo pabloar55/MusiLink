@@ -12,23 +12,18 @@ import 'package:musi_link/services/chat_composer_controller.dart';
 import 'package:musi_link/services/chat_history_controller.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/models/message.dart';
-import 'package:musi_link/models/message_reply.dart';
 import 'package:musi_link/models/chat.dart';
 import 'package:musi_link/services/user_future_cache.dart';
 import 'package:musi_link/services/user_service.dart';
 import 'package:musi_link/models/app_user.dart';
-import 'package:musi_link/theme/app_theme.dart';
-import 'package:musi_link/widgets/chat/message_bubble.dart';
 import 'package:musi_link/widgets/chat/chat_input_bar.dart';
-import 'package:musi_link/widgets/chat/message_sender_avatar.dart';
-import 'package:musi_link/widgets/chat/reply_quote.dart';
-import 'package:musi_link/widgets/chat/swipe_to_reply.dart';
-import 'package:musi_link/widgets/chat/track_bubble.dart';
+import 'package:musi_link/widgets/chat/chat_message_list.dart';
+import 'package:musi_link/widgets/chat/chat_message_locator.dart';
+import 'package:musi_link/widgets/chat/message_reply_quote.dart';
 import 'package:musi_link/widgets/chat/track_search_sheet.dart';
 import 'package:musi_link/widgets/group_circle_avatar.dart';
 import 'package:musi_link/widgets/report_reason_dialog.dart';
 import 'package:musi_link/widgets/service_error_snackbar.dart';
-import 'package:musi_link/widgets/skeleton_loader.dart';
 import 'package:musi_link/widgets/user_circle_avatar.dart';
 import 'package:go_router/go_router.dart';
 
@@ -58,14 +53,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   bool get _isGroup => widget.group != null;
   final _inputFocusNode = FocusNode();
-
-  // Ir al mensaje citado: búsqueda en curso y resaltado.
-  bool _isLocatingMessage = false;
-  String? _highlightedMessageId;
-  Timer? _highlightTimer;
   final _scrollController = ScrollController(keepScrollOffset: false);
   late final ChatHistoryController _history;
   late final ChatComposerController _composer;
+  late final ChatMessageLocator _locator;
   late final ActiveChatNotifier _activeChatNotifier;
   late final Future<AppUser?> _otherUserFuture;
   ModalRoute<void>? _route;
@@ -125,6 +116,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       chatId: widget.chatId,
       onSent: _scrollToBottom,
       onError: _showWriteError,
+    )..addListener(_rebuild);
+    _locator = ChatMessageLocator(
+      history: _history,
+      scrollController: _scrollController,
+      onUnavailable: _showOriginalUnavailable,
     )..addListener(_rebuild);
     _scrollController.addListener(_onScroll);
   }
@@ -269,7 +265,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _activeChatNotifier.clearChat(widget.chatId);
     });
     _history.dispose();
-    _highlightTimer?.cancel();
+    _locator.dispose();
     _scrollController.removeListener(_onScroll);
     _composer.dispose();
     _inputFocusNode.dispose();
@@ -297,94 +293,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _inputFocusNode.requestFocus();
   }
 
-  /// Lleva la lista hasta el mensaje citado y lo resalta un instante.
-  Future<void> _showOriginalMessage(MessageReply reply) async {
-    if (_isLocatingMessage) return;
-    _isLocatingMessage = true;
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = AppLocalizations.of(context)!;
-    try {
-      final loaded = _history.indexOf(reply.messageId) >= 0
-          ? true
-          : await _history.loadThrough(reply.messageId);
-      // Sin resultado, el error ya se ha mostrado.
-      if (!mounted || loaded == null) return;
-      if (loaded && await _scrollToMessage(reply.messageId)) {
-        if (mounted) _highlightMessage(reply.messageId);
-        return;
-      }
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.chatReplyOriginalUnavailable)),
-      );
-    } finally {
-      _isLocatingMessage = false;
-    }
-  }
-
-  /// Los mensajes tienen altura variable y solo se construyen los cercanos a
-  /// la pantalla: se salta estimando la distancia por el número de mensajes y
-  /// se corrige en cada fotograma hasta que el buscado está construido.
-  Future<bool> _scrollToMessage(String messageId) async {
-    // Posiciones entre las que ya se sabe que está el mensaje.
-    var lower = double.negativeInfinity;
-    var upper = double.infinity;
-    for (var attempt = 0; attempt < 30; attempt++) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted || !_scrollController.hasClients) return false;
-      final target = _MessageKey(this, messageId).currentContext;
-      if (target != null && target.mounted) {
-        await Scrollable.ensureVisible(
-          target,
-          alignment: 0.5,
-          duration: AppTokens.durationMedium,
-          curve: Curves.easeOut,
-        );
-        return mounted;
-      }
-
-      final messages = _history.messages;
-      final index = _history.indexOf(messageId);
-      int? oldestBuilt;
-      int? newestBuilt;
-      for (var i = 0; i < messages.length; i++) {
-        if (_MessageKey(this, messages[i].id).currentContext == null) {
-          continue;
-        }
-        oldestBuilt ??= i;
-        newestBuilt = i;
-      }
-      if (index < 0 || oldestBuilt == null || newestBuilt == null) return false;
-
-      final position = _scrollController.position;
-      final perMessage =
-          position.viewportDimension / (newestBuilt - oldestBuilt + 1);
-      // Con la lista invertida, los mensajes antiguos quedan en offsets altos.
-      final isOlder = index < oldestBuilt;
-      double next;
-      if (isOlder) {
-        lower = position.pixels;
-        next = position.pixels + (oldestBuilt - index) * perMessage;
-      } else {
-        upper = position.pixels;
-        next = position.pixels - (index - newestBuilt) * perMessage;
-      }
-      if (next <= lower || next >= upper) next = (lower + upper) / 2;
-      next = next
-          .clamp(position.minScrollExtent, position.maxScrollExtent)
-          .toDouble();
-      if (next == position.pixels) return false;
-      _scrollController.jumpTo(next);
-    }
-    return false;
-  }
-
-  void _highlightMessage(String messageId) {
-    _highlightTimer?.cancel();
-    setState(() => _highlightedMessageId = messageId);
-    _highlightTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) setState(() => _highlightedMessageId = null);
-    });
+  void _showOriginalUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context)!.chatReplyOriginalUnavailable,
+        ),
+      ),
+    );
   }
 
   void _showWriteError(Object? error) {
@@ -586,7 +502,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         body: Column(
           children: [
             // Lista de mensajes
-            Expanded(child: _buildMessageList(colorScheme, l10n, canInteract)),
+            Expanded(
+              child: ChatMessageList(
+                messages: _history.messages,
+                isInitialLoading: _history.isInitialLoading,
+                isLoadingMore: _history.isLoadingMore,
+                scrollController: _scrollController,
+                locator: _locator,
+                chatId: widget.chatId,
+                chatService: ref.read(chatServiceProvider),
+                currentUid: _currentUid,
+                isGroup: _isGroup,
+                reactionsEnabled: canInteract,
+                senderFuture: _senderFuture,
+                fallbackSenderName: _fallbackSenderName(l10n),
+                onReport: _reportMessage,
+                onReply: canInteract && !_isOtherUserDeleted
+                    ? _startReply
+                    : null,
+              ),
+            ),
             if (_isOtherUserDeleted)
               _buildDeletedAccountBar(colorScheme, l10n)
             else if (relationship?.isLoading ?? false)
@@ -603,223 +538,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildMessageList(
-    ColorScheme colorScheme,
-    AppLocalizations l10n,
-    bool canInteract,
-  ) {
-    if (_history.isInitialLoading) {
-      return const SkeletonShimmer(child: SkeletonChatMessages());
-    }
+  Future<AppUser?> _senderFuture(String senderId) =>
+      _isGroup ? getUserFuture(senderId) : _otherUserFuture;
 
-    final messages = _history.messages;
-    if (messages.isEmpty) {
-      return Center(
-        child: Text(
-          l10n.chatSendFirst,
-          style: TextStyle(color: colorScheme.onSurface.withAlpha(120)),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        if (_history.isLoadingMore)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            reverse: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: messages.length,
-            itemBuilder: (context, index) {
-              final messageIndex = messages.length - 1 - index;
-              final msg = messages[messageIndex];
-              final isMe = msg.senderId == _currentUid;
-              final showDateSeparator =
-                  messageIndex == 0 ||
-                  !_isSameCalendarDay(
-                    msg.timestamp,
-                    messages[messageIndex - 1].timestamp,
-                  );
-              // Mensajes seguidos de una misma persona en el mismo día forman
-              // un bloque: nombre en el primero y foto en el último.
-              final startsSenderRun =
-                  showDateSeparator ||
-                  messages[messageIndex - 1].senderId != msg.senderId;
-              final next = messageIndex + 1 < messages.length
-                  ? messages[messageIndex + 1]
-                  : null;
-              final endsSenderRun =
-                  next == null ||
-                  next.senderId != msg.senderId ||
-                  !_isSameCalendarDay(msg.timestamp, next.timestamp);
-              final senderAvatar = isMe
-                  ? null
-                  : !endsSenderRun
-                  ? const MessageSenderAvatar.spacer()
-                  : MessageSenderAvatar(
-                      userFuture: _isGroup
-                          ? getUserFuture(msg.senderId)
-                          : _otherUserFuture,
-                      fallbackName: _isGroup
-                          ? l10n.socialUser
-                          : widget.otherUserName,
-                    );
-              final replyTo = msg.replyTo;
-              final replyQuote = replyTo == null
-                  ? null
-                  : _buildReplyQuote(
-                      replyTo,
-                      l10n,
-                      accentColor: isMe
-                          ? colorScheme.onPrimary
-                          : colorScheme.primary,
-                      textColor: isMe
-                          ? colorScheme.onPrimary.withAlpha(220)
-                          : colorScheme.onSurfaceVariant,
-                      backgroundColor:
-                          (isMe ? colorScheme.onPrimary : colorScheme.onSurface)
-                              .withAlpha(28),
-                      onTap: () => _showOriginalMessage(replyTo),
-                    );
-
-              final messageBubble = msg.isTrack
-                  ? TrackBubble(
-                      message: msg,
-                      isMe: isMe,
-                      colorScheme: colorScheme,
-                      currentUid: _currentUid,
-                      chatId: widget.chatId,
-                      chatService: ref.read(chatServiceProvider),
-                      showReceipts: !_isGroup,
-                      reactionsEnabled: canInteract && !msg.isPending,
-                      onReport: !isMe && !msg.isPending
-                          ? () => _reportMessage(msg)
-                          : null,
-                      senderAvatar: senderAvatar,
-                      replyQuote: replyQuote,
-                    )
-                  : MessageBubble(
-                      message: msg,
-                      isMe: isMe,
-                      colorScheme: colorScheme,
-                      currentUid: _currentUid,
-                      chatId: widget.chatId,
-                      chatService: ref.read(chatServiceProvider),
-                      showReceipts: !_isGroup,
-                      reactionsEnabled: canInteract && !msg.isPending,
-                      onReport: !isMe && !msg.isPending
-                          ? () => _reportMessage(msg)
-                          : null,
-                      senderAvatar: senderAvatar,
-                      replyQuote: replyQuote,
-                    );
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (showDateSeparator)
-                    _buildDateSeparator(context, msg.timestamp, colorScheme),
-                  if (_isGroup && !isMe && startsSenderRun)
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: MessageSenderAvatar.extent + 8,
-                        top: 8,
-                      ),
-                      child: FutureBuilder<AppUser?>(
-                        future: getUserFuture(msg.senderId),
-                        builder: (context, snapshot) => Text(
-                          snapshot.data?.displayName ?? l10n.socialUser,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: colorScheme.primary),
-                        ),
-                      ),
-                    ),
-                  AnimatedContainer(
-                    key: _MessageKey(this, msg.id),
-                    duration: AppTokens.durationSlow,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withAlpha(
-                        msg.id == _highlightedMessageId ? 40 : 0,
-                      ),
-                      borderRadius: BorderRadius.circular(AppTokens.radiusMD),
-                    ),
-                    child: SwipeToReply(
-                      onReply:
-                          canInteract && !_isOtherUserDeleted && !msg.isPending
-                          ? () => _startReply(msg)
-                          : null,
-                      child: messageBubble,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  bool _isSameCalendarDay(DateTime first, DateTime second) {
-    final localFirst = first.toLocal();
-    final localSecond = second.toLocal();
-    return localFirst.year == localSecond.year &&
-        localFirst.month == localSecond.month &&
-        localFirst.day == localSecond.day;
-  }
-
-  Widget _buildDateSeparator(
-    BuildContext context,
-    DateTime timestamp,
-    ColorScheme colorScheme,
-  ) {
-    final l10n = AppLocalizations.of(context)!;
-    final localDate = timestamp.toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(
-      localDate.year,
-      localDate.month,
-      localDate.day,
-    );
-    final daysAgo = today.difference(messageDate).inDays;
-    final label = switch (daysAgo) {
-      0 => l10n.chatDateToday,
-      1 => l10n.chatDateYesterday,
-      _ => MaterialLocalizations.of(context).formatMediumDate(localDate),
-    };
-
-    return Center(
-      child: Container(
-        key: ValueKey(
-          'chat-date-${localDate.year}-${localDate.month}-${localDate.day}',
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
+  String _fallbackSenderName(AppLocalizations l10n) =>
+      _isGroup ? l10n.socialUser : widget.otherUserName;
 
   Widget _buildInputBar({bool canSend = true}) {
     final replyingTo = _composer.replyingTo;
@@ -832,49 +555,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       onShareSong: _showTrackSearch,
       header: replyingTo == null
           ? null
-          : _buildReplyQuote(
-              replyingTo.toReply(),
-              AppLocalizations.of(context)!,
+          : MessageReplyQuote(
+              reply: replyingTo.toReply(),
+              currentUid: _currentUid,
+              senderFuture: _senderFuture,
+              fallbackSenderName: _fallbackSenderName(
+                AppLocalizations.of(context)!,
+              ),
               accentColor: colorScheme.primary,
               textColor: colorScheme.onSurfaceVariant,
               backgroundColor: colorScheme.surfaceContainerHighest,
               maxLines: 1,
               onClose: _composer.cancelReply,
             ),
-    );
-  }
-
-  Widget _buildReplyQuote(
-    MessageReply reply,
-    AppLocalizations l10n, {
-    required Color accentColor,
-    required Color textColor,
-    required Color backgroundColor,
-    int maxLines = 2,
-    VoidCallback? onTap,
-    VoidCallback? onClose,
-  }) {
-    final isMine = reply.senderId == _currentUid;
-    return FutureBuilder<AppUser?>(
-      future: isMine
-          ? null
-          : _isGroup
-          ? getUserFuture(reply.senderId)
-          : _otherUserFuture,
-      builder: (context, snapshot) => ReplyQuote(
-        senderName: isMine
-            ? l10n.groupChatYou
-            : snapshot.data?.displayName ??
-                  (_isGroup ? l10n.socialUser : widget.otherUserName),
-        text: reply.text,
-        isTrack: reply.isTrack,
-        accentColor: accentColor,
-        textColor: textColor,
-        backgroundColor: backgroundColor,
-        maxLines: maxLines,
-        onTap: onTap,
-        onClose: onClose,
-      ),
     );
   }
 
@@ -925,22 +618,4 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ),
     );
   }
-}
-
-/// Localiza la fila de un mensaje en una pantalla de chat concreta, de modo
-/// que dos pantallas abiertas sobre el mismo chat no compartan claves.
-class _MessageKey extends GlobalKey {
-  const _MessageKey(this.owner, this.messageId) : super.constructor();
-
-  final Object owner;
-  final String messageId;
-
-  @override
-  bool operator ==(Object other) =>
-      other is _MessageKey &&
-      identical(other.owner, owner) &&
-      other.messageId == messageId;
-
-  @override
-  int get hashCode => Object.hash(identityHashCode(owner), messageId);
 }
