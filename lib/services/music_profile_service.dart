@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/artist.dart' as app;
 import 'package:musi_link/models/discovery_result.dart';
+import 'package:musi_link/models/stored_recommendations.dart';
 import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/utils/artist_identity.dart';
@@ -58,9 +59,7 @@ class MusicProfileService with AuthenticatedService {
 
   static const _cacheTtl = Duration(minutes: 30);
   static const _recommendationGenerationWait = Duration(seconds: 15);
-  static const _recentRecommendationRequestWindow = Duration(minutes: 2);
   static const _pageSize = 20;
-  static const _recommendationSnapshotVersion = 1;
 
   bool get hasMoreDiscoveryUsers => _hasMoreDiscoveryUsers;
 
@@ -166,7 +165,7 @@ class MusicProfileService with AuthenticatedService {
       if (myUser.topArtistNames.isEmpty && myUser.topGenreNames.isEmpty) {
         return null;
       }
-      if (_recommendationRefreshIsPending(myDoc.data())) return null;
+      if (recommendationRefreshPending(myDoc.data())) return null;
 
       _blockedUids = null;
       final stored = await _fetchStoredRecommendationsPage(options: opts);
@@ -205,7 +204,7 @@ class MusicProfileService with AuthenticatedService {
           revision: revision,
         );
       }
-      if (_shouldWaitForRecommendationRefresh(myDoc.data())) {
+      if (shouldAwaitRecommendationRefresh(myDoc.data(), now: DateTime.now())) {
         myDoc = await _waitForRecommendationRefresh(myDoc);
       }
 
@@ -240,38 +239,6 @@ class MusicProfileService with AuthenticatedService {
     }
   }
 
-  bool _recommendationRefreshIsPending(Map<String, dynamic>? data) {
-    if (data == null ||
-        !data.containsKey('recommendationsRefreshRequestedAt')) {
-      return false;
-    }
-
-    final requestedVersion = data['musicProfileVersion'];
-    final generatedVersion =
-        data['recommendationsGeneratedForMusicProfileVersion'];
-    if (requestedVersion is int) {
-      return generatedVersion is! int || generatedVersion < requestedVersion;
-    }
-
-    final requestedAt = data['recommendationsRefreshRequestedAt'];
-    final generatedAt = data['recommendationsGeneratedAt'];
-    if (requestedAt is! Timestamp) {
-      // A local serverTimestamp can temporarily resolve as null.
-      return true;
-    }
-    return generatedAt is! Timestamp ||
-        generatedAt.millisecondsSinceEpoch < requestedAt.millisecondsSinceEpoch;
-  }
-
-  bool _shouldWaitForRecommendationRefresh(Map<String, dynamic>? data) {
-    if (!_recommendationRefreshIsPending(data)) return false;
-
-    final requestedAt = data?['recommendationsRefreshRequestedAt'];
-    if (requestedAt is! Timestamp) return false;
-    final age = DateTime.now().difference(requestedAt.toDate());
-    return age < _recentRecommendationRequestWindow;
-  }
-
   Future<DocumentSnapshot<Map<String, dynamic>>> _waitForRecommendationRefresh(
     DocumentSnapshot<Map<String, dynamic>> current,
   ) async {
@@ -282,7 +249,7 @@ class MusicProfileService with AuthenticatedService {
           .firstWhere(
             (snapshot) =>
                 snapshot.exists &&
-                !_recommendationRefreshIsPending(snapshot.data()),
+                !recommendationRefreshPending(snapshot.data()),
           )
           .timeout(_recommendationGenerationWait);
     } on TimeoutException {
@@ -363,16 +330,12 @@ class MusicProfileService with AuthenticatedService {
 
     final results = <DiscoveryResult>[];
     for (final doc in recommendationDocs) {
-      final data = doc.data();
-      final uid = (data['userId'] ?? doc.id).toString();
-      if (uid.isEmpty || uid == currentUid) continue;
-      final user = _userFromRecommendationSnapshot(uid: uid, data: data);
-      if (user == null) continue;
-      if (user.topArtistNames.isEmpty && user.topGenreNames.isEmpty) continue;
-
-      results.add(
-        _discoveryResultFromStoredRecommendation(user: user, data: data),
+      final result = discoveryResultFromStoredRecommendation(
+        docId: doc.id,
+        data: doc.data(),
+        currentUid: currentUid,
       );
+      if (result != null) results.add(result);
     }
 
     if (blockedUids.isNotEmpty) {
@@ -385,22 +348,6 @@ class MusicProfileService with AuthenticatedService {
       lastDocument: recommendationDocs.last,
       hasMore: recommendationDocs.length == _pageSize,
     );
-  }
-
-  AppUser? _userFromRecommendationSnapshot({
-    required String uid,
-    required Map<String, dynamic> data,
-  }) {
-    if (data['snapshotVersion'] != _recommendationSnapshotVersion) return null;
-    final rawSnapshot = data['profileSnapshot'];
-    if (rawSnapshot is! Map) return null;
-
-    final snapshot = Map<String, dynamic>.from(rawSnapshot);
-    if ((snapshot['displayName'] ?? '').toString().trim().isEmpty ||
-        (snapshot['username'] ?? '').toString().trim().isEmpty) {
-      return null;
-    }
-    return AppUser.fromMap(uid: uid, data: snapshot);
   }
 
   Future<Set<String>> _readBlockedUids({GetOptions? options}) async {
@@ -433,7 +380,7 @@ class MusicProfileService with AuthenticatedService {
       final data = doc.data();
       if (!doc.exists || data == null) return null;
 
-      return _discoveryResultFromStoredRecommendation(
+      return DiscoveryResult.fromStoredRecommendation(
         user: otherUser,
         data: data,
       );
@@ -443,26 +390,6 @@ class MusicProfileService with AuthenticatedService {
     } catch (_) {
       return null;
     }
-  }
-
-  DiscoveryResult _discoveryResultFromStoredRecommendation({
-    required AppUser user,
-    required Map<String, dynamic> data,
-  }) {
-    return DiscoveryResult(
-      user: user,
-      score: ((data['score'] as num?) ?? 0).toDouble(),
-      sharedArtistNames:
-          (data['sharedArtistNames'] as List<dynamic>?)
-              ?.map((value) => value.toString())
-              .toList() ??
-          const [],
-      sharedGenreNames:
-          (data['sharedGenreNames'] as List<dynamic>?)
-              ?.map((value) => value.toString())
-              .toList() ??
-          const [],
-    );
   }
 
   static String _normalizedMusicKey(String value) => value.trim().toLowerCase();
