@@ -7,9 +7,9 @@ import {
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
+import { artistIdentityKey } from './artist_identity';
 import { db } from './firebase';
 import { normalizeGenreName } from './genre_normalizer';
-import { normalizeArtistIdentityName } from './recommendations';
 
 const maxArtists = 30;
 const maxGenres = 10;
@@ -99,9 +99,7 @@ export function parseMusicProfilePayload(value: unknown): ArtistPayload[] {
   const artists = value.artists.map(parseArtist);
   const identities = new Set<string>();
   for (const artist of artists) {
-    const identity = artist.spotifyId
-      ? `spotify:${artist.spotifyId}`
-      : `name:${normalizeArtistIdentityName(artist.name)}`;
+    const identity = artistIdentityKey(artist.name, artist.spotifyId);
     if (identity.endsWith(':') || identities.has(identity)) {
       return invalid('artists must not contain duplicates.');
     }
@@ -152,9 +150,7 @@ export function buildMusicProfileFields(
     topArtists: artists,
     topGenres,
     topArtistNames: artists.map((artist) => artist.name),
-    topArtistKeys: artists.map((artist) => artist.spotifyId
-      ? `spotify:${artist.spotifyId}`
-      : `name:${normalizeArtistIdentityName(artist.name)}`),
+    topArtistKeys: artists.map((artist) => artistIdentityKey(artist.name, artist.spotifyId)),
     topGenreNames: topGenres.map((genre) => genre.name),
     artistIdentityVersion: 1,
     musicDataUpdatedAt: updatedAt,

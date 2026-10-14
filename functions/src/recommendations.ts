@@ -13,56 +13,33 @@ import {
 } from 'firebase-functions/v2/firestore';
 
 import { db } from './firebase';
-import { stringList, timestampMillis } from './firestore_values';
+import { timestampMillis } from './firestore_values';
+import {
+  CandidateProfile,
+  RecommendationResult,
+  UserMusicProfile,
+  artistMatchKeys,
+  calculateRecommendation,
+  candidateProfileFromData,
+  genreMatchKeys,
+  readMusicProfile,
+} from './recommendation_scoring';
 
 const recommendationProfilesCollection = 'music_recommendation_profiles';
 const recommendationsCollection = 'recommendations';
 const recommendationSyncStateCollection = 'recommendation_sync_state';
-const maxRecommendationInputArtists = 30;
-const maxRecommendationInputGenres = 10;
 const maxArtistCandidateProfiles = 300;
 const maxGenreCandidateProfiles = 100;
 const maxStoredRecommendations = 100;
 const maxRecommendationPublicationWrites = 500;
 const maxReciprocalRecommendationUsers = 100;
-const artistScoreWeight = 70;
-const genreScoreWeight = 30;
-const artistEvidenceTarget = 7;
-const genreEvidenceTarget = 4;
 const recommendationSnapshotVersion = 1;
 const recommendationProfileSchemaVersion = 2;
-
-export interface UserMusicProfile {
-  topArtistNames: string[];
-  topArtistKeys: string[];
-  topGenreNames: string[];
-}
 
 interface PublicProfileSnapshot extends UserMusicProfile {
   displayName: string;
   username: string;
   photoUrl: string;
-}
-
-export interface CandidateProfile extends UserMusicProfile {
-  uid: string;
-}
-
-export interface RecommendationResult {
-  uid: string;
-  score: number;
-  sharedArtistNames: string[];
-  sharedGenreNames: string[];
-}
-
-export function readMusicProfile(data: DocumentData | undefined): UserMusicProfile {
-  const topArtistNames =
-    stringList(data?.topArtistNames).slice(0, maxRecommendationInputArtists);
-  return {
-    topArtistNames,
-    topArtistKeys: readArtistIdentityKeys(data, topArtistNames),
-    topGenreNames: stringList(data?.topGenreNames).slice(0, maxRecommendationInputGenres),
-  };
 }
 
 function readPublicProfileSnapshot(
@@ -144,197 +121,12 @@ function compareTimestamps(left: Timestamp, right: Timestamp): number {
   return left.nanoseconds - right.nanoseconds;
 }
 
-function normalizedMusicKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-const artistDiacriticGroups: Record<string, string> = {
-  a: 'áàäâãåāăąæ',
-  c: 'çćčĉċ',
-  d: 'ďđð',
-  e: 'éèëêēĕėęě',
-  g: 'ğĝġģ',
-  h: 'ĥħ',
-  i: 'íìïîīĭįı',
-  j: 'ĵ',
-  k: 'ķ',
-  l: 'ĺļľŀł',
-  n: 'ñńņňŉŋ',
-  o: 'óòöôõōŏőøœ',
-  r: 'ŕŗř',
-  s: 'śşšŝșß',
-  t: 'ťţŧț',
-  u: 'úùüûūŭůűų',
-  w: 'ŵ',
-  y: 'ýÿŷ',
-  z: 'źżž',
-};
-
-const artistDiacriticReplacements = new Map<string, string>(
-  Object.entries(artistDiacriticGroups)
-    .flatMap(([replacement, characters]) =>
-      [...characters].map((character) => [character, replacement] as const)),
-);
-
-export function normalizeArtistIdentityName(value: string): string {
-  const folded = [...value.trim().toLowerCase()]
-    .map((character) => artistDiacriticReplacements.get(character) ?? character)
-    .join('');
-  return folded
-    .replace(/['’]/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/[-_/.,:;!?()[\]{}"“”+*=|\\]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function fallbackArtistIdentityKey(name: string): string {
-  return `name:${normalizeArtistIdentityName(name)}`;
-}
-
-function normalizedStoredArtistKey(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (trimmed.startsWith('spotify:')) {
-    const spotifyId = trimmed.slice('spotify:'.length).trim();
-    return spotifyId ? `spotify:${spotifyId}` : undefined;
-  }
-  if (trimmed.startsWith('name:')) {
-    const name = normalizeArtistIdentityName(trimmed.slice('name:'.length));
-    return name ? `name:${name}` : undefined;
-  }
-  return undefined;
-}
-
-function readArtistIdentityKeys(
-  data: DocumentData | undefined,
-  names: string[],
-): string[] {
-  const storedKeys = stringList(data?.topArtistKeys)
-    .slice(0, maxRecommendationInputArtists);
-  const storedArtists = Array.isArray(data?.topArtists) ? data.topArtists : [];
-
-  return names.map((name, index) => {
-    const rawArtist = storedArtists[index];
-    const rawName = typeof rawArtist?.name === 'string' ? rawArtist.name.trim() : '';
-    const spotifyId =
-      typeof rawArtist?.spotifyId === 'string' ? rawArtist.spotifyId.trim() : '';
-    if (normalizeArtistIdentityName(rawName) === normalizeArtistIdentityName(name)) {
-      return spotifyId
-        ? `spotify:${spotifyId}`
-        : fallbackArtistIdentityKey(name);
-    }
-
-    const storedKey = normalizedStoredArtistKey(storedKeys[index] ?? '');
-    if (storedKey) return storedKey;
-    return fallbackArtistIdentityKey(name);
-  });
-}
-
-interface ArtistIdentity {
-  name: string;
-  key: string;
-  normalizedName: string;
-}
-
-function artistIdentities(profile: UserMusicProfile): ArtistIdentity[] {
-  const artistsByKey = new Map<string, ArtistIdentity>();
-  profile.topArtistNames.forEach((rawName, index) => {
-    const name = rawName.trim();
-    const normalizedName = normalizeArtistIdentityName(name);
-    if (!normalizedName) return;
-    const key =
-      normalizedStoredArtistKey(profile.topArtistKeys[index] ?? '') ??
-      `name:${normalizedName}`;
-    if (!artistsByKey.has(key)) artistsByKey.set(key, { name, key, normalizedName });
-  });
-  return [...artistsByKey.values()];
-}
-
-function artistIdentitiesMatch(left: ArtistIdentity, right: ArtistIdentity): boolean {
-  const leftHasSpotifyId = left.key.startsWith('spotify:');
-  const rightHasSpotifyId = right.key.startsWith('spotify:');
-  if (leftHasSpotifyId && rightHasSpotifyId) return left.key === right.key;
-  return left.normalizedName === right.normalizedName;
-}
-
-function sharedArtistNames(
-  leftArtists: ArtistIdentity[],
-  rightArtists: ArtistIdentity[],
-): string[] {
-  const usedLeftIndexes = new Set<number>();
-  const shared: string[] = [];
-  for (const rightArtist of rightArtists) {
-    const leftIndex = leftArtists.findIndex((leftArtist, index) =>
-      !usedLeftIndexes.has(index) &&
-      artistIdentitiesMatch(leftArtist, rightArtist));
-    if (leftIndex < 0) continue;
-    usedLeftIndexes.add(leftIndex);
-    shared.push(rightArtist.name);
-  }
-  return shared;
-}
-
-function uniqueMusicNames(values: string[]): string[] {
-  const namesByKey = new Map<string, string>();
-  for (const value of values) {
-    const trimmed = value.trim();
-    const key = normalizedMusicKey(trimmed);
-    if (key.length > 0 && !namesByKey.has(key)) namesByKey.set(key, trimmed);
-  }
-  return [...namesByKey.values()];
-}
-
-export function similarityScore(
-  sharedCount: number,
-  leftCount: number,
-  rightCount: number,
-  evidenceTarget: number,
-  weight: number,
-): number {
-  if (sharedCount === 0) return 0;
-
-  const comparableCount = Math.min(leftCount, rightCount);
-  const coverage = comparableCount === 0 ? 0 : sharedCount / comparableCount;
-  const evidence = Math.min(sharedCount / evidenceTarget, 1);
-  return Math.max(coverage, evidence) * weight;
-}
-
-function artistMatchKeys(profile: UserMusicProfile): string[] {
-  return [...new Set(
-    artistIdentities(profile)
-      .map((artist) => artist.normalizedName)
-      .filter((value) => value.length > 0),
-  )].slice(0, maxRecommendationInputArtists);
-}
-
-function genreMatchKeys(profile: UserMusicProfile): string[] {
-  return [...new Set(
-    profile.topGenreNames
-      .map(normalizedMusicKey)
-      .filter((value) => value.length > 0),
-  )].slice(0, maxRecommendationInputGenres);
-}
-
 function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) {
     result.push(values.slice(index, index + size));
   }
   return result;
-}
-
-function candidateProfileFromData(
-  uid: string,
-  data: DocumentData,
-): CandidateProfile | undefined {
-  const topArtistNames = stringList(data.topArtistNames)
-    .slice(0, maxRecommendationInputArtists);
-  const topArtistKeys = stringList(data.topArtistKeys)
-    .slice(0, maxRecommendationInputArtists);
-  const topGenreNames = stringList(data.topGenreNames)
-    .slice(0, maxRecommendationInputGenres);
-  if (topArtistNames.length === 0 && topGenreNames.length === 0) return undefined;
-  return { uid, topArtistNames, topArtistKeys, topGenreNames };
 }
 
 async function addCandidateMatches(
@@ -529,44 +321,6 @@ async function updateStoredProfileSnapshots(
     uid,
     recommendationCount: recommendations.size,
   });
-}
-
-export function calculateRecommendation(
-  myProfile: UserMusicProfile,
-  candidate: CandidateProfile,
-): RecommendationResult | null {
-  const myArtists = artistIdentities(myProfile);
-  const candidateArtists = artistIdentities(candidate);
-  const myGenreNames = uniqueMusicNames(myProfile.topGenreNames);
-  const candidateGenreNames = uniqueMusicNames(candidate.topGenreNames);
-  const myGenres = new Set(myGenreNames.map(normalizedMusicKey));
-  const matchingArtistNames = sharedArtistNames(myArtists, candidateArtists);
-  const sharedGenreNames = candidateGenreNames.filter((genre) =>
-    myGenres.has(normalizedMusicKey(genre)));
-
-  if (matchingArtistNames.length === 0 && sharedGenreNames.length === 0) return null;
-
-  const artistScore = similarityScore(
-    matchingArtistNames.length,
-    myArtists.length,
-    candidateArtists.length,
-    artistEvidenceTarget,
-    artistScoreWeight,
-  );
-  const genreScore = similarityScore(
-    sharedGenreNames.length,
-    myGenreNames.length,
-    candidateGenreNames.length,
-    genreEvidenceTarget,
-    genreScoreWeight,
-  );
-
-  return {
-    uid: candidate.uid,
-    score: Math.round(artistScore + genreScore),
-    sharedArtistNames: matchingArtistNames,
-    sharedGenreNames,
-  };
 }
 
 interface RecommendationWrite {

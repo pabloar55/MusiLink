@@ -7,9 +7,9 @@ exports.writeMusicProfile = writeMusicProfile;
 const firestore_1 = require("firebase-admin/firestore");
 const v2_1 = require("firebase-functions/v2");
 const https_1 = require("firebase-functions/v2/https");
+const artist_identity_1 = require("./artist_identity");
 const firebase_1 = require("./firebase");
 const genre_normalizer_1 = require("./genre_normalizer");
-const recommendations_1 = require("./recommendations");
 const maxArtists = 30;
 const maxGenres = 10;
 const maxArtistGenres = 50;
@@ -80,9 +80,7 @@ function parseMusicProfilePayload(value) {
     const artists = value.artists.map(parseArtist);
     const identities = new Set();
     for (const artist of artists) {
-        const identity = artist.spotifyId
-            ? `spotify:${artist.spotifyId}`
-            : `name:${(0, recommendations_1.normalizeArtistIdentityName)(artist.name)}`;
+        const identity = (0, artist_identity_1.artistIdentityKey)(artist.name, artist.spotifyId);
         if (identity.endsWith(':') || identities.has(identity)) {
             return invalid('artists must not contain duplicates.');
         }
@@ -123,9 +121,7 @@ function buildMusicProfileFields(artists, updatedAt = firestore_1.FieldValue.ser
         topArtists: artists,
         topGenres,
         topArtistNames: artists.map((artist) => artist.name),
-        topArtistKeys: artists.map((artist) => artist.spotifyId
-            ? `spotify:${artist.spotifyId}`
-            : `name:${(0, recommendations_1.normalizeArtistIdentityName)(artist.name)}`),
+        topArtistKeys: artists.map((artist) => (0, artist_identity_1.artistIdentityKey)(artist.name, artist.spotifyId)),
         topGenreNames: topGenres.map((genre) => genre.name),
         artistIdentityVersion: 1,
         musicDataUpdatedAt: updatedAt,
