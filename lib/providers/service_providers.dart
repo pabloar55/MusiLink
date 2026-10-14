@@ -17,6 +17,7 @@ import 'package:musi_link/services/group_chat_service.dart';
 import 'package:musi_link/services/music_profile_service.dart';
 import 'package:musi_link/services/moderation_service.dart';
 import 'package:musi_link/services/notification_service.dart';
+import 'package:musi_link/services/push_token_registry.dart';
 import 'package:musi_link/services/last_fm_service.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
 import 'package:musi_link/services/spotify_cloud_service.dart';
@@ -149,8 +150,12 @@ final localNotificationLaunchHandledProvider = Provider<bool>((ref) => false);
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService(
     messaging: ref.read(firebaseMessagingProvider),
-    firestore: ref.read(firebaseFirestoreProvider),
-    auth: ref.read(firebaseAuthProvider),
+    pushTokens: PushTokenRegistry(
+      messaging: ref.read(firebaseMessagingProvider),
+      firestore: ref.read(firebaseFirestoreProvider),
+      auth: ref.read(firebaseAuthProvider),
+      prefs: ref.read(sharedPreferencesProvider),
+    ),
     prefs: ref.read(sharedPreferencesProvider),
     onNotificationTapped: (data) {
       unawaited(ref.read(chatServiceProvider).prepareNotificationChat(data));
