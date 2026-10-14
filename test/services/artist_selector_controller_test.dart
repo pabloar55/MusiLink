@@ -147,4 +147,99 @@ void main() {
     selection.toggle(_artist('Blur'));
     expect(selection.hasChanges, isTrue);
   });
+  test('el catálogo solo completa un artista con el mismo artista', () async {
+    const vandi = Artist(name: 'Βανδή', imageUrl: '', genres: []);
+    const nirvana = Artist(
+      name: 'Nirvana',
+      imageUrl: '',
+      genres: [],
+      spotifyId: 'us',
+    );
+    when(() => catalog.searchArtists('Βανδή', limit: 1))
+        .thenAnswer((_) async => [_artist('Ρουβάς')]);
+    when(() => catalog.searchArtists('Nirvana', limit: 1)).thenAnswer(
+      (_) async => [
+        const Artist(
+          name: 'Nirvana',
+          imageUrl: 'https://i.scdn.co/image/uk',
+          genres: [],
+          spotifyId: 'uk',
+        ),
+      ],
+    );
+
+    selection
+      ..toggle(vandi)
+      ..toggle(nirvana);
+    await pumpEventQueue();
+
+    expect(selection.selected, [vandi, nirvana]);
+  });
+
+  test('completar un artista no cuenta como cambio', () async {
+    const blur = Artist(name: 'Blur', imageUrl: '', genres: []);
+    const enrichedBlur = Artist(
+      name: 'Blur',
+      imageUrl: 'https://i.scdn.co/image/blur',
+      genres: ['britpop'],
+      spotifyId: 'blur',
+    );
+    when(() => catalog.searchArtists('Blur', limit: 1))
+        .thenAnswer((_) async => [enrichedBlur]);
+    await selection.restore([_artist('Muse'), blur]);
+
+    selection
+      ..toggle(blur)
+      ..toggle(blur);
+    await pumpEventQueue();
+
+    expect(selection.selected.last, same(enrichedBlur));
+    expect(selection.hasChanges, isFalse);
+  });
+
+  testWidgets(
+    'los resultados distinguen homónimos y omiten lo que el backend rechaza',
+    (tester) async {
+      const nirvanaUs = Artist(
+        name: 'Nirvana',
+        imageUrl: 'https://i.scdn.co/image/us',
+        genres: [],
+        spotifyId: 'us',
+      );
+      const nirvanaUk = Artist(
+        name: 'Nirvana',
+        imageUrl: 'https://i.scdn.co/image/uk',
+        genres: [],
+        spotifyId: 'uk',
+      );
+      await selection.restore([
+        nirvanaUs,
+        _artist('Beyoncé'),
+        _artist('Simon & Garfunkel'),
+      ]);
+      when(() => catalog.searchArtists('n', limit: 10)).thenAnswer(
+        (_) async => [
+          nirvanaUs,
+          nirvanaUk,
+          _artist('Beyonce'),
+          _artist('Simon and Garfunkel'),
+          _artist('Βανδή'),
+          _artist('Ρουβάς'),
+        ],
+      );
+
+      selection.searchController.text = 'n';
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(selection.searchResults, [
+        nirvanaUk,
+        _artistNamed(selection.searchResults, 'Βανδή'),
+        _artistNamed(selection.searchResults, 'Ρουβάς'),
+      ]);
+      expect(selection.isSelected(nirvanaUk), isFalse);
+    },
+  );
 }
+
+Artist _artistNamed(List<Artist> artists, String name) =>
+    artists.firstWhere((artist) => artist.name == name);

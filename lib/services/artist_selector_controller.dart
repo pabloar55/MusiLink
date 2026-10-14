@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show TextEditingController;
 import 'package:musi_link/models/artist.dart';
 import 'package:musi_link/services/music_catalog_service.dart';
+import 'package:musi_link/utils/artist_identity.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/music_profile_limits.dart';
 
@@ -32,10 +33,11 @@ class ArtistSelectorController extends ChangeNotifier {
   final List<Artist> _selected = [];
   List<Artist> _searchResults = [];
   List<Artist> _suggestions = [];
-  final Map<String, List<Artist>> _relatedArtistsByKey = {};
-  final Set<String> _loadingRelatedArtistKeys = {};
-  List<String> _originalArtistKeys = [];
-  String? _preferredSuggestionArtistKey;
+  // Los similares se piden por nombre, así que se guardan por nombre.
+  final Map<String, List<Artist>> _relatedArtistsByName = {};
+  final Set<String> _loadingRelatedArtistNames = {};
+  List<Artist> _originalArtists = [];
+  Artist? _preferredSuggestionArtist;
   int _suggestionsRevision = 0;
 
   bool _isSearching = false;
@@ -57,52 +59,32 @@ class ArtistSelectorController extends ChangeNotifier {
   bool get canContinue => _selected.length >= minArtists;
   int get missingArtists => minArtists - _selected.length;
 
-  /// Si el ranking difiere del aplicado con [restore].
+  /// Si el ranking difiere del aplicado con [restore]. Completar un artista
+  /// con el catálogo no cuenta como cambio.
   bool get hasChanges {
-    final current = _selected.map(keyOf).toList();
-    if (current.length != _originalArtistKeys.length) return true;
-    for (var i = 0; i < current.length; i++) {
-      if (current[i] != _originalArtistKeys[i]) return true;
+    if (_selected.length != _originalArtists.length) return true;
+    for (var i = 0; i < _selected.length; i++) {
+      if (!isSameArtist(_selected[i], _originalArtists[i])) return true;
     }
     return false;
   }
 
-  bool isSelected(Artist artist) {
-    final key = keyOf(artist);
-    return _selected.any((a) => keyOf(a) == key);
-  }
-
-  /// Identidad con la que se deduplican y comparan los artistas.
-  static String keyOf(Artist artist) {
-    final normalizedName = _normalizeName(artist.name);
-    if (normalizedName.isNotEmpty) return normalizedName;
-
-    final spotifyId = artist.spotifyId?.trim();
-    if (spotifyId != null && spotifyId.isNotEmpty) return 'spotify:$spotifyId';
-
-    final imageUrl = artist.imageUrl.trim();
-    if (imageUrl.isNotEmpty) return 'image:$imageUrl';
-
-    return 'artist:${identityHashCode(artist)}';
-  }
+  bool isSelected(Artist artist) =>
+      _selected.any((selected) => isSameArtist(selected, artist));
 
   static List<Artist> _dedupeArtists(
     Iterable<Artist> artists, {
-    Set<String> excluding = const {},
+    Iterable<Artist> excluding = const [],
   }) {
-    final seen = {...excluding};
-    final deduped = <Artist>[];
-    for (final artist in artists) {
-      if (seen.add(keyOf(artist))) deduped.add(artist);
-    }
-    return deduped;
+    final seen = ArtistIdentitySet(excluding);
+    return [
+      for (final artist in artists)
+        if (seen.add(artist)) artist,
+    ];
   }
 
-  static String _normalizeName(String name) => name
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[^\w\s]'), '')
-      .replaceAll(RegExp(r'\s+'), ' ');
+  static String _relatedArtistsName(Artist artist) =>
+      normalizeArtistIdentityName(artist.name);
 
   /// Parte de un perfil guardado: lo toma como referencia de [hasChanges] y
   /// carga las sugerencias de sus primeros artistas.
@@ -111,10 +93,8 @@ class ArtistSelectorController extends ChangeNotifier {
     _selected
       ..clear()
       ..addAll(_dedupeArtists(artists.take(maxArtists)));
-    _originalArtistKeys = _selected.map(keyOf).toList();
-    _preferredSuggestionArtistKey = _selected.isEmpty
-        ? null
-        : keyOf(_selected.first);
+    _originalArtists = List.of(_selected);
+    _preferredSuggestionArtist = _selected.firstOrNull;
     notifyListeners();
     await _loadSuggestions(
       artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
@@ -123,19 +103,18 @@ class ArtistSelectorController extends ChangeNotifier {
 
   /// Añade un artista que no está elegido o quita uno que sí lo está.
   void toggle(Artist artist) {
-    final artistKey = keyOf(artist);
-    final idx = _selected.indexWhere((a) => keyOf(a) == artistKey);
-    if (idx >= 0) {
-      _selected.removeWhere((a) => keyOf(a) == artistKey);
+    if (isSelected(artist)) {
+      _selected.removeWhere((a) => isSameArtist(a, artist));
       _searchResults = _dedupeArtists(_searchResults);
-      if (_preferredSuggestionArtistKey == artistKey) {
-        _preferredSuggestionArtistKey = null;
+      final preferred = _preferredSuggestionArtist;
+      if (preferred != null && isSameArtist(preferred, artist)) {
+        _preferredSuggestionArtist = null;
       }
       notifyListeners();
       _refreshSuggestions();
     } else {
       if (_selected.length >= maxArtists) return;
-      _suggestions.removeWhere((a) => keyOf(a) == artistKey);
+      _suggestions.removeWhere((a) => isSameArtist(a, artist));
       _add(artist);
     }
   }
@@ -147,10 +126,9 @@ class ArtistSelectorController extends ChangeNotifier {
   }
 
   void _add(Artist artist) {
-    final artistKey = keyOf(artist);
     _selected.add(artist);
-    _searchResults.removeWhere((a) => keyOf(a) == artistKey);
-    _preferredSuggestionArtistKey = artistKey;
+    _searchResults.removeWhere((a) => isSameArtist(a, artist));
+    _preferredSuggestionArtist = artist;
     notifyListeners();
     if (artist.imageUrl.isEmpty) unawaited(_enrichFromCatalog(artist));
     searchController.clear();
@@ -192,8 +170,7 @@ class ArtistSelectorController extends ChangeNotifier {
     try {
       final results = await _catalog.searchArtists(query, limit: 10);
       if (_disposed || generation != _searchGeneration) return;
-      final selectedKeys = _selected.map(keyOf).toSet();
-      _searchResults = _dedupeArtists(results, excluding: selectedKeys);
+      _searchResults = _dedupeArtists(results, excluding: _selected);
       _isSearching = false;
       notifyListeners();
     } catch (e, st) {
@@ -212,33 +189,33 @@ class ArtistSelectorController extends ChangeNotifier {
       return;
     }
 
-    final selectedKeys = _selected.map(keyOf).toSet();
-    final missingByKey = <String, Artist>{};
+    final selected = ArtistIdentitySet(_selected);
+    final missingByName = <String, Artist>{};
     for (final artist in artistsToFetch) {
-      final key = keyOf(artist);
-      if (selectedKeys.contains(key) &&
-          !_relatedArtistsByKey.containsKey(key) &&
-          !_loadingRelatedArtistKeys.contains(key)) {
-        missingByKey[key] = artist;
+      final name = _relatedArtistsName(artist);
+      if (selected.contains(artist) &&
+          !_relatedArtistsByName.containsKey(name) &&
+          !_loadingRelatedArtistNames.contains(name)) {
+        missingByName[name] = artist;
       }
     }
 
-    if (missingByKey.isEmpty) {
+    if (missingByName.isEmpty) {
       _refreshSuggestions();
       return;
     }
 
-    _loadingRelatedArtistKeys.addAll(missingByKey.keys);
+    _loadingRelatedArtistNames.addAll(missingByName.keys);
     await Future.wait(
-      missingByKey.entries.map((entry) async {
+      missingByName.entries.map((entry) async {
         try {
           final related = await _catalog.getRelatedArtists(entry.value.name);
-          _relatedArtistsByKey[entry.key] = related;
+          _relatedArtistsByName[entry.key] = related;
         } catch (e, st) {
           // Sin caché: la próxima selección del artista lo vuelve a pedir.
           if (!isRateLimitError(e)) reportError(e, st).ignore();
         } finally {
-          _loadingRelatedArtistKeys.remove(entry.key);
+          _loadingRelatedArtistNames.remove(entry.key);
         }
       }),
     );
@@ -255,10 +232,10 @@ class ArtistSelectorController extends ChangeNotifier {
     }
 
     final orderedSeeds = List<Artist>.from(_selected);
-    final preferredKey = _preferredSuggestionArtistKey;
-    if (preferredKey != null) {
+    final preferred = _preferredSuggestionArtist;
+    if (preferred != null) {
       final preferredIndex = orderedSeeds.indexWhere(
-        (artist) => keyOf(artist) == preferredKey,
+        (artist) => isSameArtist(artist, preferred),
       );
       if (preferredIndex > 0) {
         final preferred = orderedSeeds.removeAt(preferredIndex);
@@ -268,11 +245,13 @@ class ArtistSelectorController extends ChangeNotifier {
 
     final relatedLists = orderedSeeds
         .map(
-          (artist) => _relatedArtistsByKey[keyOf(artist)] ?? const <Artist>[],
+          (artist) =>
+              _relatedArtistsByName[_relatedArtistsName(artist)] ??
+              const <Artist>[],
         )
         .where((artists) => artists.isNotEmpty)
         .toList();
-    final seen = _selected.map(keyOf).toSet();
+    final seen = ArtistIdentitySet(_selected);
     final merged = <Artist>[];
     for (
       var relatedIndex = 0;
@@ -284,7 +263,7 @@ class ArtistSelectorController extends ChangeNotifier {
         if (relatedIndex >= related.length) continue;
         foundCandidate = true;
         final candidate = related[relatedIndex];
-        if (seen.add(keyOf(candidate))) merged.add(candidate);
+        if (seen.add(candidate)) merged.add(candidate);
         if (merged.length >= _maxSuggestions) break;
       }
       if (!foundCandidate) break;
@@ -299,17 +278,22 @@ class ArtistSelectorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Completa con el catálogo un artista elegido sin imagen.
+  /// Completa con el catálogo un artista elegido sin imagen. Solo acepta el
+  /// primer resultado si es el mismo artista: con dos spotifyId decide el id
+  /// y, si no, el nombre normalizado, que no puede quedar vacío.
   Future<void> _enrichFromCatalog(Artist artist) async {
     try {
       final results = await _catalog.searchArtists(artist.name, limit: 1);
       if (_disposed || results.isEmpty) return;
       final enriched = results.first;
-      if (_normalizeName(enriched.name) != _normalizeName(artist.name)) return;
-      final idx = _selected.indexWhere((a) => keyOf(a) == keyOf(artist));
+      if (normalizeArtistIdentityName(artist.name).isEmpty ||
+          !isSameArtist(enriched, artist)) {
+        return;
+      }
+      final idx = _selected.indexWhere((a) => isSameArtist(a, artist));
       if (idx >= 0) _selected[idx] = enriched;
-      final selectedKeys = <String>{};
-      _selected.removeWhere((a) => !selectedKeys.add(keyOf(a)));
+      final seen = ArtistIdentitySet();
+      _selected.removeWhere((a) => !seen.add(a));
       notifyListeners();
     } catch (_) {}
   }

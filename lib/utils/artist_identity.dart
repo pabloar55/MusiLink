@@ -67,3 +67,71 @@ List<String> artistIdentityKeys(Iterable<Artist> artists) => artists
 bool isSpotifyArtistIdentityKey(String value) =>
     value.trim().startsWith('spotify:') &&
     value.trim().length > 'spotify:'.length;
+
+/// Misma regla que `artistIdentitiesMatch` en el backend: dos claves de
+/// Spotify deciden por sí solas; si falta alguna, se compara el nombre
+/// normalizado.
+bool artistIdentitiesMatch({
+  required String leftName,
+  required String leftKey,
+  required String rightName,
+  required String rightKey,
+}) {
+  if (isSpotifyArtistIdentityKey(leftKey) &&
+      isSpotifyArtistIdentityKey(rightKey)) {
+    return leftKey == rightKey;
+  }
+  return normalizeArtistIdentityName(leftName) ==
+      normalizeArtistIdentityName(rightName);
+}
+
+/// Si [left] y [right] son el mismo artista según [artistIdentitiesMatch].
+bool isSameArtist(Artist left, Artist right) => artistIdentitiesMatch(
+  leftName: left.name,
+  leftKey: artistIdentityKey(name: left.name, spotifyId: left.spotifyId),
+  rightName: right.name,
+  rightKey: artistIdentityKey(name: right.name, spotifyId: right.spotifyId),
+);
+
+/// Artistas distintos entre sí según [isSameArtist], con consultas en tiempo
+/// constante.
+class ArtistIdentitySet {
+  ArtistIdentitySet([Iterable<Artist> artists = const []]) {
+    artists.forEach(add);
+  }
+
+  final _spotifyKeys = <String>{};
+  final _names = <String>{};
+  final _namesWithoutSpotifyKey = <String>{};
+
+  /// Si algún miembro es el mismo artista que [artist].
+  bool contains(Artist artist) {
+    final key = artistIdentityKey(
+      name: artist.name,
+      spotifyId: artist.spotifyId,
+    );
+    final name = normalizeArtistIdentityName(artist.name);
+    if (isSpotifyArtistIdentityKey(key)) {
+      return _spotifyKeys.contains(key) ||
+          _namesWithoutSpotifyKey.contains(name);
+    }
+    return _names.contains(name);
+  }
+
+  /// Añade [artist] salvo que ya esté; devuelve si lo ha añadido.
+  bool add(Artist artist) {
+    if (contains(artist)) return false;
+    final key = artistIdentityKey(
+      name: artist.name,
+      spotifyId: artist.spotifyId,
+    );
+    final name = normalizeArtistIdentityName(artist.name);
+    _names.add(name);
+    if (isSpotifyArtistIdentityKey(key)) {
+      _spotifyKeys.add(key);
+    } else {
+      _namesWithoutSpotifyKey.add(name);
+    }
+    return true;
+  }
+}

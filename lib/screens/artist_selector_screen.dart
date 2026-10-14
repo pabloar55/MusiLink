@@ -12,6 +12,7 @@ import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/providers/user_setup_provider.dart';
 import 'package:musi_link/services/artist_selector_controller.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/utils/artist_identity.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/music_profile_limits.dart';
 import 'package:musi_link/widgets/artist_avatar.dart';
@@ -641,7 +642,10 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   Widget _buildRankedItem(Artist artist, int index) {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
-      key: ValueKey(ArtistSelectorController.keyOf(artist)),
+      // Única dentro de la selección, que no admite dos veces el mismo artista.
+      key: ValueKey(
+        artistIdentityKey(name: artist.name, spotifyId: artist.spotifyId),
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: Row(
         mainAxisSize: MainAxisSize.min,

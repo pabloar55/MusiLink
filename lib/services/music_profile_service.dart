@@ -578,15 +578,12 @@ class MusicProfileService with AuthenticatedService {
   static bool _artistsMatch(
     ({String name, String key}) left,
     ({String name, String key}) right,
-  ) {
-    final leftHasSpotifyId = isSpotifyArtistIdentityKey(left.key);
-    final rightHasSpotifyId = isSpotifyArtistIdentityKey(right.key);
-    if (leftHasSpotifyId && rightHasSpotifyId) {
-      return left.key == right.key;
-    }
-    return normalizeArtistIdentityName(left.name) ==
-        normalizeArtistIdentityName(right.name);
-  }
+  ) => artistIdentitiesMatch(
+    leftName: left.name,
+    leftKey: left.key,
+    rightName: right.name,
+    rightKey: right.key,
+  );
 
   static List<String> _uniqueGenreNames(List<String> values) =>
       normalizeGenreNames(values);
