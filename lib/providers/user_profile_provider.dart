@@ -4,6 +4,7 @@ import 'package:musi_link/models/discovery_result.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/utils/music_compatibility.dart';
 
 final currentUserProvider = StreamProvider<AppUser?>((ref) {
   final uid = ref.watch(sessionUidProvider);
@@ -39,7 +40,7 @@ final compatibilityProvider = FutureProvider.family<DiscoveryResult, AppUser>((
   final storedResult = await service.getStoredCompatibilityWith(user);
   if (storedResult != null) return storedResult;
 
-  return service.getCompatibilityWith(myUser, user);
+  return compatibilityBetween(myUser, user);
 });
 
 final relationshipProvider = StreamProvider.family<RelationshipResult, String>((
