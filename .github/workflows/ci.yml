@@ -109,9 +109,6 @@ jobs:
       - name: Test unit functions
         run: npm run test:unit
 
-      - name: Test account deletion
-        run: npm run test:account-deletion
-
       - name: Test Firestore security rules
         run: npm --prefix .. run test:rules
 

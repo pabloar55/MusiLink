@@ -17,6 +17,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 
 import { deleteGroupIfAbandoned } from './abandoned_groups';
+import { reactionEmojis, scrubUserReactions } from './chat_reactions';
 const callableRegion = 'europe-southwest1';
 // Cloud Tasks is not available in Madrid. Keep the client-facing callable
 // close to Firestore and run only the durable queue worker in Belgium.
@@ -31,7 +32,6 @@ const deletedProfile = {
   username: 'deleted_user',
   photoUrl: '',
 };
-export const reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'] as const;
 
 const phases = [
   'freeze',
@@ -256,22 +256,6 @@ function messageSummary(data: DocumentData): string {
     if (typeof title === 'string' && title.length > 0) return `🎵 ${title}`;
   }
   return typeof data.text === 'string' ? data.text : '';
-}
-
-export function scrubUserReactions(
-  reactions: unknown,
-  uid: string,
-): Record<string, string[]> {
-  if (!reactions || typeof reactions !== 'object' || Array.isArray(reactions)) return {};
-  const scrubbed: Record<string, string[]> = {};
-  for (const [emoji, users] of Object.entries(reactions)) {
-    if (!Array.isArray(users)) continue;
-    const remaining = users.filter(
-      (value): value is string => typeof value === 'string' && value !== uid,
-    );
-    if (remaining.length > 0) scrubbed[emoji] = remaining;
-  }
-  return scrubbed;
 }
 
 async function scrubReactionBatch(uid: string, emoji: string): Promise<number> {

@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { scrubUserReactions } = require('../lib/account_deletion.js');
+const { scrubUserReactions } = require('../../lib/chat_reactions.js');
 
 test('scrubUserReactions removes the deleted uid and empty emoji entries', () => {
   assert.deepEqual(

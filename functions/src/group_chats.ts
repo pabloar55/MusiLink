@@ -7,7 +7,7 @@ import { onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/fire
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { deletedGroupsCollection, deleteGroup, everyAccountDeleted } from './abandoned_groups';
-import { reactionEmojis, scrubUserReactions } from './account_deletion';
+import { reactionEmojis, scrubUserReactions } from './chat_reactions';
 import { db } from './firebase';
 import { chatParticipants, stringList } from './firestore_values';
 import { advanceFixedWindow } from './rate_limits';

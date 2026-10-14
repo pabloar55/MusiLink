@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.processAccountDeletion = exports.requestAccountDeletion = exports.reactionEmojis = void 0;
-exports.scrubUserReactions = scrubUserReactions;
+exports.processAccountDeletion = exports.requestAccountDeletion = void 0;
 exports.processChats = processChats;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("firebase-admin/auth");
@@ -12,6 +11,7 @@ const v2_1 = require("firebase-functions/v2");
 const https_1 = require("firebase-functions/v2/https");
 const tasks_1 = require("firebase-functions/v2/tasks");
 const abandoned_groups_1 = require("./abandoned_groups");
+const chat_reactions_1 = require("./chat_reactions");
 const callableRegion = 'europe-southwest1';
 // Cloud Tasks is not available in Madrid. Keep the client-facing callable
 // close to Firestore and run only the durable queue worker in Belgium.
@@ -26,7 +26,6 @@ const deletedProfile = {
     username: 'deleted_user',
     photoUrl: '',
 };
-exports.reactionEmojis = ['❤️', '🔥', '👏', '😍', '💀'];
 const phases = [
     'freeze',
     'push_tokens',
@@ -201,19 +200,6 @@ function messageSummary(data) {
     }
     return typeof data.text === 'string' ? data.text : '';
 }
-function scrubUserReactions(reactions, uid) {
-    if (!reactions || typeof reactions !== 'object' || Array.isArray(reactions))
-        return {};
-    const scrubbed = {};
-    for (const [emoji, users] of Object.entries(reactions)) {
-        if (!Array.isArray(users))
-            continue;
-        const remaining = users.filter((value) => typeof value === 'string' && value !== uid);
-        if (remaining.length > 0)
-            scrubbed[emoji] = remaining;
-    }
-    return scrubbed;
-}
 async function scrubReactionBatch(uid, emoji) {
     const snapshot = await (0, firestore_1.getFirestore)()
         .collectionGroup('messages')
@@ -225,7 +211,7 @@ async function scrubReactionBatch(uid, emoji) {
     const batch = (0, firestore_1.getFirestore)().batch();
     snapshot.docs.forEach((document) => {
         batch.update(document.ref, {
-            reactions: scrubUserReactions(document.data().reactions, uid),
+            reactions: (0, chat_reactions_1.scrubUserReactions)(document.data().reactions, uid),
         });
     });
     await batch.commit();
@@ -368,8 +354,8 @@ async function verifyCleanup(uid) {
     if ((await db.doc(`recommendation_sync_state/${uid}`).get()).exists) {
         return 'recommendation_sync_state';
     }
-    for (let index = 0; index < exports.reactionEmojis.length; index += 1) {
-        const emoji = exports.reactionEmojis[index];
+    for (let index = 0; index < chat_reactions_1.reactionEmojis.length; index += 1) {
+        const emoji = chat_reactions_1.reactionEmojis[index];
         const snapshot = await db
             .collectionGroup('messages')
             .where(new firestore_1.FieldPath('reactions', emoji), 'array-contains', uid)
@@ -445,7 +431,7 @@ async function processPhase(uid, job) {
         case 'reactions_love':
         case 'reactions_skull': {
             const reactionIndex = phases.indexOf(job.phase) - phases.indexOf('reactions_heart');
-            const count = await scrubReactionBatch(uid, exports.reactionEmojis[reactionIndex]);
+            const count = await scrubReactionBatch(uid, chat_reactions_1.reactionEmojis[reactionIndex]);
             const nextPhase = count === batchSize
                 ? job.phase
                 : phases[phases.indexOf(job.phase) + 1];

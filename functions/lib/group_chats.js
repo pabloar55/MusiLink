@@ -12,7 +12,7 @@ const v2_1 = require("firebase-functions/v2");
 const firestore_2 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const abandoned_groups_1 = require("./abandoned_groups");
-const account_deletion_1 = require("./account_deletion");
+const chat_reactions_1 = require("./chat_reactions");
 const firebase_1 = require("./firebase");
 const firestore_values_1 = require("./firestore_values");
 const rate_limits_1 = require("./rate_limits");
@@ -225,7 +225,7 @@ async function cleanUpDeparture(firestore, chatId, uid) {
     if (!departure)
         return;
     let superseded = false;
-    for (const emoji of account_deletion_1.reactionEmojis) {
+    for (const emoji of chat_reactions_1.reactionEmojis) {
         // The reaction indexes only exist at collection-group scope.
         const snapshot = await firestore.collectionGroup('messages')
             .where(new firestore_1.FieldPath('reactions', emoji), 'array-contains', uid)
@@ -242,7 +242,7 @@ async function cleanUpDeparture(firestore, chatId, uid) {
                 }
                 if (!current.exists)
                     return;
-                tx.update(message, { reactions: (0, account_deletion_1.scrubUserReactions)(current.data()?.reactions, uid) });
+                tx.update(message, { reactions: (0, chat_reactions_1.scrubUserReactions)(current.data()?.reactions, uid) });
             })));
             if (superseded)
                 return;
