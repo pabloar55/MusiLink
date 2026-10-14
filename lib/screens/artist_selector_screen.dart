@@ -10,6 +10,7 @@ import 'package:musi_link/providers/music_profile_sync_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/providers/user_setup_provider.dart';
+import 'package:musi_link/services/artist_selector_controller.dart';
 import 'package:musi_link/theme/app_theme.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/utils/music_profile_limits.dart';
@@ -206,41 +207,42 @@ class ArtistSelectorScreen extends ConsumerStatefulWidget {
 }
 
 class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
-  final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   final _scrollController = ScrollController();
 
-  List<Artist> _searchResults = [];
-  List<Artist> _suggestions = [];
-  final List<Artist> _selected = [];
-  final Map<String, List<Artist>> _relatedArtistsByKey = {};
-  final Set<String> _loadingRelatedArtistKeys = {};
+  late final ArtistSelectorController _selection;
   GlobalKey<AnimatedListState> _suggestionsListKey = GlobalKey();
-  List<String> _originalArtistKeys = [];
-  String? _preferredSuggestionArtistKey;
+  int _suggestionsRevision = 0;
 
-  bool _isSearching = false;
   bool _isSaving = false;
   bool _isLeaving = false;
   bool _allowPop = false;
-  Timer? _debounce;
-  String _lastQuery = '';
-  int _searchGeneration = 0;
 
-  static const _minArtists = 4;
-  static const _maxArtists = MusicProfileLimits.maxArtists;
-  static const _initialSuggestionSeedLimit = 5;
-  static const _maxSuggestions = 20;
+  static const _maxArtists = ArtistSelectorController.maxArtists;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
+    _selection = ArtistSelectorController(
+      catalog: ref.read(musicCatalogServiceProvider),
+    )..addListener(_onSelectionChanged);
+    _suggestionsRevision = _selection.suggestionsRevision;
     if (widget.isEditMode) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _loadExistingArtists(),
       );
     }
+  }
+
+  void _onSelectionChanged() {
+    if (!mounted) return;
+    setState(() {
+      // Unas sugerencias nuevas reconstruyen la lista animada desde cero.
+      if (_selection.suggestionsRevision != _suggestionsRevision) {
+        _suggestionsRevision = _selection.suggestionsRevision;
+        _suggestionsListKey = GlobalKey();
+      }
+    });
   }
 
   Future<void> _loadExistingArtists() async {
@@ -251,10 +253,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       syncCoordinator.resume();
       final pendingArtists = syncCoordinator.pendingArtists(uid);
       if (pendingArtists != null) {
-        _applyLoadedArtists(pendingArtists);
-        await _loadSuggestions(
-          artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
-        );
+        await _selection.restore(pendingArtists);
         return;
       }
       final currentUser = ref.read(currentUserProvider).asData?.value;
@@ -276,261 +275,18 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         reportError(e, st).ignore();
       }
       if (!mounted || user == null) return;
-      _applyLoadedArtists(user.topArtists);
-      await _loadSuggestions(
-        artistsToFetch: _selected.take(_initialSuggestionSeedLimit),
-      );
+      await _selection.restore(user.topArtists);
     } catch (e, st) {
       reportError(e, st).ignore();
     }
-  }
-
-  void _applyLoadedArtists(Iterable<Artist> artists) {
-    if (!mounted) return;
-    setState(() {
-      _selected
-        ..clear()
-        ..addAll(_dedupeArtists(artists.take(MusicProfileLimits.maxArtists)));
-      _originalArtistKeys = _selected.map(_artistKey).toList();
-      _preferredSuggestionArtistKey = _selected.isEmpty
-          ? null
-          : _artistKey(_selected.first);
-    });
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
+    _selection.dispose();
     _searchFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _onSearchChanged() {
-    _debounce?.cancel();
-    final query = _searchController.text.trim();
-    if (query == _lastQuery) return;
-    _lastQuery = query;
-    final generation = ++_searchGeneration;
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-    setState(() => _isSearching = true);
-    _debounce = Timer(
-      const Duration(milliseconds: 400),
-      () => _search(query, generation),
-    );
-  }
-
-  Future<void> _search(String query, int generation) async {
-    try {
-      final results = await ref
-          .read(musicCatalogServiceProvider)
-          .searchArtists(query, limit: 10);
-      if (!mounted || generation != _searchGeneration) return;
-      final selectedKeys = _selected.map(_artistKey).toSet();
-      setState(() {
-        _searchResults = _dedupeArtists(results, excluding: selectedKeys);
-        _isSearching = false;
-      });
-    } catch (e, st) {
-      reportError(e, st).ignore();
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() => _isSearching = false);
-    }
-  }
-
-  Future<void> _loadSuggestions({
-    Iterable<Artist> artistsToFetch = const [],
-  }) async {
-    if (_selected.isEmpty) {
-      _replaceSuggestions(const []);
-      return;
-    }
-
-    final selectedKeys = _selected.map(_artistKey).toSet();
-    final missingByKey = <String, Artist>{};
-    for (final artist in artistsToFetch) {
-      final key = _artistKey(artist);
-      if (selectedKeys.contains(key) &&
-          !_relatedArtistsByKey.containsKey(key) &&
-          !_loadingRelatedArtistKeys.contains(key)) {
-        missingByKey[key] = artist;
-      }
-    }
-
-    if (missingByKey.isEmpty) {
-      _refreshSuggestions();
-      return;
-    }
-
-    _loadingRelatedArtistKeys.addAll(missingByKey.keys);
-    final service = ref.read(musicCatalogServiceProvider);
-    await Future.wait(
-      missingByKey.entries.map((entry) async {
-        try {
-          final related = await service.getRelatedArtists(entry.value.name);
-          _relatedArtistsByKey[entry.key] = related;
-        } catch (e, st) {
-          if (!isRateLimitError(e)) reportError(e, st).ignore();
-        } finally {
-          _loadingRelatedArtistKeys.remove(entry.key);
-        }
-      }),
-    );
-    if (mounted) _refreshSuggestions();
-  }
-
-  void _refreshSuggestions() {
-    if (!mounted) return;
-    if (_selected.isEmpty) {
-      _replaceSuggestions(const []);
-      return;
-    }
-
-    final orderedSeeds = List<Artist>.from(_selected);
-    final preferredKey = _preferredSuggestionArtistKey;
-    if (preferredKey != null) {
-      final preferredIndex = orderedSeeds.indexWhere(
-        (artist) => _artistKey(artist) == preferredKey,
-      );
-      if (preferredIndex > 0) {
-        final preferred = orderedSeeds.removeAt(preferredIndex);
-        orderedSeeds.insert(0, preferred);
-      }
-    }
-
-    final relatedLists = orderedSeeds
-        .map(
-          (artist) =>
-              _relatedArtistsByKey[_artistKey(artist)] ?? const <Artist>[],
-        )
-        .where((artists) => artists.isNotEmpty)
-        .toList();
-    final seen = _selected.map(_artistKey).toSet();
-    final merged = <Artist>[];
-    for (
-      var relatedIndex = 0;
-      merged.length < _maxSuggestions;
-      relatedIndex++
-    ) {
-      var foundCandidate = false;
-      for (final related in relatedLists) {
-        if (relatedIndex >= related.length) continue;
-        foundCandidate = true;
-        final candidate = related[relatedIndex];
-        if (seen.add(_artistKey(candidate))) merged.add(candidate);
-        if (merged.length >= _maxSuggestions) break;
-      }
-      if (!foundCandidate) break;
-    }
-    _replaceSuggestions(merged);
-  }
-
-  void _replaceSuggestions(List<Artist> suggestions) {
-    if (!mounted) return;
-    setState(() {
-      _suggestions = List<Artist>.of(suggestions);
-      _suggestionsListKey = GlobalKey();
-    });
-  }
-
-  void _onReorder(int oldIndex, int newIndex) {
-    setState(() {
-      final item = _selected.removeAt(oldIndex);
-      _selected.insert(newIndex, item);
-    });
-    _refreshSuggestions();
-  }
-
-  void _toggleArtist(Artist artist) {
-    final artistKey = _artistKey(artist);
-    final idx = _selected.indexWhere((a) => _artistKey(a) == artistKey);
-    if (idx >= 0) {
-      setState(() {
-        _selected.removeWhere((a) => _artistKey(a) == artistKey);
-        _searchResults = _dedupeArtists(_searchResults);
-        if (_preferredSuggestionArtistKey == artistKey) {
-          _preferredSuggestionArtistKey = null;
-        }
-      });
-      _refreshSuggestions();
-    } else {
-      if (_selected.length >= _maxArtists) return;
-      setState(() {
-        _selected.add(artist);
-        _searchResults.removeWhere((a) => _artistKey(a) == artistKey);
-        _suggestions.removeWhere((a) => _artistKey(a) == artistKey);
-        _preferredSuggestionArtistKey = artistKey;
-      });
-      if (artist.imageUrl.isEmpty) _enrichFromSpotify(artist);
-      _searchController.clear();
-      unawaited(_loadSuggestions(artistsToFetch: [artist]));
-    }
-  }
-
-  static String _artistKey(Artist artist) {
-    final normalizedName = _normalizeName(artist.name);
-    if (normalizedName.isNotEmpty) return normalizedName;
-
-    final spotifyId = artist.spotifyId?.trim();
-    if (spotifyId != null && spotifyId.isNotEmpty) return 'spotify:$spotifyId';
-
-    final imageUrl = artist.imageUrl.trim();
-    if (imageUrl.isNotEmpty) return 'image:$imageUrl';
-
-    return 'artist:${identityHashCode(artist)}';
-  }
-
-  static List<Artist> _dedupeArtists(
-    Iterable<Artist> artists, {
-    Set<String> excluding = const {},
-  }) {
-    final seen = {...excluding};
-    final deduped = <Artist>[];
-    for (final artist in artists) {
-      if (seen.add(_artistKey(artist))) deduped.add(artist);
-    }
-    return deduped;
-  }
-
-  static String _normalizeName(String name) => name
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[^\w\s]'), '')
-      .replaceAll(RegExp(r'\s+'), ' ');
-
-  Future<void> _enrichFromSpotify(Artist artist) async {
-    try {
-      final results = await ref
-          .read(musicCatalogServiceProvider)
-          .searchArtists(artist.name, limit: 1);
-      if (!mounted || results.isEmpty) return;
-      final enriched = results.first;
-      if (_normalizeName(enriched.name) != _normalizeName(artist.name)) return;
-      setState(() {
-        final idx = _selected.indexWhere(
-          (a) => _artistKey(a) == _artistKey(artist),
-        );
-        if (idx >= 0) _selected[idx] = enriched;
-        final selectedKeys = <String>{};
-        _selected.removeWhere((a) => !selectedKeys.add(_artistKey(a)));
-      });
-    } catch (_) {}
-  }
-
-  bool get _hasChanges {
-    final current = _selected.map(_artistKey).toList();
-    if (current.length != _originalArtistKeys.length) return true;
-    for (var i = 0; i < current.length; i++) {
-      if (current[i] != _originalArtistKeys[i]) return true;
-    }
-    return false;
   }
 
   void _popAfterRebuild() {
@@ -545,7 +301,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     if (_isLeaving) return;
     _isLeaving = true;
 
-    if (!_hasChanges) {
+    if (!_selection.hasChanges) {
       _popAfterRebuild();
       return;
     }
@@ -558,7 +314,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
     try {
       await ref
           .read(musicProfileSyncCoordinatorProvider)
-          .enqueue(uid, List<Artist>.from(_selected));
+          .enqueue(uid, List<Artist>.from(_selection.selected));
     } catch (error, stack) {
       reportError(error, stack).ignore();
     } finally {
@@ -567,13 +323,15 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   }
 
   Future<void> _save() async {
-    if (_selected.length < _minArtists) return;
+    if (!_selection.canContinue) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (uid == null) return;
 
-      await ref.read(musicProfileServiceProvider).saveManualArtists(_selected);
+      await ref
+          .read(musicProfileServiceProvider)
+          .saveManualArtists(List<Artist>.from(_selection.selected));
       if (!mounted || ref.read(firebaseAuthProvider).currentUser?.uid != uid) {
         return;
       }
@@ -595,7 +353,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final showSearch = _searchController.text.trim().isNotEmpty;
+    final showSearch = _selection.searchController.text.trim().isNotEmpty;
     final isKeyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return PopScope(
@@ -641,7 +399,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                     ),
                     if (!widget.isEditMode)
                       Visibility(
-                        visible: _selected.length >= _minArtists,
+                        visible: _selection.canContinue,
                         maintainState: true,
                         maintainAnimation: true,
                         maintainSize: true,
@@ -669,7 +427,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                       children: [
                         Text(
                           l10n.artistSelectorSubtitle(
-                            _selected.length,
+                            _selection.selected.length,
                             MusicProfileLimits.maxArtists,
                           ),
                           style: TextStyle(
@@ -681,7 +439,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                         ),
                         const SizedBox(height: 12),
                         _ProfileProgressBar(
-                          count: _selected.length,
+                          count: _selection.selected.length,
                           l10n: l10n,
                         ),
                         const SizedBox(height: 16),
@@ -689,17 +447,14 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                     ),
                     TextField(
                       focusNode: _searchFocusNode,
-                      controller: _searchController,
+                      controller: _selection.searchController,
                       decoration: InputDecoration(
                         hintText: l10n.artistSelectorSearchHint,
                         prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isNotEmpty
+                        suffixIcon: _selection.searchController.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchResults = []);
-                                },
+                                onPressed: _selection.clearSearch,
                               )
                             : null,
                         filled: true,
@@ -708,11 +463,12 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                         focusedBorder: AppTheme.pillInputBorder,
                       ),
                     ),
-                    if (_suggestions.isNotEmpty) const SizedBox(height: 10),
+                    if (_selection.suggestions.isNotEmpty)
+                      const SizedBox(height: 10),
                   ],
                 ),
               ),
-              if (_suggestions.isNotEmpty && !showSearch)
+              if (_selection.suggestions.isNotEmpty && !showSearch)
                 _buildSuggestedArtistsRow(l10n),
 
               Expanded(child: _buildArtistContent(l10n, showSearch)),
@@ -727,8 +483,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                       width: double.infinity,
                       height: 48,
                       child: FilledButton(
-                        onPressed:
-                            (_selected.length >= _minArtists && !_isSaving)
+                        onPressed: (_selection.canContinue && !_isSaving)
                             ? _save
                             : null,
                         child: _isSaving
@@ -740,10 +495,10 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                                 ),
                               )
                             : Text(
-                                _selected.length >= _minArtists
+                                _selection.canContinue
                                     ? l10n.artistSelectorContinue
                                     : l10n.artistSelectorContinueLocked(
-                                        _minArtists - _selected.length,
+                                        _selection.missingArtists,
                                       ),
                               ),
                       ),
@@ -760,7 +515,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   Widget _buildArtistContent(AppLocalizations l10n, bool showSearch) {
     if (showSearch) return _buildSearchResults(l10n);
 
-    if (_selected.isEmpty) return _buildEmptySelectedState(l10n);
+    if (_selection.selected.isEmpty) return _buildEmptySelectedState(l10n);
 
     return _buildRankedList();
   }
@@ -768,14 +523,14 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   Widget _buildRankedList() {
     return ReorderableListView.builder(
       buildDefaultDragHandles: false,
-      itemCount: _selected.length,
-      onReorderItem: _onReorder,
-      itemBuilder: (_, i) => _buildRankedItem(_selected[i], i),
+      itemCount: _selection.selected.length,
+      onReorderItem: _selection.reorder,
+      itemBuilder: (_, i) => _buildRankedItem(_selection.selected[i], i),
     );
   }
 
   Widget _buildSearchResults(AppLocalizations l10n) {
-    if (_isSearching) {
+    if (_selection.isSearching) {
       return SkeletonShimmer(
         child: ListView.builder(
           itemCount: 8,
@@ -783,7 +538,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         ),
       );
     }
-    if (_searchResults.isEmpty) {
+    if (_selection.searchResults.isEmpty) {
       return Center(
         child: Text(
           l10n.artistSelectorNoResults,
@@ -793,7 +548,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         ),
       );
     }
-    return _artistList(_searchResults);
+    return _artistList(_selection.searchResults);
   }
 
   Widget _buildEmptySelectedState(AppLocalizations l10n) {
@@ -812,23 +567,14 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   }
 
   void _onSuggestionTap(Artist artist, int index) {
-    if (_selected.length >= _maxArtists) return;
+    if (_selection.selected.length >= _maxArtists) return;
 
-    _suggestions.removeAt(index);
     _suggestionsListKey.currentState?.removeItem(
       index,
       (context, animation) => _buildAnimatingChip(artist, animation),
       duration: const Duration(milliseconds: 180),
     );
-
-    setState(() {
-      _selected.add(artist);
-      _searchResults.removeWhere((a) => _artistKey(a) == _artistKey(artist));
-      _preferredSuggestionArtistKey = _artistKey(artist);
-    });
-    if (artist.imageUrl.isEmpty) _enrichFromSpotify(artist);
-    _searchController.clear();
-    unawaited(_loadSuggestions(artistsToFetch: [artist]));
+    _selection.addSuggestion(index);
   }
 
   Widget _buildAnimatingChip(Artist artist, Animation<double> animation) {
@@ -872,9 +618,9 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
               key: _suggestionsListKey,
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              initialItemCount: _suggestions.length,
+              initialItemCount: _selection.suggestions.length,
               itemBuilder: (_, i, animation) {
-                final artist = _suggestions[i];
+                final artist = _selection.suggestions[i];
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ActionChip(
@@ -895,7 +641,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
   Widget _buildRankedItem(Artist artist, int index) {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
-      key: ValueKey(_artistKey(artist)),
+      key: ValueKey(ArtistSelectorController.keyOf(artist)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: Row(
         mainAxisSize: MainAxisSize.min,
@@ -922,7 +668,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
         children: [
           IconButton(
             icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
-            onPressed: () => _toggleArtist(artist),
+            onPressed: () => _selection.toggle(artist),
           ),
           ReorderableDragStartListener(
             index: index,
@@ -939,9 +685,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
       itemCount: artists.length,
       itemBuilder: (_, i) {
         final artist = artists[i];
-        final isSelected = _selected.any(
-          (a) => _artistKey(a) == _artistKey(artist),
-        );
+        final isSelected = _selection.isSelected(artist);
         return ListTile(
           visualDensity: const VisualDensity(vertical: -2),
           minVerticalPadding: 2,
@@ -963,7 +707,7 @@ class _ArtistSelectorScreenState extends ConsumerState<ArtistSelectorScreen> {
                   Icons.add_circle_outline,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-          onTap: () => _toggleArtist(artist),
+          onTap: () => _selection.toggle(artist),
         );
       },
     );
