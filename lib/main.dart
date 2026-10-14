@@ -134,13 +134,11 @@ void main() async {
   );
   // En web el hash contiene la ruta con la que arranca la app: la de una
   // notificación o la de un enlace compartido.
-  final initialLocation =
-      notificationLocation ??
-      (kIsWeb && Uri.base.fragment.startsWith('/') ? Uri.base.fragment : null);
-  final route = initialLocation == null ? null : Uri.tryParse(initialLocation);
-  final chatId = route?.path == '/chat'
-      ? route?.queryParameters['chatId']
-      : null;
+  final initialLocation = launchLocation(
+    notificationLocation: notificationLocation,
+    webFragment: kIsWeb ? Uri.base.fragment : null,
+  );
+  final chatId = directChatIdOf(initialLocation);
   if (chatId != null) {
     final cached = chatService.getCachedHistory(chatId);
     // Solo lectura local: nunca trasladar una espera de red al splash.
@@ -398,18 +396,16 @@ class _MainAppState extends ConsumerState<MainApp> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || generation != _notificationNavigationGeneration) return;
         final router = ref.read(goRouterProvider);
-        final current = router.state.uri;
-        final target = Uri.parse(location);
-        if (current.path == '/chat' &&
-            target.path == '/chat' &&
-            current.queryParameters['chatId'] ==
-                target.queryParameters['chatId']) {
-          return;
-        }
-        if (target.path == '/chat') {
-          unawaited(router.push(location));
-        } else {
-          router.go(location);
+        switch (notificationNavigation(
+          current: router.state.uri,
+          target: Uri.parse(location),
+        )) {
+          case NotificationNavigation.stay:
+            break;
+          case NotificationNavigation.push:
+            unawaited(router.push(location));
+          case NotificationNavigation.go:
+            router.go(location);
         }
       });
       WidgetsBinding.instance.ensureVisualUpdate();
