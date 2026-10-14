@@ -46,9 +46,17 @@ class AppUser {
 
   bool isDailySongActiveAt(DateTime now) {
     if (_dailySong == null) return false;
+    final expiresAt = dailySongExpiresAt;
+    if (expiresAt == null) return true;
+    return now.isBefore(expiresAt);
+  }
+
+  /// Instante en que caduca la canción del día publicada, aunque ya haya
+  /// pasado. Es null si no hay canción o si carece de fecha de publicación.
+  DateTime? get dailySongExpiresAt {
     final updatedAt = dailySongUpdatedAt;
-    if (updatedAt == null) return true;
-    return now.isBefore(updatedAt.add(dailySongLifetime));
+    if (_dailySong == null || updatedAt == null) return null;
+    return updatedAt.add(dailySongLifetime);
   }
 
   static AppUser? fromFirestore(DocumentSnapshot doc) {

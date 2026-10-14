@@ -11,6 +11,7 @@ import 'package:musi_link/providers/session_scope_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_locations.dart';
+import 'package:musi_link/utils/expiry_refresh_timer.dart';
 import 'package:musi_link/utils/spotify_url.dart';
 import 'package:musi_link/widgets/discover/daily_song_card.dart';
 import 'package:musi_link/widgets/discover/daily_song_actions.dart';
@@ -31,8 +32,9 @@ class DailySongTab extends ConsumerStatefulWidget {
 
 class _DailySongTabState extends ConsumerState<DailySongTab>
     with AutomaticKeepAliveClientMixin<DailySongTab> {
-  Timer? _expiryTimer;
-  DateTime? _scheduledExpiry;
+  late final _expiryRefresh = ExpiryRefreshTimer(() {
+    if (mounted) setState(() {});
+  });
 
   /// UID of the authenticated user from the Riverpod provider.
   /// Returns empty string on session loss; actions stop until routing completes.
@@ -106,33 +108,15 @@ class _DailySongTabState extends ConsumerState<DailySongTab>
   }
 
   void _scheduleExpiryRefresh(AppUser? currentUser, List<AppUser> friends) {
-    final now = DateTime.now();
-    final expirations = <DateTime>[
-      if (currentUser?.dailySong != null &&
-          currentUser?.dailySongUpdatedAt != null)
-        currentUser!.dailySongUpdatedAt!.add(AppUser.dailySongLifetime),
-      for (final friend in friends)
-        if (friend.dailySong != null && friend.dailySongUpdatedAt != null)
-          friend.dailySongUpdatedAt!.add(AppUser.dailySongLifetime),
-    ].where((expiry) => expiry.isAfter(now)).toList();
-    expirations.sort();
-    final nextExpiry = expirations.firstOrNull;
-    if (_scheduledExpiry == nextExpiry) return;
-
-    _expiryTimer?.cancel();
-    _scheduledExpiry = nextExpiry;
-    if (nextExpiry == null) return;
-
-    _expiryTimer = Timer(nextExpiry.difference(now), () {
-      if (!mounted) return;
-      _scheduledExpiry = null;
-      setState(() {});
-    });
+    _expiryRefresh.schedule([
+      currentUser?.dailySongExpiresAt,
+      for (final friend in friends) friend.dailySongExpiresAt,
+    ]);
   }
 
   @override
   void dispose() {
-    _expiryTimer?.cancel();
+    _expiryRefresh.cancel();
     super.dispose();
   }
 

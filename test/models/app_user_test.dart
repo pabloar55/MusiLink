@@ -217,6 +217,25 @@ void main() {
       );
     });
 
+    test('la caducidad de la cancion se deriva de su publicacion', () {
+      const song = Track(title: 'Song', artist: 'Artist', imageUrl: 'url');
+      final publishedAt = DateTime.utc(2020, 1, 1);
+
+      // También informa de una caducidad pasada; filtrarla es cosa del uso.
+      expect(
+        createTestUser(
+          dailySong: song,
+          dailySongUpdatedAt: publishedAt,
+        ).dailySongExpiresAt,
+        publishedAt.add(AppUser.dailySongLifetime),
+      );
+      expect(createTestUser(dailySong: song).dailySongExpiresAt, isNull);
+      expect(
+        createTestUser(dailySongUpdatedAt: publishedAt).dailySongExpiresAt,
+        isNull,
+      );
+    });
+
     test('copyWith mantiene todos los campos si no se pasan parametros', () {
       final original = createTestUser(
         displayName: 'Keep This',

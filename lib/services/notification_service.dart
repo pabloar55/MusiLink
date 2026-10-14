@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:musi_link/services/chat_notification_history.dart';
 import 'package:musi_link/services/notification_avatar_cache.dart';
 import 'package:musi_link/services/web_foreground_notification.dart';
 import 'package:musi_link/utils/error_reporter.dart';
@@ -92,6 +93,7 @@ class NotificationService {
     }
   }
 
+  late final _chatHistory = ChatNotificationHistory(_prefs);
   Future<bool>? _platformInitialization;
   int _tokenGeneration = 0;
   bool _signingOut = false;
@@ -119,8 +121,6 @@ class NotificationService {
   static const _permissionDialogShownKey = 'notification_pre_dialog_shown';
   static const _apnsTokenRetries = 5;
   static const _apnsTokenRetryDelay = Duration(milliseconds: 300);
-  static const _chatHistoryKey = 'chat_notification_history';
-  static const _maxMessagesPerChat = 5;
   static final _notificationAvatarCache = NotificationAvatarCache();
 
   Future<void> initialize() async {
@@ -390,7 +390,7 @@ class NotificationService {
     _signingOut = true;
     _tokenGeneration++;
     try {
-      await _prefs.remove(_chatHistoryKey);
+      await _chatHistory.clear();
     } finally {
       if (!kIsWeb) await _localNotifications.cancelAll();
     }
@@ -479,6 +479,7 @@ class NotificationService {
           _showChatNotification(
             localNotifications: _localNotifications,
             prefs: _prefs,
+            history: _chatHistory,
             data: message.data,
           ),
         );
@@ -492,24 +493,16 @@ class NotificationService {
 
     final n = message.notification;
     if (n == null) return;
-    final vibrate = _prefs.getBool(kVibrationKey) ?? true;
-    final sound = _prefs.getBool(kSoundKey) ?? true;
     if (kIsWeb) {
-      unawaited(_showWebForegroundNotification(message, sound: sound));
+      unawaited(
+        _showWebForegroundNotification(
+          message,
+          sound: _prefs.getBool(kSoundKey) ?? true,
+        ),
+      );
       return;
     }
-    final channelId = switch ((sound, vibrate)) {
-      (true, true) => _channelId,
-      (true, false) => _channelNoVibrationId,
-      (false, true) => _channelNoSoundId,
-      (false, false) => _channelSilentId,
-    };
-    final channelName = switch ((sound, vibrate)) {
-      (true, true) => _channelName,
-      (true, false) => _channelNoVibrationName,
-      (false, true) => _channelNoSoundName,
-      (false, false) => _channelSilentName,
-    };
+    final channel = _alertChannel(_prefs);
     // Repeated social notifications share a stable ID so they replace each
     // other in the notification drawer instead of stacking indefinitely.
     final notifId = foregroundNotificationId(message);
@@ -519,8 +512,8 @@ class NotificationService {
       body: n.body,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
-          channelId,
-          channelName,
+          channel.id,
+          channel.name,
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_notification',
@@ -564,6 +557,7 @@ class NotificationService {
     await _showChatNotification(
       localNotifications: localNotifications,
       prefs: prefs,
+      history: ChatNotificationHistory(prefs),
       data: data,
     );
   }
@@ -571,6 +565,7 @@ class NotificationService {
   static Future<void> _showChatNotification({
     required FlutterLocalNotificationsPlugin localNotifications,
     required SharedPreferences prefs,
+    required ChatNotificationHistory history,
     required Map<String, dynamic> data,
   }) async {
     final chatId = data['chatId'] as String?;
@@ -584,44 +579,30 @@ class NotificationService {
         ? messageText
         : '$notificationTitle\n$messageText';
 
-    final messages = await _appendChatMessage(
-      prefs: prefs,
-      chatId: chatId,
+    final messages = await history.append(chatId, (
       senderName: senderName,
       senderId: senderId,
       text: isGroup && messageText.startsWith('$senderName: ')
           ? messageText.substring(senderName.length + 2)
           : notificationText,
-    );
+      sentAt: DateTime.now(),
+    ));
     final senderIconBytes = await _notificationAvatarCache.load(
       data['senderPhotoUrl'] as String?,
     );
     final senderIcon = senderIconBytes == null
         ? null
         : ByteArrayAndroidIcon(senderIconBytes);
-    final vibrate = prefs.getBool(kVibrationKey) ?? true;
-    final sound = prefs.getBool(kSoundKey) ?? true;
-    final channelId = switch ((sound, vibrate)) {
-      (true, true) => _channelId,
-      (true, false) => _channelNoVibrationId,
-      (false, true) => _channelNoSoundId,
-      (false, false) => _channelSilentId,
-    };
-    final channelName = switch ((sound, vibrate)) {
-      (true, true) => _channelName,
-      (true, false) => _channelNoVibrationName,
-      (false, true) => _channelNoSoundName,
-      (false, false) => _channelSilentName,
-    };
+    final channel = _alertChannel(prefs);
     final styleMessages = messages
         .map(
           (message) => Message(
-            message['text']! as String,
-            DateTime.fromMillisecondsSinceEpoch(message['timestamp']! as int),
+            message.text,
+            message.sentAt,
             Person(
-              name: message['senderName']! as String,
-              key: message['senderId'] as String? ?? senderId,
-              icon: !isGroup || message['senderId'] == senderId
+              name: message.senderName,
+              key: message.senderId ?? senderId,
+              icon: !isGroup || message.senderId == senderId
                   ? senderIcon
                   : null,
               important: true,
@@ -635,8 +616,8 @@ class NotificationService {
       body: notificationText,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
-          channelId,
-          channelName,
+          channel.id,
+          channel.name,
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_notification',
@@ -659,32 +640,20 @@ class NotificationService {
     );
   }
 
-  static Future<List<Map<String, Object>>> _appendChatMessage({
-    required SharedPreferences prefs,
-    required String chatId,
-    required String senderName,
-    String? senderId,
-    required String text,
-  }) async {
-    final rawHistory = prefs.getString(_chatHistoryKey);
-    final history = rawHistory == null
-        ? <String, dynamic>{}
-        : jsonDecode(rawHistory) as Map<String, dynamic>;
-    final messages = (history[chatId] as List<dynamic>? ?? <dynamic>[])
-        .map((item) => Map<String, Object>.from(item as Map))
-        .toList();
-    messages.add({
-      'senderName': senderName,
-      'senderId': ?senderId,
-      'text': text,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
-    if (messages.length > _maxMessagesPerChat) {
-      messages.removeRange(0, messages.length - _maxMessagesPerChat);
-    }
-    history[chatId] = messages;
-    await prefs.setString(_chatHistoryKey, jsonEncode(history));
-    return messages;
+  /// Canal de Android según las preferencias de sonido y vibración: en
+  /// Android 8+ ambas se fijan por canal, no por aviso.
+  static ({String id, String name}) _alertChannel(SharedPreferences prefs) {
+    final vibrate = prefs.getBool(kVibrationKey) ?? true;
+    final sound = prefs.getBool(kSoundKey) ?? true;
+    return switch ((sound, vibrate)) {
+      (true, true) => (id: _channelId, name: _channelName),
+      (true, false) => (
+        id: _channelNoVibrationId,
+        name: _channelNoVibrationName,
+      ),
+      (false, true) => (id: _channelNoSoundId, name: _channelNoSoundName),
+      (false, false) => (id: _channelSilentId, name: _channelSilentName),
+    };
   }
 
   static Future<void> _createAndroidChannels(
@@ -742,12 +711,7 @@ class NotificationService {
   Future<void> cancelChatNotifications(String chatId) async {
     try {
       await _localNotifications.cancel(id: chatId.hashCode);
-      final rawHistory = _prefs.getString(_chatHistoryKey);
-      if (rawHistory != null) {
-        final history = jsonDecode(rawHistory) as Map<String, dynamic>;
-        history.remove(chatId);
-        await _prefs.setString(_chatHistoryKey, jsonEncode(history));
-      }
+      await _chatHistory.remove(chatId);
       final active = await _localNotifications.getActiveNotifications();
       for (final n in active) {
         if (n.tag != chatId && n.groupKey != chatId) continue;
