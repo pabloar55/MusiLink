@@ -1044,6 +1044,44 @@ void main() {
 
         verify(() => mockChatDocRef.update(any())).called(1);
       });
+
+      test('se detiene si la sesión cambia durante la lectura', () async {
+        final mockChatDocRef = MockDocumentReference();
+        final mockMessagesCol = MockMessagesCollectionRef();
+        final mockQuery1 = MockQuery();
+        final mockQuery2 = MockQuery();
+        final mockLimitQuery = MockQuery();
+        final mockSnapshot = MockQuerySnapshot();
+        final otherUser = MockUser();
+
+        when(() => otherUser.uid).thenReturn('other_uid');
+        when(() => mockChatsRef.doc('chat_123')).thenReturn(mockChatDocRef);
+        when(() => mockChatDocRef.collection('messages'))
+            .thenReturn(mockMessagesCol);
+        when(() => mockMessagesCol.where('read', isEqualTo: false))
+            .thenReturn(mockQuery1);
+        when(() => mockQuery1.where('senderId', isNotEqualTo: 'current_uid'))
+            .thenReturn(mockQuery2);
+        when(() => mockQuery2.limit(499)).thenReturn(mockLimitQuery);
+        when(() => mockLimitQuery.get()).thenAnswer((_) async {
+          when(() => mockAuth.currentUser).thenReturn(otherUser);
+          return mockSnapshot;
+        });
+        when(() => mockSnapshot.docs).thenReturn([MockQueryDocumentSnapshot()]);
+
+        await chatService.markMessagesAsRead('chat_123');
+
+        verifyNever(() => mockFirestore.batch());
+        verifyNever(() => mockChatDocRef.update(any()));
+      });
+
+      test('sin sesión no consulta nada', () async {
+        when(() => mockAuth.currentUser).thenReturn(null);
+
+        await chatService.markMessagesAsRead('chat_123');
+
+        verifyNever(() => mockChatsRef.doc(any()));
+      });
     });
 
     group('toggleReaction', () {

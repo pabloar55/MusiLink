@@ -638,17 +638,22 @@ class ChatService with AuthenticatedService {
   /// resetea el contador desnormalizado del usuario actual en el documento
   /// del chat.
   Future<void> markMessagesAsRead(String chatId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
     try {
       // Marcar mensajes individuales como leídos (impulsa los ticks de lectura).
       final messagesRef = _chatsRef
           .doc(chatId)
           .collection(FirestoreCollections.messages)
           .where('read', isEqualTo: false)
-          .where('senderId', isNotEqualTo: currentUid)
+          .where('senderId', isNotEqualTo: uid)
           .limit(_deleteBatchSize);
 
       while (true) {
         final snapshot = await messagesRef.get();
+        // Tras un cambio de sesión, ni los ticks ni el contador son de la
+        // sesión actual.
+        if (_auth.currentUser?.uid != uid) return;
         if (snapshot.docs.isEmpty) break;
 
         final batch = _firestore.batch();
@@ -663,7 +668,8 @@ class ChatService with AuthenticatedService {
       // Resetear el contador desnormalizado al final. Si el proceso se
       // interrumpe antes, la siguiente lectura del chat puede reintentar y
       // completar los ticks pendientes antes de limpiar el badge.
-      await _chatsRef.doc(chatId).update({'unreadCounts.$currentUid': 0});
+      if (_auth.currentUser?.uid != uid) return;
+      await _chatsRef.doc(chatId).update({'unreadCounts.$uid': 0});
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') return;
       await reportError(e, StackTrace.current);
