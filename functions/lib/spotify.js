@@ -8,13 +8,11 @@ const firebase_1 = require("./firebase");
 const rate_limits_1 = require("./rate_limits");
 const lastfm_request_1 = require("./lastfm_request");
 const catalog_request_1 = require("./catalog_request");
+const catalog_genres_1 = require("./catalog_genres");
 const spotify_artist_ranking_1 = require("./spotify_artist_ranking");
 const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
 const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = (0, params_1.defineSecret)('LASTFM_API_KEY');
-const maxSpotifyGenresPerArtist = 5;
-const maxLastFmGenresPerArtist = 2;
-const minLastFmTagCount = 10;
 const spotifyRequestTimeoutMs = 8_000;
 // Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
 let cachedToken = null;
@@ -80,206 +78,6 @@ async function readResponseSnippet(res) {
 function spotifyArtistQuery(query) {
     return `artist:${query.replace(/"/g, '').trim()}`;
 }
-const genreAliases = new Map([
-    ['alt rock', 'alternative rock'],
-    ['alternative music', 'alternative'],
-    ['corridos belicos', 'corridos belicos'],
-    ['drum and bass', 'drum and bass'],
-    ['dnb', 'drum and bass'],
-    ['edm', 'electronic'],
-    ['electro', 'electronic'],
-    ['electronica', 'electronic'],
-    ['electronic music', 'electronic'],
-    ['hiphop', 'hip hop'],
-    ['hip hop music', 'hip hop'],
-    ['rap', 'hip hop'],
-    ['rhythm and blues', 'r&b'],
-    ['rnb', 'r&b'],
-    ['singer songwriter', 'singer-songwriter'],
-    ['synth pop', 'synthpop'],
-]);
-const blockedGenreTags = new Set([
-    '00s',
-    '10s',
-    '20s',
-    '60s',
-    '70s',
-    '80s',
-    '90s',
-    'american',
-    'australian',
-    'belgian',
-    'brazilian',
-    'british',
-    'canadian',
-    'chilean',
-    'chinese',
-    'colombian',
-    'danish',
-    'dutch',
-    'english',
-    'favorite',
-    'favorites',
-    'favourite',
-    'female vocalists',
-    'finnish',
-    'french',
-    'german',
-    'greek',
-    'icelandic',
-    'irish',
-    'italian',
-    'japanese',
-    'korean',
-    'male vocalists',
-    'mexican',
-    'mexico',
-    'new zealand',
-    'norwegian',
-    'polish',
-    'portuguese',
-    'puerto rican',
-    'puerto rico',
-    'romanian',
-    'russian',
-    'scottish',
-    'seen live',
-    'spanish',
-    'spain',
-    'swedish',
-    'turkish',
-    'uk',
-    'ukrainian',
-    'usa',
-    'vocalists',
-    'welsh',
-]);
-const lastFmGenreKeywords = [
-    'afrobeat',
-    'afrobeats',
-    'alternative',
-    'ambient',
-    'americana',
-    'bachata',
-    'bluegrass',
-    'blues',
-    'bebop',
-    'classical',
-    'corrido',
-    'corridos',
-    'country',
-    'dance',
-    'dancehall',
-    'disco',
-    'drill',
-    'dub',
-    'dubstep',
-    'electronic',
-    'emo',
-    'experimental',
-    'flamenco',
-    'folk',
-    'funk',
-    'fusion',
-    'gospel',
-    'grunge',
-    'hardcore',
-    'hip hop',
-    'house',
-    'indie',
-    'industrial',
-    'jazz',
-    'latin',
-    'metal',
-    'new wave',
-    'opera',
-    'pop',
-    'post punk',
-    'punk',
-    'r&b',
-    'regional mexicano',
-    'reggae',
-    'reggaeton',
-    'rock',
-    'salsa',
-    'shoegaze',
-    'ska',
-    'soul',
-    'synthpop',
-    'techno',
-    'trance',
-    'trap',
-];
-function normalizeGenreName(value) {
-    const key = value
-        .trim()
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/\br\s*&\s*b\b/g, 'rnb')
-        .replace(/&/g, ' and ')
-        .replace(/[\-_/]+/g, ' ')
-        .replace(/[^a-z0-9&]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    if (!key)
-        return null;
-    const normalized = genreAliases.get(key) ?? key;
-    if (!isUsefulGenreName(normalized))
-        return null;
-    return normalized;
-}
-function isUsefulGenreName(value) {
-    if (value.length < 2)
-        return false;
-    if (blockedGenreTags.has(value))
-        return false;
-    if (/^(?:[0-9]{2}s|[12][0-9]{3}s?)$/.test(value))
-        return false;
-    if (value.includes('seen live') || value.includes('favorite'))
-        return false;
-    return true;
-}
-function hasLastFmGenreKeyword(value) {
-    return lastFmGenreKeywords.some((keyword) => {
-        if (value === keyword)
-            return true;
-        return value.startsWith(`${keyword} `) ||
-            value.endsWith(` ${keyword}`) ||
-            value.includes(` ${keyword} `);
-    });
-}
-function normalizeSpotifyGenres(values) {
-    if (!Array.isArray(values))
-        return [];
-    const genres = new Map();
-    for (const value of values) {
-        if (typeof value !== 'string')
-            continue;
-        const normalized = normalizeGenreName(value);
-        if (!normalized)
-            continue;
-        genres.set(normalized, normalized);
-        if (genres.size >= maxSpotifyGenresPerArtist)
-            break;
-    }
-    return [...genres.values()];
-}
-function normalizeLastFmTags(tags) {
-    const genres = new Map();
-    for (const tag of tags) {
-        const count = Number(tag.count ?? 0);
-        if (!tag.name || count < minLastFmTagCount)
-            continue;
-        const normalized = normalizeGenreName(tag.name);
-        if (!normalized || !hasLastFmGenreKeyword(normalized))
-            continue;
-        genres.set(normalized, normalized);
-        if (genres.size >= maxLastFmGenresPerArtist)
-            break;
-    }
-    return [...genres.values()];
-}
 function isSpotifyArtistItem(value) {
     if (!(0, catalog_request_1.isRecord)(value) || typeof value.id !== 'string' || typeof value.name !== 'string') {
         return false;
@@ -312,7 +110,7 @@ async function getLastFmGenres(artistName, apiKey) {
         if (validTags.length !== tags.length) {
             throw new https_1.HttpsError('unavailable', 'Last.fm returned an invalid tag list');
         }
-        return normalizeLastFmTags(validTags);
+        return (0, catalog_genres_1.normalizeLastFmTags)(validTags);
     }
     catch {
         return [];
@@ -355,7 +153,7 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({
         .map((item) => ({
         name: item.name ?? 'Unknown Artist',
         imageUrl: item.images?.[0]?.url ?? '',
-        genres: normalizeSpotifyGenres(item.genres),
+        genres: (0, catalog_genres_1.normalizeSpotifyGenres)(item.genres),
         spotifyId: item.id ?? null,
     }));
     const apiKey = lastFmApiKey.value();

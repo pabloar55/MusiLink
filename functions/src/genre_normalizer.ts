@@ -35,7 +35,7 @@ const decadeOrYearPattern = /^(?:[0-9]{2}s|[12][0-9]{3}s?)$/;
 export function normalizeGenreName(value: string): string | undefined {
   const key = value
     .trim()
-    .normalize('NFD')
+    .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/\br\s*&\s*b\b/g, 'rnb')
