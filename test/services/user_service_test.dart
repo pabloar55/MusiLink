@@ -581,58 +581,6 @@ void main() {
       });
     });
 
-    group('anonymizeUser', () {
-      test('no borra rate_limits al anonimizar usuario', () async {
-        final mockUserDocRef = MockDocumentReference();
-        final mockPrivateDocRef = MockDocumentReference();
-        final mockReservationRef = MockDocumentReference();
-        final mockUserSnapshot = MockDocumentSnapshot();
-        final mockReservationSnapshot = MockDocumentSnapshot();
-        final mockPushTokensRef = MockCollectionReference();
-        final mockPushTokensSnapshot = MockQuerySnapshot();
-        when(() => mockUsersRef.doc('uid123')).thenReturn(mockUserDocRef);
-        when(() => mockUserDocRef.get())
-            .thenAnswer((_) async => mockUserSnapshot);
-        when(() => mockUserSnapshot.data())
-            .thenReturn({'username': 'testuser'});
-        when(() => mockUsernamesRef.doc('testuser'))
-            .thenReturn(mockReservationRef);
-        when(() => mockReservationRef.get())
-            .thenAnswer((_) async => mockReservationSnapshot);
-        when(() => mockReservationSnapshot.data())
-            .thenReturn({'uid': 'uid123'});
-        when(() => mockReservationSnapshot.reference)
-            .thenReturn(mockReservationRef);
-        when(() => mockPrivateUsersRef.doc('uid123'))
-            .thenReturn(mockPrivateDocRef);
-        when(() => mockPrivateDocRef.collection('push_tokens'))
-            .thenReturn(mockPushTokensRef);
-        when(() => mockPushTokensRef.get())
-            .thenAnswer((_) async => mockPushTokensSnapshot);
-        when(() => mockPushTokensSnapshot.docs).thenReturn([]);
-        when(() => mockBatch.update(mockUserDocRef, any())).thenReturn(null);
-        when(() => mockBatch.delete(mockReservationRef)).thenReturn(null);
-        when(() => mockBatch.delete(mockPrivateDocRef)).thenReturn(null);
-
-        await userService.anonymizeUser('uid123');
-
-        final publicUpdate = Map<String, dynamic>.from(
-          verify(
-                () => mockBatch.update<Map<String, dynamic>>(
-                  mockUserDocRef,
-                  captureAny(),
-                ),
-              ).captured.single
-              as Map,
-        );
-        expect(publicUpdate['displayName'], AppUser.deletedDisplayName);
-        expect(publicUpdate['username'], AppUser.deletedUsername);
-        verify(() => mockBatch.delete(mockReservationRef)).called(1);
-        verify(() => mockBatch.delete(mockPrivateDocRef)).called(1);
-        verifyNever(() => mockFirestore.collection('rate_limits'));
-      });
-    });
-
     group('getUsersByIds', () {
       test('devuelve lista vacía con UIDs vacíos', () async {
         final result = await userService.getUsersByIds([]);

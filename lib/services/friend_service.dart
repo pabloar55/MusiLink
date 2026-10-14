@@ -404,56 +404,6 @@ class FriendService with AuthenticatedService {
     );
   }
 
-  // ─── Eliminar cuenta ────────────────────────────────────
-
-  /// Elimina todos los datos de amistad de [uid]:
-  /// lo quita del array `friends` de sus amigos y borra todas sus solicitudes.
-  Future<void> deleteAllUserFriendData(String uid) async {
-    try {
-      // Quitar uid del array friends de cada amigo suyo
-      final userDoc = await _privateUsersRef.doc(uid).get();
-      final friends = List<String>.from(
-        userDoc.data()?['friends'] as List? ?? [],
-      );
-      const batchSize = 400;
-      for (var i = 0; i < friends.length; i += batchSize) {
-        final chunk = friends.sublist(
-          i,
-          (i + batchSize).clamp(0, friends.length),
-        );
-        final batch = _firestore.batch();
-        for (final friendUid in chunk) {
-          batch.update(_privateUsersRef.doc(friendUid), {
-            'friends': FieldValue.arrayRemove([uid]),
-          });
-        }
-        await batch.commit();
-      }
-
-      // Eliminar todas las solicitudes de amistad (enviadas y recibidas)
-      final sent = await _requestsRef.where('senderId', isEqualTo: uid).get();
-      final received = await _requestsRef
-          .where('receiverId', isEqualTo: uid)
-          .get();
-      final allDocs = [...sent.docs, ...received.docs];
-      const requestBatchSize = 400;
-      for (var i = 0; i < allDocs.length; i += requestBatchSize) {
-        final chunk = allDocs.sublist(
-          i,
-          (i + requestBatchSize).clamp(0, allDocs.length),
-        );
-        final batch = _firestore.batch();
-        for (final doc in chunk) {
-          batch.delete(doc.reference);
-        }
-        await batch.commit();
-      }
-    } catch (e, stack) {
-      await reportError(e, stack);
-      rethrow;
-    }
-  }
-
   // ─── Bloquear usuarios ──────────────────────────────────
 
   /// Bloquea a [otherUid]: lo añade a `blockedUsers`, elimina la amistad

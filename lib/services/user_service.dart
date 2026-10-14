@@ -344,53 +344,6 @@ class UserService {
     }
   }
 
-  /// Anonimiza el perfil de [uid] eliminando todos los datos personales.
-  /// El documento se mantiene para que los mensajes existentes sigan teniendo
-  /// un autor reconocible ("Deleted user") en lugar de romperse.
-  Future<void> anonymizeUser(String uid) async {
-    try {
-      final publicProfile = await _usersRef.doc(uid).get();
-      final username = normalizeUsername(
-        (publicProfile.data()?['username'] ?? '').toString(),
-      );
-      final pushTokens = await _privateUsersRef
-          .doc(uid)
-          .collection(FirestoreCollections.pushTokens)
-          .get();
-      final reservation =
-          username.isNotEmpty && username != AppUser.deletedUsername
-          ? await _usernamesRef.doc(username).get()
-          : null;
-      final batch = _firestore.batch();
-      batch.update(_usersRef.doc(uid), {
-        'displayName': AppUser.deletedDisplayName,
-        'username': AppUser.deletedUsername,
-        'photoUrl': '',
-        'spotifyId': FieldValue.delete(),
-        'topArtists': FieldValue.delete(),
-        'topGenres': FieldValue.delete(),
-        'topArtistNames': FieldValue.delete(),
-        'topArtistKeys': FieldValue.delete(),
-        'topGenreNames': FieldValue.delete(),
-        'artistIdentityVersion': FieldValue.delete(),
-        'dailySong': FieldValue.delete(),
-        'dailySongUpdatedAt': FieldValue.delete(),
-      });
-      for (final token in pushTokens.docs) {
-        batch.delete(token.reference);
-      }
-      if (reservation?.data()?['uid'] == uid) {
-        batch.delete(reservation!.reference);
-      }
-      batch.delete(_privateUsersRef.doc(uid));
-      await batch.commit();
-      _userCache.remove(uid);
-    } catch (e, stack) {
-      await reportError(e, stack);
-      rethrow;
-    }
-  }
-
   /// Obtiene los usuarios correspondientes a una lista de UIDs.
   ///
   /// Conserva el orden original, reutiliza perfiles ya cacheados y agrupa en
