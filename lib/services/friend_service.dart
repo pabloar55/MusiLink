@@ -7,19 +7,8 @@ import 'package:musi_link/services/authenticated_service.dart';
 import 'package:musi_link/services/service_exceptions.dart';
 import 'package:musi_link/utils/error_reporter.dart';
 import 'package:musi_link/models/friend_request.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/utils/firestore_collections.dart';
-
-/// Estado de la relación entre el usuario actual y otro usuario.
-enum RelationshipStatus { none, requestSent, requestReceived, friends, blocked }
-
-/// Resultado de consultar la relación con otro usuario.
-class RelationshipResult {
-  final RelationshipStatus status;
-  final String? requestId; // ID del friend_request si existe
-  const RelationshipResult(this.status, [this.requestId]);
-
-  bool get canInteractInChat => status == RelationshipStatus.friends;
-}
 
 /// Servicio para gestionar solicitudes de amistad y amigos en Firestore.
 class FriendService with AuthenticatedService {
@@ -220,13 +209,7 @@ class FriendService with AuthenticatedService {
       final receivedSnapshots =
           results[2] as List<QuerySnapshot<Map<String, dynamic>>>;
 
-      final privateData = privateUser.data() ?? const <String, dynamic>{};
-      final blocked = Set<String>.from(
-        privateData['blockedUsers'] as List? ?? const [],
-      );
-      final friends = Set<String>.from(
-        privateData['friends'] as List? ?? const [],
-      );
+      final privateData = privateUser.data();
       final sentByUid = <String, String>{};
       for (final snapshot in sentSnapshots) {
         for (final doc in snapshot.docs) {
@@ -244,21 +227,12 @@ class FriendService with AuthenticatedService {
 
       return {
         for (final uid in uids)
-          uid: blocked.contains(uid)
-              ? const RelationshipResult(RelationshipStatus.blocked)
-              : friends.contains(uid)
-              ? const RelationshipResult(RelationshipStatus.friends)
-              : sentByUid.containsKey(uid)
-              ? RelationshipResult(
-                  RelationshipStatus.requestSent,
-                  sentByUid[uid],
-                )
-              : receivedByUid.containsKey(uid)
-              ? RelationshipResult(
-                  RelationshipStatus.requestReceived,
-                  receivedByUid[uid],
-                )
-              : const RelationshipResult(RelationshipStatus.none),
+          uid: resolveRelationship(
+            uid,
+            privateUserData: privateData,
+            sentRequestId: sentByUid[uid],
+            receivedRequestId: receivedByUid[uid],
+          ),
       };
     } catch (e, stack) {
       await reportError(e, stack);
@@ -289,36 +263,19 @@ class FriendService with AuthenticatedService {
       final sent = results[1] as QuerySnapshot<Map<String, dynamic>>;
       final received = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
-      final data = userDoc.data() ?? {};
-      final blocked = List<String>.from(data['blockedUsers'] as List? ?? []);
-      if (blocked.contains(otherUid)) {
-        return const RelationshipResult(RelationshipStatus.blocked);
-      }
-      final friends = List<String>.from(data['friends'] as List? ?? []);
-      if (friends.contains(otherUid)) {
-        return const RelationshipResult(RelationshipStatus.friends);
-      }
-      if (sent.docs.isNotEmpty) {
-        return RelationshipResult(
-          RelationshipStatus.requestSent,
-          sent.docs.first.id,
-        );
-      }
-      if (received.docs.isNotEmpty) {
-        return RelationshipResult(
-          RelationshipStatus.requestReceived,
-          received.docs.first.id,
-        );
-      }
-
-      return const RelationshipResult(RelationshipStatus.none);
+      return resolveRelationship(
+        otherUid,
+        privateUserData: userDoc.data(),
+        sentRequestId: sent.docs.firstOrNull?.id,
+        receivedRequestId: received.docs.firstOrNull?.id,
+      );
     } catch (e, stack) {
       await reportError(e, stack);
       rethrow;
     }
   }
 
-  /// Escucha en tiempo real la relacin con [otherUid].
+  /// Escucha en tiempo real la relación con [otherUid].
   Stream<RelationshipResult> watchRelationship(String otherUid) {
     late final StreamController<RelationshipResult> controller;
     final subscriptions = <StreamSubscription<Object?>>[];
@@ -326,30 +283,19 @@ class FriendService with AuthenticatedService {
     DocumentSnapshot<Map<String, dynamic>>? sentDoc;
     DocumentSnapshot<Map<String, dynamic>>? receivedDoc;
 
-    RelationshipResult relationshipFromSnapshots() {
-      final data = userDoc?.data() ?? {};
-      final blocked = List<String>.from(data['blockedUsers'] as List? ?? []);
-      if (blocked.contains(otherUid)) {
-        return const RelationshipResult(RelationshipStatus.blocked);
-      }
-      final friends = List<String>.from(data['friends'] as List? ?? []);
-      if (friends.contains(otherUid)) {
-        return const RelationshipResult(RelationshipStatus.friends);
-      }
+    // Se escuchan los documentos por id, no consultas filtradas: hay que
+    // descartar aquí las solicitudes que ya no están pendientes.
+    String? pendingRequestId(DocumentSnapshot<Map<String, dynamic>>? doc) =>
+        doc?.data()?['status'] == FriendRequestStatus.pending.name
+        ? doc!.id
+        : null;
 
-      if (sentDoc?.data()?['status'] == FriendRequestStatus.pending.name) {
-        return RelationshipResult(RelationshipStatus.requestSent, sentDoc!.id);
-      }
-
-      if (receivedDoc?.data()?['status'] == FriendRequestStatus.pending.name) {
-        return RelationshipResult(
-          RelationshipStatus.requestReceived,
-          receivedDoc!.id,
-        );
-      }
-
-      return const RelationshipResult(RelationshipStatus.none);
-    }
+    RelationshipResult relationshipFromSnapshots() => resolveRelationship(
+      otherUid,
+      privateUserData: userDoc?.data(),
+      sentRequestId: pendingRequestId(sentDoc),
+      receivedRequestId: pendingRequestId(receivedDoc),
+    );
 
     void emitRelationship() {
       if (!controller.isClosed) controller.add(relationshipFromSnapshots());

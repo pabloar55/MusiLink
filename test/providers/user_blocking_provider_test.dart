@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';

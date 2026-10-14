@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
-import 'package:musi_link/services/friend_service.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/widgets/skeleton_loader.dart';
 
 class FriendshipButtons extends StatefulWidget {

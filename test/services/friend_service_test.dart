@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/models/app_user.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/services/service_exceptions.dart';
 
@@ -49,28 +50,6 @@ void main() {
       functions: mockFunctions,
     );
     registerFallbackValues();
-  });
-
-  group('RelationshipResult', () {
-    test('solo permite interactuar en el chat cuando son amigos', () {
-      expect(
-        const RelationshipResult(RelationshipStatus.friends).canInteractInChat,
-        isTrue,
-      );
-
-      for (final status in [
-        RelationshipStatus.none,
-        RelationshipStatus.requestSent,
-        RelationshipStatus.requestReceived,
-        RelationshipStatus.blocked,
-      ]) {
-        expect(
-          RelationshipResult(status).canInteractInChat,
-          isFalse,
-          reason: '$status no debe permitir escribir ni reaccionar',
-        );
-      }
-    });
   });
 
   group('FriendService', () {

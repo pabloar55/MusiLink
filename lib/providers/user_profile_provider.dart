@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
-import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/utils/music_compatibility.dart';
 
 final currentUserProvider = StreamProvider<AppUser?>((ref) {

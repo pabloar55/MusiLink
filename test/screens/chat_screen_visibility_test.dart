@@ -7,13 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/message.dart';
+import 'package:musi_link/models/relationship.dart';
 import 'package:musi_link/providers/firebase_providers.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/router/app_route_observer.dart';
 import 'package:musi_link/screens/chat_screen.dart';
 import 'package:musi_link/services/chat_service.dart';
-import 'package:musi_link/services/friend_service.dart';
 import 'package:musi_link/utils/app_localizations_delegates.dart';
 
 import '../helpers/mocks.dart';
