@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/service_providers.dart';
+import 'package:musi_link/providers/user_blocking_provider.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/theme/app_theme.dart';
+import 'package:musi_link/widgets/service_error_snackbar.dart';
 import 'package:musi_link/widgets/user_profile_photo.dart';
 
 class BlockedUsersScreen extends ConsumerWidget {
@@ -86,7 +88,11 @@ class _BlockedUserTile extends ConsumerWidget {
       subtitle: username.isNotEmpty ? Text('@$username') : null,
       trailing: TextButton(
         onPressed: () async {
-          await ref.read(friendServiceProvider).unblockUser(uid);
+          try {
+            await ref.read(userBlockingControllerProvider).unblock(uid);
+          } catch (_) {
+            if (context.mounted) showServiceError(context, null);
+          }
         },
         child: Text(l10n.blockUserUnblock),
       ),

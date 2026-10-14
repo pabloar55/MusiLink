@@ -6,8 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/app_user.dart';
 import 'package:musi_link/models/discovery_result.dart';
-import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/providers/session_scope_provider.dart';
+import 'package:musi_link/providers/user_blocking_provider.dart';
 import 'package:musi_link/providers/service_providers.dart';
 import 'package:musi_link/providers/user_profile_provider.dart';
 import 'package:musi_link/services/friend_service.dart';
@@ -123,13 +123,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(friendServiceProvider).blockUser(widget.user.uid);
-      ref.read(musicProfileServiceProvider).clearCache();
-      final discoverNotifier = ref.read(discoverProvider.notifier);
-      discoverNotifier.hideBlockedUser(widget.user.uid);
-      unawaited(discoverNotifier.refresh());
+      await ref.read(userBlockingControllerProvider).block(widget.user.uid);
       if (!mounted) return;
-      ref.invalidate(relationshipProvider(widget.user.uid));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.blockUserBlockedSnackbar(widget.user.displayName)),
@@ -142,13 +137,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   Future<void> _unblockUser() async {
     try {
-      await ref.read(friendServiceProvider).unblockUser(widget.user.uid);
-      ref.read(musicProfileServiceProvider).clearCache();
-      final discoverNotifier = ref.read(discoverProvider.notifier);
-      discoverNotifier.unhideUser(widget.user.uid);
-      unawaited(discoverNotifier.refresh());
+      await ref.read(userBlockingControllerProvider).unblock(widget.user.uid);
       if (!mounted) return;
-      ref.invalidate(relationshipProvider(widget.user.uid));
       final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
