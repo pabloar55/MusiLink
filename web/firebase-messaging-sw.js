@@ -44,14 +44,14 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// FlutterFire 16.4.x is tested against Firebase JS 12.15.0. A classic
+// FlutterFire Messaging 17 uses Firebase JS 13.0.0 (FID registration). A classic
 // service worker is required by the plugin registration API, so the compat
 // build is used here while the app itself continues using the modular SDK.
 importScripts(
-  'https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/13.0.0/firebase-app-compat.js',
 );
 importScripts(
-  'https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js',
+  'https://www.gstatic.com/firebasejs/13.0.0/firebase-messaging-compat.js',
 );
 
 firebase.initializeApp({

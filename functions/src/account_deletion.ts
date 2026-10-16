@@ -222,6 +222,17 @@ export const requestAccountDeletion = onCall(
   },
 );
 
+export async function clearPushInstallations(uid: string): Promise<number> {
+  const db = getFirestore();
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(
+      db.collection('push_installations').where('uid', '==', uid).limit(batchSize),
+    );
+    snapshot.docs.forEach((document) => transaction.delete(document.ref));
+    return snapshot.size;
+  });
+}
+
 async function commitDeletes(query: Query): Promise<number> {
   const snapshot = await query.limit(batchSize).get();
   if (snapshot.empty) return 0;
@@ -373,6 +384,10 @@ async function verifyCleanup(uid: string): Promise<DeletionPhase | undefined> {
       query: db.collection(`user_private/${uid}/push_tokens`),
     },
     {
+      phase: 'push_tokens',
+      query: db.collection('push_installations').where('uid', '==', uid),
+    },
+    {
       phase: 'friend_references',
       query: db.collection('user_private').where('friends', 'array-contains', uid),
     },
@@ -462,7 +477,13 @@ async function processPhase(uid: string, job: DeletionJob): Promise<PhaseResult>
       return { nextPhase: 'push_tokens' };
     case 'push_tokens': {
       const count = await commitDeletes(db.collection(`user_private/${uid}/push_tokens`));
-      return { nextPhase: count === batchSize ? 'push_tokens' : 'friend_references', processed: count };
+      // Ownership can move to another account while deletion is running.
+      // Query inside the transaction so a concurrent claim is never erased.
+      const installations = await clearPushInstallations(uid);
+      return {
+        nextPhase: count === batchSize || installations === batchSize ? 'push_tokens' : 'friend_references',
+        processed: count + installations,
+      };
     }
     case 'friend_references': {
       const count = await removeArrayReference('user_private', 'friends', uid);

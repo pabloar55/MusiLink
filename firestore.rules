@@ -208,20 +208,20 @@ service cloud.firestore {
 
     function validPushToken(data) {
       return data.keys().hasOnly([
-          'token',
-          'platform',
-          'preferredLocale',
-          'updatedAt',
+          'token', 'fid', 'platform', 'preferredLocale', 'updatedAt',
         ])
-        && data.keys().hasAll([
-          'token',
-          'platform',
-          'preferredLocale',
-          'updatedAt',
-        ])
-        && data.token is string
-        && data.token.toUtf8().size() > 0
-        && data.token.toUtf8().size() <= 4096
+        && data.keys().hasAll(['platform', 'preferredLocale', 'updatedAt'])
+        // Old clients retain token support during the FID rollout. Each
+        // installation has exactly one destination, never both formats.
+        && (
+          ('fid' in data && !('token' in data)
+            && data.fid is string
+            && data.fid.matches('^[A-Za-z0-9_-]{22}$'))
+          || ('token' in data && !('fid' in data)
+            && data.token is string
+            && data.token.toUtf8().size() > 0
+            && data.token.toUtf8().size() <= 4096)
+        )
         && data.platform in ['android', 'ios', 'web']
         && validPreferredLocale(data.preferredLocale)
         && data.updatedAt == request.time;
@@ -388,8 +388,30 @@ service cloud.firestore {
           && request.auth.uid == userId
           && isActiveUser(userId)
           && installationId.matches('^[A-Za-z0-9_-]{20,64}$')
-          && validPushToken(request.resource.data);
+          && validPushToken(request.resource.data)
+          && (!('fid' in request.resource.data)
+            || (getAfter(/databases/$(database)/documents/push_installations/$(request.resource.data.fid)).data.uid == userId
+              && getAfter(/databases/$(database)/documents/push_installations/$(request.resource.data.fid)).data.installationId == installationId));
       }
+    }
+
+    // One current account per FID. Registration claims ownership atomically
+    // with its private destination; possession of the FID is required.
+    match /push_installations/{fid} {
+      allow get: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow list: if false;
+      allow create, update: if request.auth != null
+        && isActiveUser(request.auth.uid)
+        && fid.matches('^[A-Za-z0-9_-]{22}$')
+        && request.resource.data.keys().hasOnly(['uid', 'installationId', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'installationId', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.installationId is string
+        && request.resource.data.installationId.matches('^[A-Za-z0-9_-]{20,64}$')
+        && request.resource.data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/user_private/$(request.auth.uid)/push_tokens/$(request.resource.data.installationId)).data.fid == fid
+        && getAfter(/databases/$(database)/documents/user_private/$(request.auth.uid)/push_tokens/$(request.resource.data.installationId)).data.updatedAt == request.time;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // Índice interno mantenido exclusivamente por Cloud Functions/Admin SDK.

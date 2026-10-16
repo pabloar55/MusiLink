@@ -62,7 +62,7 @@ void main() {
         onNotificationTapped: (_) {},
         getActiveChatId: () => null,
         localNotifications: localNotifications,
-        tokenRefreshes: const Stream.empty(),
+        registrations: const Stream.empty(),
         foregroundMessages: const Stream.empty(),
       );
 
@@ -121,7 +121,7 @@ void main() {
         getActiveChatId: () => null,
         skipLaunchNotification: true,
         localNotifications: localNotifications,
-        tokenRefreshes: const Stream.empty(),
+        registrations: const Stream.empty(),
         foregroundMessages: foreground.stream,
       );
       await service.initialize();
@@ -266,6 +266,10 @@ void main() {
       () async {
         final messaging = MockFirebaseMessaging();
         final pushTokens = activePushTokens();
+        final registrations = StreamController<String>();
+        addTearDown(registrations.close);
+        when(() => pushTokens.saveRegisteredFid(any()))
+            .thenAnswer((_) async {});
         final localNotifications = MockLocalNotifications();
         final prefs = await SharedPreferences.getInstance();
         final handledNotifications = <Map<String, dynamic>>[];
@@ -312,12 +316,17 @@ void main() {
             preparedChats.add(data);
           },
           localNotifications: localNotifications,
-          tokenRefreshes: const Stream.empty(),
+          registrations: registrations.stream,
           foregroundMessages: foreground.stream,
         );
 
         await service.initialize();
         await service.initialize();
+        registrations.add('c123456789012345678901');
+        await Future<void>.delayed(Duration.zero);
+        verify(() => pushTokens.saveRegisteredFid('c123456789012345678901'))
+            .called(1);
+        verifyNever(pushTokens.saveToken);
 
         expect(
           handledNotifications,

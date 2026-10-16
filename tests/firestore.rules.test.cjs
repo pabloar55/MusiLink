@@ -886,3 +886,58 @@ test('likes: el cliente conserva pero no manipula la marca de notificación', as
   await assertFails(updateDoc(ref, { notificationSentFor: new Date(0) }));
   await assertFails(updateDoc(ref, { notificationSentFor: deleteField() }));
 });
+
+test('FID ownership is atomic, private and transferable between active accounts', async () => {
+  await seedActiveUser('alice');
+  await seedActiveUser('bob');
+  const fid = 'c123456789012345678901';
+  const installationId = 'abcdefghijklmnopqrstuvwx';
+  const ownerPath = `push_installations/${fid}`;
+  const registration = {
+    fid, platform: 'web', preferredLocale: 'es', updatedAt: serverTimestamp(),
+  };
+  const targetPath = (uid) => `user_private/${uid}/push_tokens/${installationId}`;
+  function claim(uid, target = registration) {
+    const db = dbFor(uid);
+    const batch = writeBatch(db);
+    batch.set(doc(db, targetPath(uid)), target);
+    batch.set(doc(db, ownerPath), { uid, installationId, updatedAt: serverTimestamp() });
+    return batch.commit();
+  }
+  await assertFails(setDoc(doc(dbFor('alice'), targetPath('alice')), registration));
+  await assertFails(setDoc(doc(dbFor('alice'), ownerPath), {
+    uid: 'alice', installationId, updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(claim('alice'));
+  await assertSucceeds(getDoc(doc(dbFor('alice'), ownerPath)));
+  await assertFails(getDoc(doc(dbFor('bob'), ownerPath)));
+  await assertFails(getDocs(collection(dbFor('alice'), 'push_installations')));
+  await assertFails(claim('alice', { ...registration, token: 'legacy-token' }));
+  await assertSucceeds(claim('bob'));
+  await assertFails(deleteDoc(doc(dbFor('alice'), ownerPath)));
+  assert.equal((await getDoc(doc(dbFor('bob'), ownerPath))).data().uid, 'bob');
+  // Cleanup of Alice's stale private registration cannot erase Bob's owner.
+  await assertSucceeds(deleteDoc(doc(dbFor('alice'), targetPath('alice'))));
+  assert.equal((await getDoc(doc(dbFor('bob'), ownerPath))).data().uid, 'bob');
+});
+
+test('FID registrations reject malformed identifiers and inactive accounts', async () => {
+  await seedActiveUser('alice');
+  const db = dbFor('alice');
+  const installationId = 'abcdefghijklmnopqrstuvwx';
+  for (const fid of ['', 'short', 'c123456789012345678901!']) {
+    await assertFails(setDoc(doc(db, `user_private/alice/push_tokens/${installationId}`), {
+      fid, platform: 'web', preferredLocale: 'es', updatedAt: serverTimestamp(),
+    }));
+  }
+  const fid = 'c123456789012345678901';
+  await seed('users/alice', { username: 'deleted_user', displayName: 'Deleted user' });
+  const batch = writeBatch(db);
+  batch.set(doc(db, `user_private/alice/push_tokens/${installationId}`), {
+    fid, platform: 'web', preferredLocale: 'es', updatedAt: serverTimestamp(),
+  });
+  batch.set(doc(db, `push_installations/${fid}`), {
+    uid: 'alice', installationId, updatedAt: serverTimestamp(),
+  });
+  await assertFails(batch.commit());
+});

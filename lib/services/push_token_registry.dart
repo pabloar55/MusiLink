@@ -31,6 +31,7 @@ class PushTokenRegistry {
 
   int _tokenGeneration = 0;
   bool _signingOut = false;
+  Future<String>? _registrationFuture;
 
   static const _supportedPreferredLocales = {'el', 'en', 'es', 'fr'};
   static const _pendingClearUidKey = 'pending_fcm_clear_uid';
@@ -86,7 +87,17 @@ class PushTokenRegistry {
     }
   }
 
-  Future<void> saveToken() async {
+  /// Persists SDK registration events without starting another registration.
+  Future<void> saveRegisteredFid(String fid) async {
+    // Explicit registrations are persisted by saveToken, which also retains
+    // the session that requested them. register() emits even for the same FID.
+    if (_registrationFuture != null) return;
+    await _saveToken(registeredFid: fid);
+  }
+
+  Future<void> saveToken() => _saveToken();
+
+  Future<void> _saveToken({String? registeredFid}) async {
     final uid = _auth.currentUser?.uid;
     final generation = _tokenGeneration;
     if (uid == null || _signingOut) return;
@@ -103,10 +114,20 @@ class PushTokenRegistry {
           profile.data()?['username'] == 'deleted_user') {
         return;
       }
-      if (_requiresApnsToken && await _waitForApnsToken() == null) return;
+      if (_signingOut ||
+          generation != _tokenGeneration ||
+          _auth.currentUser?.uid != uid) {
+        return;
+      }
+      if (registeredFid == null &&
+          _requiresApnsToken &&
+          await _waitForApnsToken() == null) {
+        return;
+      }
+      if (_signingOut || generation != _tokenGeneration) return;
 
-      final token = await _getToken();
-      if (token == null) return;
+      final fid = registeredFid ?? await _getRegisteredFid();
+      if (fid.isEmpty) return;
       final installationId = await _installationId();
       // A refresh started before logout must not re-register the removed token.
       if (_signingOut ||
@@ -127,11 +148,22 @@ class PushTokenRegistry {
         'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
       }, SetOptions(merge: true));
       batch.set(tokenRef, {
-        'token': token,
+        // Replace the legacy token in the same installation document.
+        'fid': fid,
         'platform': _pushPlatform(),
         'preferredLocale': _preferredLocale(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      // FIDs survive unregister/register and account switches. Only the
+      // current owner may receive pushes, even if an old cleanup is offline.
+      batch.set(
+        _firestore.collection(FirestoreCollections.pushInstallations).doc(fid),
+        {
+          'uid': uid,
+          'installationId': installationId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
       await batch.commit();
     } on FirebaseException catch (error, stack) {
       if (error.code == 'apns-token-not-set') return;
@@ -172,10 +204,36 @@ class PushTokenRegistry {
     };
   }
 
-  Future<String?> _getToken() => _messaging.getToken(
-    vapidKey: kIsWeb ? _webVapidKey : null,
-    serviceWorkerScriptPath: kIsWeb ? 'firebase-messaging-sw.js' : null,
-  );
+  Future<String> _getRegisteredFid() =>
+      _registrationFuture ??= Future<String>.microtask(_registerForFid)
+          .whenComplete(() => _registrationFuture = null);
+
+  Future<String> _registerForFid() async {
+    final registered = Completer<String>();
+    // Subscribe first: native platforms can emit before register completes.
+    final subscription = _messaging.onRegistered.listen(
+      (fid) {
+        if (!registered.isCompleted) registered.complete(fid);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!registered.isCompleted) registered.completeError(error, stack);
+      },
+    );
+    try {
+      final results = await Future.wait<String?>([
+        registered.future,
+        Future<void>.sync(
+          () => _messaging.register(
+            vapidKey: kIsWeb ? _webVapidKey : null,
+            serviceWorkerScriptPath: kIsWeb ? 'firebase-messaging-sw.js' : null,
+          ),
+        ).then((_) => null),
+      ], eagerError: true).timeout(const Duration(seconds: 15));
+      return results.first!;
+    } finally {
+      await subscription.cancel();
+    }
+  }
 
   Future<String> _installationId() async {
     final existing = _prefs.getString(_installationIdKey);
@@ -242,7 +300,9 @@ class PushTokenRegistry {
   }
 
   Future<void> _deleteMessagingToken() async {
-    await _messaging.deleteToken();
+    // Await the native unregistration before repairing a newer session.
+    // Firestore cleanup remains independent, including when offline.
+    await _messaging.unregister();
     // A timeout does not cancel the native operation. If another session has
     // started by the time it finishes, repair that session's token registration.
     if (!_signingOut && _auth.currentUser != null) {

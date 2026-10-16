@@ -155,16 +155,35 @@ async function sendNotification(recipientUid, recipientPrivateData, notification
         .get();
     const targets = new Map();
     for (const tokenDoc of pushTokensSnapshot.docs) {
-        const token = tokenDoc.data().token;
-        if (typeof token === 'string' && token.length > 0)
-            targets.set(token, tokenDoc.ref);
+        const { fid, token } = tokenDoc.data();
+        const destination = typeof fid === 'string' && fid.length > 0
+            ? { fid }
+            : typeof token === 'string' && token.length > 0 ? { token } : undefined;
+        if (!destination)
+            continue;
+        const key = 'fid' in destination ? `fid:${destination.fid}` : `token:${destination.token}`;
+        const target = targets.get(key);
+        if (target)
+            target.registrations.push(tokenDoc);
+        else
+            targets.set(key, { destination, registrations: [tokenDoc] });
     }
     if (targets.size === 0)
         return;
-    await Promise.all([...targets].map(async ([token, tokenRef]) => {
+    await Promise.all([...targets].map(async ([, { destination, registrations }]) => {
+        let registration = registrations[0];
         try {
+            if ('fid' in destination) {
+                const owner = (await firebase_1.db.doc(`push_installations/${destination.fid}`).get()).data();
+                if (owner?.uid !== recipientUid)
+                    return;
+                const ownedRegistration = registrations.find((candidate) => candidate.ref.id === owner.installationId);
+                if (!ownedRegistration)
+                    return;
+                registration = ownedRegistration;
+            }
             await firebase_1.messaging.send({
-                token,
+                ...destination,
                 // Android chat notifications are data-only so the client can maintain
                 // one MessagingStyle notification per conversation.
                 ...(!isChatMessage ? { notification } : {}),
@@ -199,8 +218,21 @@ async function sendNotification(recipientUid, recipientPrivateData, notification
         }
         catch (error) {
             const fcmError = error;
-            if (fcmError.code === 'messaging/registration-token-not-registered') {
-                await tokenRef.delete();
+            if (fcmError.code === 'messaging/registration-token-not-registered' ||
+                fcmError.code === 'messaging/installation-id-not-registered') {
+                // A legacy send can fail after this installation has migrated to FID.
+                // Remove only the destination we sent to, never its replacement.
+                await firebase_1.db.runTransaction(async (transaction) => {
+                    const snapshot = await transaction.get(registration.ref);
+                    const current = snapshot.data();
+                    const unchanged = 'fid' in destination
+                        ? current?.fid === destination.fid
+                        : current?.token === destination.token && !current?.fid;
+                    // The same FID can have been registered again since the failed send.
+                    if (unchanged && snapshot.updateTime?.isEqual(registration.updateTime)) {
+                        transaction.delete(registration.ref);
+                    }
+                });
                 return;
             }
             v2_1.logger.error('sendNotification: unexpected FCM error', {

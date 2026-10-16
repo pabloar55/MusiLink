@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processAccountDeletion = exports.requestAccountDeletion = void 0;
+exports.clearPushInstallations = clearPushInstallations;
 exports.processChats = processChats;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("firebase-admin/auth");
@@ -168,6 +169,14 @@ exports.requestAccountDeletion = (0, https_1.onCall)({ region: callableRegion, e
     }
     return publicJobData(result.data);
 });
+async function clearPushInstallations(uid) {
+    const db = (0, firestore_1.getFirestore)();
+    return db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(db.collection('push_installations').where('uid', '==', uid).limit(batchSize));
+        snapshot.docs.forEach((document) => transaction.delete(document.ref));
+        return snapshot.size;
+    });
+}
 async function commitDeletes(query) {
     const snapshot = await query.limit(batchSize).get();
     if (snapshot.empty)
@@ -300,6 +309,10 @@ async function verifyCleanup(uid) {
             query: db.collection(`user_private/${uid}/push_tokens`),
         },
         {
+            phase: 'push_tokens',
+            query: db.collection('push_installations').where('uid', '==', uid),
+        },
+        {
             phase: 'friend_references',
             query: db.collection('user_private').where('friends', 'array-contains', uid),
         },
@@ -391,7 +404,13 @@ async function processPhase(uid, job) {
             return { nextPhase: 'push_tokens' };
         case 'push_tokens': {
             const count = await commitDeletes(db.collection(`user_private/${uid}/push_tokens`));
-            return { nextPhase: count === batchSize ? 'push_tokens' : 'friend_references', processed: count };
+            // Ownership can move to another account while deletion is running.
+            // Query inside the transaction so a concurrent claim is never erased.
+            const installations = await clearPushInstallations(uid);
+            return {
+                nextPhase: count === batchSize || installations === batchSize ? 'push_tokens' : 'friend_references',
+                processed: count + installations,
+            };
         }
         case 'friend_references': {
             const count = await removeArrayReference('user_private', 'friends', uid);

@@ -11,6 +11,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/services/push_token_registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+const expectedVapidKey = kIsWeb
+    ? 'BHWDoNtHqOTGikK1rCJeWntcKQUiv763Z1YtY96MP2DzePOFHFtw8dxy7mGME7EnkajPy3q6DfjdMU34yiq8sEc'
+    : null;
+const expectedWorkerPath = kIsWeb ? 'firebase-messaging-sw.js' : null;
+
 class MockFirebaseMessaging extends Mock implements FirebaseMessaging {}
 
 class MockFirebaseFirestore extends Mock implements FirebaseFirestore {}
@@ -63,12 +68,17 @@ void main() {
     late MockDocumentSnapshot profile;
     late SharedPreferences prefs;
     late PushTokenRegistry registry;
+    late StreamController<String> registrations;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({
         'push_installation_id': 'installation',
       });
       messaging = MockFirebaseMessaging();
+      registrations = StreamController<String>.broadcast(sync: true);
+      addTearDown(() => unawaited(registrations.close()));
+      when(() => messaging.onRegistered)
+          .thenAnswer((_) => registrations.stream);
       firestore = MockFirebaseFirestore();
       profile = mockPublishedProfile(firestore);
       auth = MockFirebaseAuth();
@@ -88,14 +98,24 @@ void main() {
       when(() => privateUser.collection('push_tokens')).thenReturn(tokens);
       when(() => tokens.doc('installation')).thenReturn(tokenRef);
       when(() => tokenRef.delete()).thenAnswer((_) async {});
-      when(() => messaging.deleteToken()).thenAnswer((_) async {});
+      when(() => messaging.unregister()).thenAnswer((_) async {});
       when(() => messaging.getNotificationSettings())
           .thenAnswer((_) async => settings);
       when(() => settings.authorizationStatus)
           .thenReturn(AuthorizationStatus.authorized);
       when(
-        () => messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
-      ).thenAnswer((_) async => 'new-token');
+        () => messaging.register(
+          vapidKey: expectedVapidKey,
+          serviceWorkerScriptPath: expectedWorkerPath,
+        ),
+      ).thenAnswer((_) async {
+        expectSync(registrations.hasListener, isTrue);
+        registrations.add('c123456789012345678901');
+      });
+      final installations = MockCollectionReference();
+      when(() => firestore.collection('push_installations'))
+          .thenReturn(installations);
+      when(() => installations.doc(any())).thenReturn(MockDocumentReference());
       when(() => firestore.batch()).thenReturn(batch);
       when(() => batch.commit()).thenAnswer((_) async {});
 
@@ -105,6 +125,125 @@ void main() {
         auth: auth,
         prefs: prefs,
       );
+    });
+
+    test(
+      'replaces the legacy target with FID on the same installation',
+      () async {
+        await registry.saveToken();
+        final data =
+            verify(
+                  () => batch.set<Map<String, dynamic>>(tokenRef, captureAny()),
+                ).captured.single
+                as Map<String, dynamic>;
+        expect(data['fid'], 'c123456789012345678901');
+        expect(data.containsKey('token'), isFalse);
+        final ownerRef = firestore
+            .collection('push_installations')
+            .doc(data['fid'] as String);
+        final owner =
+            verify(
+                  () => batch.set<Map<String, dynamic>>(ownerRef, captureAny()),
+                ).captured.single
+                as Map<String, dynamic>;
+        expect(owner['uid'], 'alice');
+        expect(owner['installationId'], 'installation');
+
+        verify(
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
+        ).called(1);
+        expect(registrations.hasListener, isFalse);
+      },
+    );
+
+    test(
+      'registration events persist without a recursive register call',
+      () async {
+        await registry.saveRegisteredFid('d123456789012345678901');
+        verify(() => batch.commit()).called(1);
+        verifyNever(
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
+        );
+      },
+    );
+
+    test('explicit registration and its event produce one write', () async {
+      final listener = registrations.stream.listen(registry.saveRegisteredFid);
+      addTearDown(listener.cancel);
+      await registry.saveToken();
+      verify(() => batch.commit()).called(1);
+      verify(
+        () => messaging.register(
+          vapidKey: expectedVapidKey,
+          serviceWorkerScriptPath: expectedWorkerPath,
+        ),
+      ).called(1);
+    });
+
+    test('waits for an event delivered after register completes', () async {
+      final requested = Completer<void>();
+      when(
+        () => messaging.register(
+          vapidKey: expectedVapidKey,
+          serviceWorkerScriptPath: expectedWorkerPath,
+        ),
+      ).thenAnswer((_) async => requested.complete());
+      final work = registry.saveToken();
+      await requested.future;
+      verifyNever(() => batch.commit());
+      registrations.add('d123456789012345678901');
+      await work;
+      verify(() => batch.commit()).called(1);
+    });
+
+    test(
+      'registration failure releases the listener and permits retry',
+      () async {
+        when(
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
+        ).thenThrow(StateError('registration failed'));
+        await registry.saveToken();
+        verifyNever(() => batch.commit());
+        expect(registrations.hasListener, isFalse);
+        when(
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
+        ).thenAnswer((_) async => registrations.add('c123456789012345678901'));
+        await registry.saveToken();
+        verify(() => batch.commit()).called(1);
+      },
+    );
+
+    test(
+      'missing registration event times out and releases listener',
+      () async {
+        when(
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
+        ).thenAnswer((_) async {});
+        await registry.saveToken();
+        verifyNever(() => batch.commit());
+        expect(registrations.hasListener, isFalse);
+      },
+    );
+
+    test('ignores registration events after sign-out', () async {
+      registry.endSession();
+      await registry.saveRegisteredFid('c123456789012345678901');
+      verifyNever(() => batch.commit());
     });
 
     test(
@@ -118,8 +257,10 @@ void main() {
 
         verifyNever(() => batch.commit());
         verifyNever(
-          () =>
-              messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
         );
 
         when(() => profile.exists).thenReturn(true);
@@ -143,7 +284,7 @@ void main() {
     ) async {
       final fcm = Completer<void>();
       final deletion = Completer<void>();
-      when(() => messaging.deleteToken()).thenAnswer((_) {
+      when(() => messaging.unregister()).thenAnswer((_) {
         expectSync(prefs.getStringList('pending_fcm_clear_uids'), ['alice']);
         return fcm.future;
       });
@@ -151,7 +292,7 @@ void main() {
 
       final cleanup = registry.clearToken();
       await tester.pump();
-      verify(() => messaging.deleteToken()).called(1);
+      verify(() => messaging.unregister()).called(1);
       verify(() => tokenRef.delete()).called(1);
       await tester.pump(const Duration(seconds: 2));
       await cleanup;
@@ -164,7 +305,7 @@ void main() {
     });
 
     test('clears Firestore even if FCM fails', () async {
-      when(() => messaging.deleteToken()).thenThrow(StateError('FCM failed'));
+      when(() => messaging.unregister()).thenThrow(StateError('FCM failed'));
 
       await registry.clearToken();
 
@@ -193,8 +334,10 @@ void main() {
 
         verifyInOrder([
           () => tokenRef.delete(),
-          () =>
-              messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
           () => batch.commit(),
         ]);
         expect(prefs.getStringList('pending_fcm_clear_uids'), ['bob']);
@@ -237,14 +380,10 @@ void main() {
       expect(prefs.getStringList('pending_fcm_clear_uids'), ['alice', 'bob']);
     });
 
-    testWidgets('repairs registration after a late FCM revocation', (
-      tester,
-    ) async {
+    test('repairs registration after a late FCM revocation', () async {
       final revocation = Completer<void>();
-      when(() => messaging.deleteToken()).thenAnswer((_) => revocation.future);
+      when(() => messaging.unregister()).thenAnswer((_) => revocation.future);
       final cleanup = registry.clearToken();
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 2));
       await cleanup;
 
       when(() => user.uid).thenReturn('bob');
@@ -253,45 +392,44 @@ void main() {
       verify(() => batch.commit()).called(1);
 
       revocation.complete();
-      await tester.pump();
+      await Future<void>.delayed(Duration.zero);
 
       verify(() => batch.commit()).called(1);
     });
 
-    testWidgets('an offline retry is bounded and retains recovery', (
-      tester,
-    ) async {
+    test('an offline retry is bounded and retains recovery', () async {
       await prefs.setStringList('pending_fcm_clear_uids', ['alice']);
       final deletion = Completer<void>();
       when(() => tokenRef.delete()).thenAnswer((_) => deletion.future);
       final restoration = registry.restoreSession();
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 2));
       await restoration;
 
       expect(prefs.getStringList('pending_fcm_clear_uids'), ['alice']);
       verify(() => batch.commit()).called(1);
       deletion.complete();
-      await tester.pump();
+      await Future<void>.delayed(Duration.zero);
     });
 
     test(
       'does not save a token whose retrieval finishes after sign-out',
       () async {
-        final token = Completer<String?>();
+        final registrationCompleted = Completer<void>();
         final requested = Completer<void>();
         when(
-          () =>
-              messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
+          () => messaging.register(
+            vapidKey: expectedVapidKey,
+            serviceWorkerScriptPath: expectedWorkerPath,
+          ),
         ).thenAnswer((_) {
           requested.complete();
-          return token.future;
+          return registrationCompleted.future;
         });
         final registration = registry.saveTokenIfGranted();
         await requested.future;
 
         await registry.clearToken();
-        token.complete('old-token');
+        registrations.add('c123456789012345678901');
+        registrationCompleted.complete();
         await registration;
 
         verifyNever(() => batch.commit());
@@ -323,6 +461,10 @@ void main() {
       });
 
       final messaging = MockFirebaseMessaging();
+      final registrations = StreamController<String>.broadcast();
+      addTearDown(() => unawaited(registrations.close()));
+      when(() => messaging.onRegistered)
+          .thenAnswer((_) => registrations.stream);
       final firestore = MockFirebaseFirestore();
       final auth = MockFirebaseAuth();
       final settings = MockNotificationSettings();
@@ -345,13 +487,20 @@ void main() {
       when(() => settings.authorizationStatus)
           .thenReturn(AuthorizationStatus.authorized);
       when(
-        () => messaging.getToken(vapidKey: null, serviceWorkerScriptPath: null),
-      ).thenAnswer((_) async => 'fcm-token');
+        () => messaging.register(
+          vapidKey: expectedVapidKey,
+          serviceWorkerScriptPath: expectedWorkerPath,
+        ),
+      ).thenAnswer((_) async => registrations.add('c123456789012345678901'));
       when(() => firestore.collection('user_private')).thenReturn(privateUsers);
       when(() => privateUsers.doc('alice')).thenReturn(privateUserRef);
       when(() => privateUserRef.collection('push_tokens'))
           .thenReturn(pushTokens);
       when(() => pushTokens.doc(installationId)).thenReturn(tokenRef);
+      final installations = MockCollectionReference();
+      when(() => firestore.collection('push_installations'))
+          .thenReturn(installations);
+      when(() => installations.doc(any())).thenReturn(MockDocumentReference());
       when(() => firestore.batch()).thenReturn(batch);
       when(() => batch.commit()).thenThrow(
         FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),

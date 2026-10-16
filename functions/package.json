@@ -8,7 +8,8 @@
     "test:social": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/social_writes.test.cjs\"",
     "test:music-profile": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/music_profile_write.test.cjs\"",
     "test:recommendations": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/recommendations.test.cjs\"",
-    "test:unit": "npm run build && node --test test/unit/*.test.cjs"
+    "test:unit": "npm run build && node --test test/unit/*.test.cjs",
+    "test:push-registration": "npm run build && firebase emulators:exec --config ../firebase.json --project musilink-functions-test --only firestore \"node --test test/push_registration.test.cjs\""
   },
   "engines": {
     "node": "24"

@@ -49,13 +49,13 @@ class NotificationService {
     required this._onNotificationTapped,
     required this._getActiveChatId,
     FlutterLocalNotificationsPlugin? localNotifications,
-    Stream<String>? tokenRefreshes,
+    Stream<String>? registrations,
     Stream<RemoteMessage>? foregroundMessages,
     this._prepareChat,
     this._skipLaunchNotification = false,
   }) : _localNotifications =
            localNotifications ?? FlutterLocalNotificationsPlugin(),
-       _tokenRefreshes = tokenRefreshes ?? _messaging.onTokenRefresh,
+       _registrations = registrations ?? _messaging.onRegistered,
        _foregroundMessages = foregroundMessages ?? FirebaseMessaging.onMessage;
 
   final FirebaseMessaging _messaging;
@@ -64,7 +64,7 @@ class NotificationService {
   final void Function(Map<String, dynamic>) _onNotificationTapped;
   final String? Function() _getActiveChatId;
   final FlutterLocalNotificationsPlugin _localNotifications;
-  final Stream<String> _tokenRefreshes;
+  final Stream<String> _registrations;
   final Stream<RemoteMessage> _foregroundMessages;
   final Future<void> Function(Map<String, dynamic>)? _prepareChat;
   final bool _skipLaunchNotification;
@@ -129,7 +129,10 @@ class NotificationService {
   Future<bool> _initializePlatform() async {
     if (kIsWeb) {
       if (!await _messaging.isSupported()) return false;
-      _tokenRefreshes.listen((_) => _pushTokens.saveToken());
+      _registrations.listen(
+        _pushTokens.saveRegisteredFid,
+        onError: reportError,
+      );
       _foregroundMessages.listen(_onForegroundMessage);
       return true;
     }
@@ -163,8 +166,8 @@ class NotificationService {
       }
     }
 
-    // 4. Auto-refresh token
-    _tokenRefreshes.listen((_) => _pushTokens.saveToken());
+    // 4. Persist FID registration events without registering again
+    _registrations.listen(_pushTokens.saveRegisteredFid, onError: reportError);
 
     // 5. Foreground message handler
     _foregroundMessages.listen(_onForegroundMessage);
