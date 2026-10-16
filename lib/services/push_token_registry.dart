@@ -114,17 +114,17 @@ class PushTokenRegistry {
           profile.data()?['username'] == 'deleted_user') {
         return;
       }
-      if (_signingOut ||
-          generation != _tokenGeneration ||
-          _auth.currentUser?.uid != uid) {
-        return;
-      }
       if (registeredFid == null &&
           _requiresApnsToken &&
           await _waitForApnsToken() == null) {
         return;
       }
-      if (_signingOut || generation != _tokenGeneration) return;
+      // Registering after sign-out would undo its FCM unregistration.
+      if (_signingOut ||
+          generation != _tokenGeneration ||
+          _auth.currentUser?.uid != uid) {
+        return;
+      }
 
       final fid = registeredFid ?? await _getRegisteredFid();
       if (fid.isEmpty) return;

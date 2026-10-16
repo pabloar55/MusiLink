@@ -19,9 +19,13 @@ El FID sobrevive a unregister/register. Una limpieza sin red podría dejar un
 registro de la cuenta anterior. Por eso cada alta escribe atómicamente también
 `push_installations/{fid}` con `uid`, `installationId` y `updatedAt`. El backend
 solo envía al propietario actual y, si falta esa asociación, omite el envío.
-Las reglas impiden listar las asociaciones y exigen que la reclamación y el
-registro privado coincidan. El cierre de sesión borra el registro privado;
-la asociación puede permanecer hasta una nueva sesión o el borrado de cuenta.
+Las reglas impiden leer y borrar las asociaciones desde el cliente. Cada
+reclamación exige un registro privado con el mismo FID actualizado en la misma
+operación; los registros privados deben coincidir con su asociación. El backend
+comprueba además el propietario antes de cada envío, de forma independiente
+por destino: un fallo de lectura no impide enviar a los demás dispositivos.
+El cierre de sesión borra el registro privado; la asociación puede permanecer
+hasta una nueva sesión o el borrado de cuenta.
 No se usa esa asociación por sí sola como destino de notificaciones.
 El borrado de cuenta retira sus asociaciones mediante una transacción para no
 borrar una instalación transferida entretanto a otra cuenta.

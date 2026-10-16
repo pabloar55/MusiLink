@@ -46,3 +46,23 @@ test('an offline old-account record cannot receive after FID ownership transfers
   await sendNotification('alice', undefined, notification, {});
   assert.equal(sent.length, 2);
 });
+
+test('an unregistered destination is removed unless it changed after being read', async (t) => {
+  const registration = db.doc('user_private/carol/push_tokens/abcdefghijklmnopqrstuvwx');
+  let migrateDuringSend = false;
+  t.mock.method(messaging, 'send', async () => {
+    // The installation migrates to FID while the legacy send is failing.
+    if (migrateDuringSend) await registration.set({ fid: 'e123456789012345678901' });
+    throw { code: 'messaging/registration-token-not-registered' };
+  });
+  const notification = { title: 'Hello', body: 'World' };
+
+  await registration.set({ token: 'old-token' });
+  await sendNotification('carol', undefined, notification, {});
+  assert.equal((await registration.get()).exists, false);
+
+  await registration.set({ token: 'old-token' });
+  migrateDuringSend = true;
+  await sendNotification('carol', undefined, notification, {});
+  assert.equal((await registration.get()).data().fid, 'e123456789012345678901');
+});

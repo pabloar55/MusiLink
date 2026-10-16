@@ -904,21 +904,36 @@ test('FID ownership is atomic, private and transferable between active accounts'
     batch.set(doc(db, ownerPath), { uid, installationId, updatedAt: serverTimestamp() });
     return batch.commit();
   }
+  async function ownerUid() {
+    let uid;
+    await env.withSecurityRulesDisabled(async (context) => {
+      uid = (await getDoc(doc(context.firestore(), ownerPath))).data().uid;
+    });
+    return uid;
+  }
   await assertFails(setDoc(doc(dbFor('alice'), targetPath('alice')), registration));
   await assertFails(setDoc(doc(dbFor('alice'), ownerPath), {
     uid: 'alice', installationId, updatedAt: serverTimestamp(),
   }));
   await assertSucceeds(claim('alice'));
-  await assertSucceeds(getDoc(doc(dbFor('alice'), ownerPath)));
-  await assertFails(getDoc(doc(dbFor('bob'), ownerPath)));
+  // A claim without Bob's matching private registration cannot displace Alice.
+  await assertFails(setDoc(doc(dbFor('bob'), ownerPath), {
+    uid: 'bob', installationId, updatedAt: serverTimestamp(),
+  }));
+  assert.equal(await ownerUid(), 'alice');
+  await assertFails(getDoc(doc(dbFor('alice'), ownerPath)));
   await assertFails(getDocs(collection(dbFor('alice'), 'push_installations')));
   await assertFails(claim('alice', { ...registration, token: 'legacy-token' }));
   await assertSucceeds(claim('bob'));
+  // Alice's old registration cannot be reused without updating it atomically.
+  await assertFails(setDoc(doc(dbFor('alice'), ownerPath), {
+    uid: 'alice', installationId, updatedAt: serverTimestamp(),
+  }));
   await assertFails(deleteDoc(doc(dbFor('alice'), ownerPath)));
-  assert.equal((await getDoc(doc(dbFor('bob'), ownerPath))).data().uid, 'bob');
+  assert.equal(await ownerUid(), 'bob');
   // Cleanup of Alice's stale private registration cannot erase Bob's owner.
   await assertSucceeds(deleteDoc(doc(dbFor('alice'), targetPath('alice'))));
-  assert.equal((await getDoc(doc(dbFor('bob'), ownerPath))).data().uid, 'bob');
+  assert.equal(await ownerUid(), 'bob');
 });
 
 test('FID registrations reject malformed identifiers and inactive accounts', async () => {

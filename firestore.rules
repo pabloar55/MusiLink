@@ -395,11 +395,10 @@ service cloud.firestore {
       }
     }
 
-    // One current account per FID. Registration claims ownership atomically
-    // with its private destination; possession of the FID is required.
+    // One current account per FID, claimed in the same batch as the private
+    // registration. Cloud Functions only send to the installation it names.
     match /push_installations/{fid} {
-      allow get: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow list: if false;
+      allow read, delete: if false;
       allow create, update: if request.auth != null
         && isActiveUser(request.auth.uid)
         && fid.matches('^[A-Za-z0-9_-]{22}$')
@@ -411,7 +410,6 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && getAfter(/databases/$(database)/documents/user_private/$(request.auth.uid)/push_tokens/$(request.resource.data.installationId)).data.fid == fid
         && getAfter(/databases/$(database)/documents/user_private/$(request.auth.uid)/push_tokens/$(request.resource.data.installationId)).data.updatedAt == request.time;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // Índice interno mantenido exclusivamente por Cloud Functions/Admin SDK.

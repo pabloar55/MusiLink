@@ -5,6 +5,8 @@ import { db, messaging } from './firebase';
 
 const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
+// gRPC status returned by Firestore when a write precondition does not hold.
+const failedPreconditionCode = 9;
 
 export type SupportedLocale = 'el' | 'en' | 'es' | 'fr';
 
@@ -232,19 +234,13 @@ export async function sendNotification(
       const fcmError = error as { code?: string };
       if (fcmError.code === 'messaging/registration-token-not-registered' ||
           fcmError.code === 'messaging/installation-id-not-registered') {
-        // A legacy send can fail after this installation has migrated to FID.
-        // Remove only the destination we sent to, never its replacement.
-        await db.runTransaction(async (transaction) => {
-          const snapshot = await transaction.get(registration.ref);
-          const current = snapshot.data();
-          const unchanged = 'fid' in destination
-            ? current?.fid === destination.fid
-            : current?.token === destination.token && !current?.fid;
-          // The same FID can have been registered again since the failed send.
-          if (unchanged && snapshot.updateTime?.isEqual(registration.updateTime)) {
-            transaction.delete(registration.ref);
-          }
-        });
+        // The installation may have migrated to FID or registered again since
+        // it was read. Remove only the registration this send used.
+        try {
+          await registration.ref.delete({ lastUpdateTime: registration.updateTime });
+        } catch (deleteError: unknown) {
+          if ((deleteError as { code?: unknown }).code !== failedPreconditionCode) throw deleteError;
+        }
         return;
       }
       logger.error('sendNotification: unexpected FCM error', {

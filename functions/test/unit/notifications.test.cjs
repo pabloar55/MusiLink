@@ -61,18 +61,25 @@ const registrationTime = Timestamp.fromMillis(1000);
 const { sendNotification } = require('../../lib/notifications.js');
 
 function mockPushTargets(t, destinations, owner = { uid: 'alice', installationId: 'device' }) {
+  const deleted = [];
   const documents = destinations.map((data, i) => ({
     data: () => data,
     updateTime: registrationTime,
-    ref: { id: 'device', path: `user_private/alice/push_tokens/device${i}` },
+    ref: {
+      id: 'device',
+      path: `user_private/alice/push_tokens/device${i}`,
+      async delete(precondition) { deleted.push(precondition); },
+    },
   }));
   const query = { limit() { return this; }, async get() { return { docs: documents }; } };
   t.mock.method(db, 'doc', (path) => path.startsWith('push_installations/')
-    ? { async get() { return { data: () => owner }; } }
+    ? { async get() {
+      return typeof owner === 'function' ? owner(path) : { data: () => owner };
+    } }
     : { collection: () => query });
   const sent = [];
   t.mock.method(messaging, 'send', async (message) => { sent.push(message); return 'sent'; });
-  return { documents, sent };
+  return { documents, sent, deleted };
 }
 
 test('sends to FIDs and legacy tokens with identical notification behavior', async (t) => {
@@ -109,53 +116,42 @@ test('deduplicates FIDs and keeps Android chat delivery data-only', async (t) =>
   assert.deepEqual(sent[0].apns.payload.aps.alert, { title: 'Chat', body: 'Text' });
 });
 
-for (const migrated of [false, true]) {
-  test(`invalid legacy target cleanup preserves a concurrent FID migration: ${migrated}`, async (t) => {
-    const { documents } = mockPushTargets(t, [{ token: 'old-token' }]);
-    t.mock.method(messaging, 'send', async () => {
-      throw { code: 'messaging/registration-token-not-registered' };
-    });
-    const deleted = [];
-    t.mock.method(db, 'runTransaction', async (callback) => callback({
-      async get() { return { updateTime: registrationTime, data: () => migrated ? { fid: 'new-fid' } : { token: 'old-token' } }; },
-      delete(ref) { deleted.push(ref); },
-    }));
+for (const [destination, code] of [
+  [{ token: 'old-token' }, 'messaging/registration-token-not-registered'],
+  [{ fid: 'expired-fid' }, 'messaging/installation-id-not-registered'],
+]) {
+  test(`${code} removes only the registration that was read`, async (t) => {
+    const { deleted } = mockPushTargets(t, [destination]);
+    t.mock.method(messaging, 'send', async () => { throw { code }; });
     await sendNotification('alice', undefined, { title: 'Hello', body: 'World' }, {});
-    assert.deepEqual(deleted, migrated ? [] : [documents[0].ref]);
+    assert.deepEqual(deleted, [{ lastUpdateTime: registrationTime }]);
   });
 }
 
-test('expired FID registrations use the new Admin SDK error code', async (t) => {
-  const { documents } = mockPushTargets(t, [{ fid: 'expired-fid' }]);
-  t.mock.method(messaging, 'send', async () => {
-    throw { code: 'messaging/installation-id-not-registered' };
-  });
-  const deleted = [];
-  t.mock.method(db, 'runTransaction', async (callback) => callback({
-    async get() { return { updateTime: registrationTime, data: () => ({ fid: 'expired-fid' }) }; },
-    delete(ref) { deleted.push(ref); },
-  }));
-  await sendNotification('alice', undefined, { title: 'Hello', body: 'World' }, {});
-  assert.deepEqual(deleted, [documents[0].ref]);
-});
-
-test('duplicate FID records select the owned installation before deduplicating', async (t) => {
+test('duplicate FID records send only to the owned installation', async (t) => {
   const { documents, sent } = mockPushTargets(t, [{ fid: 'fid-1' }, { fid: 'fid-1' }]);
   documents[1].ref.id = 'stale-device';
   await sendNotification('alice', undefined, { title: 'Hello', body: 'World' }, {});
   assert.equal(sent.length, 1);
 });
 
-test('a failed old send cannot erase a renewed registration of the same FID', async (t) => {
-  mockPushTargets(t, [{ fid: 'renewed-fid' }]);
-  t.mock.method(messaging, 'send', async () => {
-    throw { code: 'messaging/installation-id-not-registered' };
+
+test('a failed ownership read does not prevent other FID or legacy sends', async (t) => {
+  const failure = new Error('transient ownership read failure');
+  const { sent } = mockPushTargets(t, [
+    { fid: 'unavailable-fid' }, { fid: 'healthy-fid' }, { token: 'legacy-token' },
+  ], async (path) => {
+    if (path.endsWith('/unavailable-fid')) throw failure;
+    return { data: () => ({ uid: 'alice', installationId: 'device' }) };
   });
-  t.mock.method(db, 'runTransaction', async (callback) => callback({
-    async get() { return {
-      updateTime: Timestamp.fromMillis(2000), data: () => ({ fid: 'renewed-fid' }),
-    }; },
-    delete() { assert.fail('must preserve the renewed registration'); },
-  }));
-  await sendNotification('alice', undefined, { title: 'Hello', body: 'World' }, {});
+
+  await assert.rejects(
+    sendNotification('alice', undefined, { title: 'Hello', body: 'World' }, {}),
+    (error) => error === failure,
+  );
+  // Other destinations continue even though the failed one requests a retry.
+  await new Promise(setImmediate);
+  assert.equal(sent.length, 2);
+  assert.ok(sent.some((message) => message.fid === 'healthy-fid'));
+  assert.ok(sent.some((message) => message.token === 'legacy-token'));
 });

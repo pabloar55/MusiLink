@@ -11,6 +11,8 @@ const v2_1 = require("firebase-functions/v2");
 const firebase_1 = require("./firebase");
 const userPrivateCollection = 'user_private';
 const pushTokensSubcollection = 'push_tokens';
+// gRPC status returned by Firestore when a write precondition does not hold.
+const failedPreconditionCode = 9;
 const defaultLocale = 'en';
 const supportedLocales = new Set(['el', 'en', 'es', 'fr']);
 exports.notificationText = {
@@ -220,19 +222,15 @@ async function sendNotification(recipientUid, recipientPrivateData, notification
             const fcmError = error;
             if (fcmError.code === 'messaging/registration-token-not-registered' ||
                 fcmError.code === 'messaging/installation-id-not-registered') {
-                // A legacy send can fail after this installation has migrated to FID.
-                // Remove only the destination we sent to, never its replacement.
-                await firebase_1.db.runTransaction(async (transaction) => {
-                    const snapshot = await transaction.get(registration.ref);
-                    const current = snapshot.data();
-                    const unchanged = 'fid' in destination
-                        ? current?.fid === destination.fid
-                        : current?.token === destination.token && !current?.fid;
-                    // The same FID can have been registered again since the failed send.
-                    if (unchanged && snapshot.updateTime?.isEqual(registration.updateTime)) {
-                        transaction.delete(registration.ref);
-                    }
-                });
+                // The installation may have migrated to FID or registered again since
+                // it was read. Remove only the registration this send used.
+                try {
+                    await registration.ref.delete({ lastUpdateTime: registration.updateTime });
+                }
+                catch (deleteError) {
+                    if (deleteError.code !== failedPreconditionCode)
+                        throw deleteError;
+                }
                 return;
             }
             v2_1.logger.error('sendNotification: unexpected FCM error', {
