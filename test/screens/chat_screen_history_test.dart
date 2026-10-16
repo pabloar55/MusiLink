@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/message.dart';
@@ -93,7 +94,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Instant');
       await tester.tap(
-        find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+        find.widgetWithIcon(IconButton, LucideIcons500.sendHorizontal),
       );
       await tester.pumpAndSettle();
       expect(request.isCompleted, isFalse);
@@ -232,9 +233,9 @@ void main() {
       final composerPosition = tester.getTopLeft(find.byType(TextField));
       final sendButton = find.widgetWithIcon(
         IconButton,
-        LucideIcons.sendHorizontal500,
+        LucideIcons500.sendHorizontal,
       );
-      final musicButton = find.widgetWithIcon(IconButton, LucideIcons.music);
+      final musicButton = find.widgetWithIcon(IconButton, LucideIcons500.music);
       expect(tester.widget<IconButton>(sendButton).onPressed, isNull);
       expect(tester.widget<IconButton>(musicButton).onPressed, isNull);
       expect(

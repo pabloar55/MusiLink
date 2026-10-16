@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
@@ -149,11 +149,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
               height: kIsWeb ? 72 : null,
               destinations: [
                 NavigationDestination(
-                  icon: const Icon(LucideIcons.compass500),
+                  icon: const Icon(LucideIcons500.compass),
                   label: l10n.navDiscover,
                 ),
                 NavigationDestination(
-                  icon: const Icon(LucideIcons.crown),
+                  icon: const Icon(LucideIcons500.crown),
                   label: l10n.navStats,
                 ),
                 NavigationDestination(
@@ -162,7 +162,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                     label: unreadChats > 9
                         ? const Text('9+')
                         : Text('$unreadChats'),
-                    child: const Icon(LucideIcons.messageCircle500),
+                    child: const Icon(LucideIcons500.messageCircle),
                   ),
                   label: l10n.navMessages,
                 ),
@@ -172,7 +172,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                     label: pendingCount > 9
                         ? const Text('9+')
                         : Text('$pendingCount'),
-                    child: const Icon(LucideIcons.users500),
+                    child: const Icon(LucideIcons500.users),
                   ),
                   label: l10n.navFriends,
                 ),
@@ -271,18 +271,18 @@ class _CupertinoMainTabBar extends StatelessWidget {
       border: Border(top: BorderSide(color: cs.outlineVariant)),
       items: [
         BottomNavigationBarItem(
-          icon: const Icon(LucideIcons.compass500),
+          icon: const Icon(LucideIcons500.compass),
           label: discoverLabel,
         ),
         BottomNavigationBarItem(
-          icon: const Icon(LucideIcons.crown),
+          icon: const Icon(LucideIcons500.crown),
           label: statsLabel,
         ),
         BottomNavigationBarItem(
           icon: Badge(
             isLabelVisible: unreadChats > 0,
             label: unreadChats > 9 ? const Text('9+') : Text('$unreadChats'),
-            child: const Icon(LucideIcons.messageCircle500),
+            child: const Icon(LucideIcons500.messageCircle),
           ),
           label: messagesLabel,
         ),
@@ -290,7 +290,7 @@ class _CupertinoMainTabBar extends StatelessWidget {
           icon: Badge(
             isLabelVisible: pendingCount > 0,
             label: pendingCount > 9 ? const Text('9+') : Text('$pendingCount'),
-            child: const Icon(LucideIcons.users500),
+            child: const Icon(LucideIcons500.users),
           ),
           label: friendsLabel,
         ),

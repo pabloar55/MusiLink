@@ -1,5 +1,5 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/theme/app_theme.dart';
 
@@ -76,7 +76,7 @@ class ChatInputBar extends StatelessWidget {
         if (onShareSong != null)
           IconButton(
             onPressed: canSend ? onShareSong : null,
-            icon: const Icon(LucideIcons.music),
+            icon: const Icon(LucideIcons500.music),
             tooltip: l10n.chatShareSong,
           ),
         Expanded(
@@ -108,7 +108,7 @@ class ChatInputBar extends StatelessWidget {
         IconButton.filled(
           onPressed: canSend ? onSend : null,
           tooltip: l10n.dailySongReplySend,
-          icon: const Icon(LucideIcons.sendHorizontal500),
+          icon: const Icon(LucideIcons500.sendHorizontal),
           style: IconButton.styleFrom(
             backgroundColor: colorScheme.primary,
             foregroundColor: colorScheme.onPrimary,

@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/models/message.dart';
@@ -109,7 +109,7 @@ Future<void> _swipe(WidgetTester tester, String text, [double dx = 150]) async {
 Future<void> _send(WidgetTester tester, String text) async {
   await tester.enterText(find.byType(TextField), text);
   await tester.tap(
-    find.widgetWithIcon(IconButton, LucideIcons.sendHorizontal500),
+    find.widgetWithIcon(IconButton, LucideIcons500.sendHorizontal),
   );
   await tester.pumpAndSettle();
 }
