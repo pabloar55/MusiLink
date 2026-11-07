@@ -5,6 +5,7 @@
 *.swp
 .DS_Store
 .atom/
+android/.kotlin
 .build/
 .buildlog/
 .history
