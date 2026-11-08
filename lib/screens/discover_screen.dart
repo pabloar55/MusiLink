@@ -5,6 +5,7 @@ import 'package:musi_link/l10n/app_localizations.dart';
 import 'package:musi_link/providers/discover_provider.dart';
 import 'package:musi_link/widgets/discover/people_tab.dart';
 import 'package:musi_link/widgets/discover/daily_song_tab.dart';
+import 'package:musi_link/widgets/releases/weekly_releases_view.dart';
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
@@ -21,18 +22,27 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
   bool _discoveryRequested = false;
   String? _lastRequestedTab;
 
+  static const _peopleTabIndex = 2;
+
+  /// Pestaña interna que abren los enlaces `/?tab=…` (notificaciones).
+  static int? _tabIndexFor(String? tab) => switch (tab) {
+    'daily-song' => 0,
+    'releases' => 1,
+    _ => null,
+  };
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this)
+    _tabController = TabController(length: 3, vsync: this)
       ..addListener(_loadDiscoveryWhenSelected);
   }
 
   void _loadDiscoveryWhenSelected() {
-    if (_tabController.index != 1 || _discoveryRequested) return;
+    if (_tabController.index != _peopleTabIndex || _discoveryRequested) return;
     _discoveryRequested = true;
     ref.read(discoverProvider.notifier).loadDiscovery();
   }
@@ -43,10 +53,11 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     final requestedTab = GoRouterState.of(context).uri.queryParameters['tab'];
     if (requestedTab == _lastRequestedTab) return;
     _lastRequestedTab = requestedTab;
-    if (requestedTab != 'daily-song' || _tabController.index == 0) return;
+    final index = _tabIndexFor(requestedTab);
+    if (index == null || _tabController.index == index) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _tabController.animateTo(0);
+      if (mounted) _tabController.animateTo(index);
     });
   }
 
@@ -70,8 +81,12 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
           splashFactory: NoSplash.splashFactory,
           dividerColor: Colors.transparent,
           controller: _tabController,
+          // Centradas a su ancho; se desplazan si no caben (p. ej., en griego).
+          isScrollable: true,
+          tabAlignment: TabAlignment.center,
           tabs: [
             Tab(text: l10n.dailySongTitle),
+            Tab(text: l10n.discoverTabReleases),
             Tab(text: l10n.discoverTabPeople),
           ],
         ),
@@ -81,6 +96,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
             physics: const NeverScrollableScrollPhysics(),
             children: [
               const DailySongTab(),
+              const WeeklyReleasesView(),
               PeopleTab(
                 results: discoverState.results,
                 isLoading: discoverState.isLoading,

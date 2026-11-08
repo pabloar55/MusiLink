@@ -305,6 +305,28 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statsNoData => 'Aucune donnée disponible';
 
   @override
+  String get discoverTabReleases => 'Nouveautés';
+
+  @override
+  String get releasesEmpty => 'Vos artistes n’ont rien sorti cette semaine';
+
+  @override
+  String get releasesHint =>
+      'Les singles et albums de vos artistes des 7 derniers jours s’affichent ici.';
+
+  @override
+  String get releaseTypeSingle => 'Single';
+
+  @override
+  String get releaseTypeAlbum => 'Album';
+
+  @override
+  String get releaseToday => 'Aujourd’hui';
+
+  @override
+  String get releaseYesterday => 'Hier';
+
+  @override
   String get socialNow => 'Maintenant';
 
   @override
@@ -448,7 +470,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dailySongChoose => 'Choisir votre chanson du jour';
 
   @override
-  String get discoverTabPeople => 'Découvrir';
+  String get discoverTabPeople => 'Personnes';
 
   @override
   String get dailySongNone =>
@@ -735,6 +757,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsFriendDigest => 'Résumé quotidien des amis';
+
+  @override
+  String get settingsNewReleases => 'Nouveautés de la semaine de vos artistes';
 
   @override
   String get pushNotificationsTitle => 'Ne manquez aucun message';

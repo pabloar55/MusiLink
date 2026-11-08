@@ -16,4 +16,5 @@ abstract final class FirestoreCollections {
   static const String messages = 'messages';
   static const String friendRequests = 'friend_requests';
   static const String accountDeletions = 'account_deletions';
+  static const String artistReleases = 'artist_releases';
 }

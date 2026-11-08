@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendDailyFriendDigests = void 0;
 exports.friendDigestOffsets = friendDigestOffsets;
-exports.localDay = localDay;
 exports.friendDigestBody = friendDigestBody;
 exports.wantsFriendDigest = wantsFriendDigest;
 exports.unblockedFriendIds = unblockedFriendIds;
@@ -13,10 +12,10 @@ const v2_1 = require("firebase-functions/v2");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firebase_1 = require("./firebase");
 const firestore_values_1 = require("./firestore_values");
+const local_time_1 = require("./local_time");
 const notifications_1 = require("./notifications");
 const userPrivateCollection = 'user_private';
-const dayMs = 24 * 60 * 60 * 1000;
-const dailySongLifetimeMs = dayMs;
+const dailySongLifetimeMs = 24 * 60 * 60 * 1000;
 const friendDigestLocalMinutes = 21 * 60;
 const friendDigestSlotMinutes = 15;
 const friendDigestMinFriends = 1;
@@ -25,16 +24,7 @@ const friendDigestConcurrency = 20;
 const friendProfileBatchSize = 100;
 /** UTC offsets, in minutes, where it is 21:00 during the scheduled slot. */
 function friendDigestOffsets(scheduledAt) {
-    const utcMinutes = scheduledAt.getUTCHours() * 60
-        + Math.floor(scheduledAt.getUTCMinutes() / friendDigestSlotMinutes)
-            * friendDigestSlotMinutes;
-    const offset = friendDigestLocalMinutes - utcMinutes;
-    // Offsets span UTC-12:00 to UTC+14:00, so a slot can match two zones on
-    // opposite sides of the date line.
-    return [offset, offset - 24 * 60].filter((value) => value >= -720 && value <= 840);
-}
-function localDay(millis, utcOffsetMinutes) {
-    return Math.floor((millis + utcOffsetMinutes * 60 * 1000) / dayMs);
+    return (0, local_time_1.utcOffsetsAtLocalTime)(scheduledAt, friendDigestLocalMinutes, friendDigestSlotMinutes);
 }
 /** Names up to three friends; larger groups show two and count the rest. */
 function friendDigestBody(locale, names) {
@@ -54,7 +44,7 @@ function wantsFriendDigest(privateData, nowMillis) {
         return false;
     const lastPush = privateData?.[notifications_1.engagementPushField];
     return !(lastPush instanceof firestore_1.Timestamp)
-        || localDay(lastPush.toMillis(), offset) !== localDay(nowMillis, offset);
+        || (0, local_time_1.localDay)(lastPush.toMillis(), offset) !== (0, local_time_1.localDay)(nowMillis, offset);
 }
 function friendSong(data, activeAfter) {
     const updatedAt = data?.dailySongUpdatedAt;

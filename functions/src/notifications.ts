@@ -74,6 +74,24 @@ export const notificationText = {
     es: (count: string) => `${count} más`,
     fr: (count: string) => `${count} autres`,
   },
+  newReleaseSong: {
+    el: (artist: string) => `Ακούστε το νέο τραγούδι από ${artist}`,
+    en: (artist: string) => `Listen to the new song by ${artist}`,
+    es: (artist: string) => `Escucha la nueva canción de ${artist}`,
+    fr: (artist: string) => `Écoutez la nouvelle chanson de ${artist}`,
+  },
+  newReleaseAlbum: {
+    el: (artist: string) => `Ακούστε το νέο άλμπουμ από ${artist}`,
+    en: (artist: string) => `Listen to the new album by ${artist}`,
+    es: (artist: string) => `Escucha el nuevo álbum de ${artist}`,
+    fr: (artist: string) => `Écoutez le nouvel album de ${artist}`,
+  },
+  newReleaseOthers: {
+    el: (artists: string) => `Νέα μουσική και από ${artists}`,
+    en: (artists: string) => `New music from ${artists} too`,
+    es: (artists: string) => `También hay novedades de ${artists}`,
+    fr: (artists: string) => `Également des nouveautés de ${artists}`,
+  },
 } satisfies Record<string, Record<SupportedLocale, (name: string) => string>>;
 
 export function notifChannelId(sound: boolean, vibration: boolean): string {
@@ -112,6 +130,7 @@ export function notificationPath(data: Record<string, string>): string {
   ) {
     return '/?tab=daily-song';
   }
+  if (data.type === 'new_release') return '/?tab=releases';
   return '/';
 }
 

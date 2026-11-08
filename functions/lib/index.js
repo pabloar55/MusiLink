@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onGroupChatDeleted = exports.onGroupMemberLeft = exports.leaveGroupChat = exports.addGroupChatMembers = exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
+exports.onGroupChatDeleted = exports.onGroupMemberLeft = exports.leaveGroupChat = exports.addGroupChatMembers = exports.createGroupChat = exports.acknowledgeChatDelivery = exports.submitModerationReport = exports.syncWatchedArtists = exports.sendWeeklyReleaseNotifications = exports.checkArtistReleases = exports.sendDailyFriendDigests = exports.onDailySongLiked = exports.expireDailySongs = exports.sendFriendRequest = exports.sendChatMessage = exports.onChatMessageDeleted = exports.onChatSoftDeleted = exports.onNewMessage = exports.onFriendRequestDeleted = exports.onFriendRequestAccepted = exports.onFriendRequest = exports.acceptFriendRequest = exports.onUserMusicProfileChanged = exports.onUserMusicProfileCreated = exports.saveMusicProfile = exports.acceptTerms = exports.createUserProfile = exports.processAccountDeletion = exports.requestAccountDeletion = exports.getSimilarArtists = exports.searchSpotifyTracks = exports.searchSpotifyArtists = void 0;
 // Keep this file as the public Firebase Functions manifest. Domain logic lives
 // in focused modules so importing one feature does not expose unrelated code.
 var spotify_1 = require("./spotify");
@@ -38,6 +38,10 @@ var daily_song_likes_1 = require("./daily_song_likes");
 Object.defineProperty(exports, "onDailySongLiked", { enumerable: true, get: function () { return daily_song_likes_1.onDailySongLiked; } });
 var friend_digest_1 = require("./friend_digest");
 Object.defineProperty(exports, "sendDailyFriendDigests", { enumerable: true, get: function () { return friend_digest_1.sendDailyFriendDigests; } });
+var artist_releases_1 = require("./artist_releases");
+Object.defineProperty(exports, "checkArtistReleases", { enumerable: true, get: function () { return artist_releases_1.checkArtistReleases; } });
+Object.defineProperty(exports, "sendWeeklyReleaseNotifications", { enumerable: true, get: function () { return artist_releases_1.sendWeeklyReleaseNotifications; } });
+Object.defineProperty(exports, "syncWatchedArtists", { enumerable: true, get: function () { return artist_releases_1.syncWatchedArtists; } });
 var moderation_reports_1 = require("./moderation_reports");
 Object.defineProperty(exports, "submitModerationReport", { enumerable: true, get: function () { return moderation_reports_1.submitModerationReport; } });
 var chat_delivery_1 = require("./chat_delivery");

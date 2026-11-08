@@ -76,6 +76,24 @@ exports.notificationText = {
         es: (count) => `${count} más`,
         fr: (count) => `${count} autres`,
     },
+    newReleaseSong: {
+        el: (artist) => `Ακούστε το νέο τραγούδι από ${artist}`,
+        en: (artist) => `Listen to the new song by ${artist}`,
+        es: (artist) => `Escucha la nueva canción de ${artist}`,
+        fr: (artist) => `Écoutez la nouvelle chanson de ${artist}`,
+    },
+    newReleaseAlbum: {
+        el: (artist) => `Ακούστε το νέο άλμπουμ από ${artist}`,
+        en: (artist) => `Listen to the new album by ${artist}`,
+        es: (artist) => `Escucha el nuevo álbum de ${artist}`,
+        fr: (artist) => `Écoutez le nouvel album de ${artist}`,
+    },
+    newReleaseOthers: {
+        el: (artists) => `Νέα μουσική και από ${artists}`,
+        en: (artists) => `New music from ${artists} too`,
+        es: (artists) => `También hay novedades de ${artists}`,
+        fr: (artists) => `Également des nouveautés de ${artists}`,
+    },
 };
 function notifChannelId(sound, vibration) {
     if (sound && vibration)
@@ -111,6 +129,8 @@ function notificationPath(data) {
         data.type === 'friend_digest') {
         return '/?tab=daily-song';
     }
+    if (data.type === 'new_release')
+        return '/?tab=releases';
     return '/';
 }
 function preferredLocale(data) {

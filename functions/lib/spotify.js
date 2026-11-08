@@ -7,74 +7,11 @@ const v2_1 = require("firebase-functions/v2");
 const firebase_1 = require("./firebase");
 const rate_limits_1 = require("./rate_limits");
 const lastfm_request_1 = require("./lastfm_request");
+const spotify_client_1 = require("./spotify_client");
 const catalog_request_1 = require("./catalog_request");
 const catalog_genres_1 = require("./catalog_genres");
 const spotify_artist_ranking_1 = require("./spotify_artist_ranking");
-const spotifyClientId = (0, params_1.defineSecret)('SPOTIFY_CLIENT_ID');
-const spotifyClientSecret = (0, params_1.defineSecret)('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = (0, params_1.defineSecret)('LASTFM_API_KEY');
-const spotifyRequestTimeoutMs = 8_000;
-// Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
-let cachedToken = null;
-let tokenExpiresAt = 0;
-async function fetchExternal(input, init, timeoutMs, service) {
-    try {
-        return await fetch(input, {
-            ...init,
-            signal: AbortSignal.timeout(timeoutMs),
-        });
-    }
-    catch (error) {
-        v2_1.logger.warn(`${service} request failed before receiving a response`, {
-            reason: error instanceof Error ? error.name : 'unknown',
-        });
-        throw new https_1.HttpsError('unavailable', `${service} is temporarily unavailable`);
-    }
-}
-async function getSpotifyToken(clientId, clientSecret) {
-    const now = Date.now();
-    if (cachedToken && now < tokenExpiresAt - 60_000)
-        return cachedToken;
-    if (!clientId.trim() || !clientSecret.trim()) {
-        v2_1.logger.error('Spotify credentials are not configured');
-        throw new https_1.HttpsError('failed-precondition', 'Spotify credentials are not configured');
-    }
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const res = await fetchExternal('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-            Authorization: `Basic ${credentials}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: 'grant_type=client_credentials',
-    }, spotifyRequestTimeoutMs, 'Spotify');
-    if (!res.ok) {
-        const errorBody = await readResponseSnippet(res);
-        v2_1.logger.error('Spotify token request failed', { status: res.status, errorBody });
-        throw new https_1.HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
-    }
-    const data = await res.json();
-    if (!(0, catalog_request_1.isRecord)(data) ||
-        typeof data.access_token !== 'string' ||
-        !data.access_token ||
-        typeof data.expires_in !== 'number' ||
-        !Number.isFinite(data.expires_in) ||
-        data.expires_in <= 0) {
-        v2_1.logger.error('Spotify token response was malformed');
-        throw new https_1.HttpsError('unavailable', 'Spotify returned an invalid token response');
-    }
-    cachedToken = data.access_token;
-    tokenExpiresAt = now + data.expires_in * 1000;
-    return cachedToken;
-}
-async function readResponseSnippet(res) {
-    try {
-        return (await res.text()).slice(0, 500);
-    }
-    catch {
-        return '';
-    }
-}
 function spotifyArtistQuery(query) {
     return `artist:${query.replace(/"/g, '').trim()}`;
 }
@@ -120,22 +57,22 @@ async function getLastFmGenres(artistName, apiKey) {
 exports.searchSpotifyArtists = (0, https_1.onCall)({
     region: 'europe-southwest1',
     enforceAppCheck: true,
-    secrets: [spotifyClientId, spotifyClientSecret, lastFmApiKey],
+    secrets: [spotify_client_1.spotifyClientId, spotify_client_1.spotifyClientSecret, lastFmApiKey],
 }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { value: query, limit, market } = (0, catalog_request_1.parseSpotifyArtistSearchRequest)(request.data);
     await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid, 'spotifySearch');
     const spotifyLimit = 10;
-    const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
+    const token = await (0, spotify_client_1.getSpotifyToken)(spotify_client_1.spotifyClientId.value(), spotify_client_1.spotifyClientSecret.value());
     const url = new URL('https://api.spotify.com/v1/search');
     url.searchParams.set('q', spotifyArtistQuery(query));
     url.searchParams.set('type', 'artist');
     url.searchParams.set('market', market);
     url.searchParams.set('limit', String(spotifyLimit));
-    const res = await fetchExternal(url.toString(), {
+    const res = await (0, spotify_client_1.fetchExternal)(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
-    }, spotifyRequestTimeoutMs, 'Spotify');
+    }, spotify_client_1.spotifyRequestTimeoutMs, 'Spotify');
     if (!res.ok) {
         v2_1.logger.error('Spotify searchArtists failed', { status: res.status, query });
         if (res.status === 429) {
@@ -168,23 +105,23 @@ exports.searchSpotifyArtists = (0, https_1.onCall)({
 exports.searchSpotifyTracks = (0, https_1.onCall)({
     region: 'europe-southwest1',
     enforceAppCheck: true,
-    secrets: [spotifyClientId, spotifyClientSecret],
+    secrets: [spotify_client_1.spotifyClientId, spotify_client_1.spotifyClientSecret],
 }, async (request) => {
     try {
         if (!request.auth)
             throw new https_1.HttpsError('unauthenticated', 'Login required');
         const { value: query, limit } = (0, catalog_request_1.parseSpotifySearchRequest)(request.data);
         await (0, rate_limits_1.consumeCatalogSearchQuota)(firebase_1.db, request.auth.uid, 'spotifySearch');
-        const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
+        const token = await (0, spotify_client_1.getSpotifyToken)(spotify_client_1.spotifyClientId.value(), spotify_client_1.spotifyClientSecret.value());
         const url = new URL('https://api.spotify.com/v1/search');
         url.searchParams.set('q', query);
         url.searchParams.set('type', 'track');
         url.searchParams.set('limit', String(limit));
-        const res = await fetchExternal(url.toString(), {
+        const res = await (0, spotify_client_1.fetchExternal)(url.toString(), {
             headers: { Authorization: `Bearer ${token}` },
-        }, spotifyRequestTimeoutMs, 'Spotify');
+        }, spotify_client_1.spotifyRequestTimeoutMs, 'Spotify');
         if (!res.ok) {
-            const errorBody = await readResponseSnippet(res);
+            const errorBody = await (0, spotify_client_1.readResponseSnippet)(res);
             v2_1.logger.error('Spotify searchTracks failed', { status: res.status, query, errorBody });
             if (res.status === 429) {
                 throw new https_1.HttpsError('resource-exhausted', 'Spotify rate limit reached');

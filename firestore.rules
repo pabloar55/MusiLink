@@ -199,6 +199,7 @@ service cloud.firestore {
         && (!('notifSound' in data) || data.notifSound is bool)
         && (!('notifVibration' in data) || data.notifVibration is bool)
         && (!('notifFriendDigest' in data) || data.notifFriendDigest is bool)
+        && (!('notifNewReleases' in data) || data.notifNewReleases is bool)
         // Desfases reales: de UTC-12:00 a UTC+14:00.
         && (!('utcOffsetMinutes' in data)
           || data.utcOffsetMinutes is int
@@ -344,6 +345,7 @@ service cloud.firestore {
             'notifSound',
             'notifVibration',
             'notifFriendDigest',
+            'notifNewReleases',
             'utcOffsetMinutes',
             'setupProfile',
           ])
@@ -414,6 +416,18 @@ service cloud.firestore {
 
     // Índice interno mantenido exclusivamente por Cloud Functions/Admin SDK.
     match /music_recommendation_profiles/{userId} {
+      allow read, write: if false;
+    }
+
+    // Lanzamientos recientes por artista (catálogo público de Spotify) para
+    // la sección «Novedades». Solo Cloud Functions los escribe.
+    match /artist_releases/{artistId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Estado interno de las tareas programadas.
+    match /scheduler_state/{taskId} {
       allow read, write: if false;
     }
 

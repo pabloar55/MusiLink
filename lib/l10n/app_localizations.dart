@@ -648,6 +648,48 @@ abstract class AppLocalizations {
   /// **'No data available'**
   String get statsNoData;
 
+  /// No description provided for @discoverTabReleases.
+  ///
+  /// In en, this message translates to:
+  /// **'New releases'**
+  String get discoverTabReleases;
+
+  /// No description provided for @releasesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Your artists haven\'t released anything this week'**
+  String get releasesEmpty;
+
+  /// No description provided for @releasesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Singles and albums from your artists in the last 7 days show up here.'**
+  String get releasesHint;
+
+  /// No description provided for @releaseTypeSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Single'**
+  String get releaseTypeSingle;
+
+  /// No description provided for @releaseTypeAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get releaseTypeAlbum;
+
+  /// No description provided for @releaseToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get releaseToday;
+
+  /// No description provided for @releaseYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get releaseYesterday;
+
   /// No description provided for @socialNow.
   ///
   /// In en, this message translates to:
@@ -885,7 +927,7 @@ abstract class AppLocalizations {
   /// No description provided for @discoverTabPeople.
   ///
   /// In en, this message translates to:
-  /// **'Discover people'**
+  /// **'People'**
   String get discoverTabPeople;
 
   /// No description provided for @dailySongNone.
@@ -1397,6 +1439,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Daily friends recap'**
   String get settingsFriendDigest;
+
+  /// No description provided for @settingsNewReleases.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly releases from your artists'**
+  String get settingsNewReleases;
 
   /// No description provided for @pushNotificationsTitle.
   ///

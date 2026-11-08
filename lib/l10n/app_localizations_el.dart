@@ -301,6 +301,29 @@ class AppLocalizationsEl extends AppLocalizations {
   String get statsNoData => 'Δεν υπάρχουν διαθέσιμα δεδομένα';
 
   @override
+  String get discoverTabReleases => 'Κυκλοφορίες';
+
+  @override
+  String get releasesEmpty =>
+      'Οι καλλιτέχνες σας δεν κυκλοφόρησαν κάτι αυτή την εβδομάδα';
+
+  @override
+  String get releasesHint =>
+      'Εδώ εμφανίζονται τα σινγκλ και τα άλμπουμ των καλλιτεχνών σας των τελευταίων 7 ημερών.';
+
+  @override
+  String get releaseTypeSingle => 'Σινγκλ';
+
+  @override
+  String get releaseTypeAlbum => 'Άλμπουμ';
+
+  @override
+  String get releaseToday => 'Σήμερα';
+
+  @override
+  String get releaseYesterday => 'Χθες';
+
+  @override
   String get socialNow => 'Τώρα';
 
   @override
@@ -442,7 +465,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dailySongChoose => 'Επιλέξτε το τραγούδι σας της ημέρας';
 
   @override
-  String get discoverTabPeople => 'Ανακαλύψτε ανθρώπους';
+  String get discoverTabPeople => 'Άνθρωποι';
 
   @override
   String get dailySongNone => 'Δεν έχετε επιλέξει ακόμη τραγούδι της ημέρας';
@@ -729,6 +752,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get settingsFriendDigest => 'Ημερήσια σύνοψη φίλων';
+
+  @override
+  String get settingsNewReleases =>
+      'Εβδομαδιαίες κυκλοφορίες των καλλιτεχνών σας';
 
   @override
   String get pushNotificationsTitle => 'Μην χάσετε κανένα μήνυμα';

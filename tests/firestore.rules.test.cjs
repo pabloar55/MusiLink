@@ -199,14 +199,21 @@ test('el propietario configura el resumen de amigos pero no su marca de envío',
   await assertSucceeds(updateDoc(own, {
     utcOffsetMinutes: 120,
     notifFriendDigest: false,
+    notifNewReleases: false,
   }));
   await assertSucceeds(updateDoc(own, { utcOffsetMinutes: -720 }));
   for (const utcOffsetMinutes of [841, -721, 90.5, '120']) {
     await assertFails(updateDoc(own, { utcOffsetMinutes }));
   }
   await assertFails(updateDoc(own, { notifFriendDigest: 'no' }));
+  await assertFails(updateDoc(own, { notifNewReleases: 'no' }));
   // Solo el backend registra el último recordatorio enviado.
   await assertFails(updateDoc(own, { engagementPushAt: serverTimestamp() }));
+  await assertFails(updateDoc(own, { newReleasePushAt: serverTimestamp() }));
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'artist_releases/RRRRRRRRRRRRRRRRRRRRRR')));
+  await assertSucceeds(getDoc(doc(dbFor('alice'), 'artist_releases/RRRRRRRRRRRRRRRRRRRRRR')));
+  await assertFails(setDoc(doc(dbFor('alice'), 'artist_releases/RRRRRRRRRRRRRRRRRRRRRR'), { name: 'X' }));
+  await assertFails(getDoc(doc(dbFor('alice'), 'scheduler_state/artist_release_checks')));
 });
 
 test('cada usuario solo puede gestionar sus propios tokens push válidos', async () => {

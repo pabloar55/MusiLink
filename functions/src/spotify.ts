@@ -5,6 +5,14 @@ import { db } from './firebase';
 import { consumeCatalogSearchQuota } from './rate_limits';
 import { fetchLastFm } from './lastfm_request';
 import {
+  fetchExternal,
+  getSpotifyToken,
+  readResponseSnippet,
+  spotifyClientId,
+  spotifyClientSecret,
+  spotifyRequestTimeoutMs,
+} from './spotify_client';
+import {
   isRecord,
   parseSpotifyArtistSearchRequest,
   parseSpotifySearchRequest,
@@ -12,83 +20,7 @@ import {
 import { normalizeLastFmTags, normalizeSpotifyGenres } from './catalog_genres';
 import { rankSpotifyArtists, SpotifyArtistItem } from './spotify_artist_ranking';
 
-const spotifyClientId = defineSecret('SPOTIFY_CLIENT_ID');
-const spotifyClientSecret = defineSecret('SPOTIFY_CLIENT_SECRET');
 const lastFmApiKey = defineSecret('LASTFM_API_KEY');
-const spotifyRequestTimeoutMs = 8_000;
-
-// Module-level cache — reused across warm instances (Spotify tokens last 3600 s).
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
-
-async function fetchExternal(
-  input: string,
-  init: RequestInit,
-  timeoutMs: number,
-  service: 'Spotify' | 'Last.fm',
-): Promise<Response> {
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (error: unknown) {
-    logger.warn(`${service} request failed before receiving a response`, {
-      reason: error instanceof Error ? error.name : 'unknown',
-    });
-    throw new HttpsError('unavailable', `${service} is temporarily unavailable`);
-  }
-}
-
-async function getSpotifyToken(clientId: string, clientSecret: string): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && now < tokenExpiresAt - 60_000) return cachedToken;
-
-  if (!clientId.trim() || !clientSecret.trim()) {
-    logger.error('Spotify credentials are not configured');
-    throw new HttpsError('failed-precondition', 'Spotify credentials are not configured');
-  }
-
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const res = await fetchExternal('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  }, spotifyRequestTimeoutMs, 'Spotify');
-
-  if (!res.ok) {
-    const errorBody = await readResponseSnippet(res);
-    logger.error('Spotify token request failed', { status: res.status, errorBody });
-    throw new HttpsError('failed-precondition', 'Failed to obtain Spotify token', { status: res.status });
-  }
-
-  const data: unknown = await res.json();
-  if (
-    !isRecord(data) ||
-    typeof data.access_token !== 'string' ||
-    !data.access_token ||
-    typeof data.expires_in !== 'number' ||
-    !Number.isFinite(data.expires_in) ||
-    data.expires_in <= 0
-  ) {
-    logger.error('Spotify token response was malformed');
-    throw new HttpsError('unavailable', 'Spotify returned an invalid token response');
-  }
-  cachedToken = data.access_token;
-  tokenExpiresAt = now + data.expires_in * 1000;
-  return cachedToken;
-}
-
-async function readResponseSnippet(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 500);
-  } catch {
-    return '';
-  }
-}
 
 function spotifyArtistQuery(query: string): string {
   return `artist:${query.replace(/"/g, '').trim()}`;

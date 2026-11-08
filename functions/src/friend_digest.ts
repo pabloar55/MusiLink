@@ -10,6 +10,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { db } from './firebase';
 import { stringList } from './firestore_values';
+import { localDay, utcOffsetsAtLocalTime } from './local_time';
 import {
   engagementPushField,
   notificationText,
@@ -19,8 +20,7 @@ import {
 } from './notifications';
 
 const userPrivateCollection = 'user_private';
-const dayMs = 24 * 60 * 60 * 1000;
-const dailySongLifetimeMs = dayMs;
+const dailySongLifetimeMs = 24 * 60 * 60 * 1000;
 const friendDigestLocalMinutes = 21 * 60;
 const friendDigestSlotMinutes = 15;
 const friendDigestMinFriends = 1;
@@ -35,17 +35,7 @@ export interface FriendSong {
 
 /** UTC offsets, in minutes, where it is 21:00 during the scheduled slot. */
 export function friendDigestOffsets(scheduledAt: Date): number[] {
-  const utcMinutes = scheduledAt.getUTCHours() * 60
-    + Math.floor(scheduledAt.getUTCMinutes() / friendDigestSlotMinutes)
-      * friendDigestSlotMinutes;
-  const offset = friendDigestLocalMinutes - utcMinutes;
-  // Offsets span UTC-12:00 to UTC+14:00, so a slot can match two zones on
-  // opposite sides of the date line.
-  return [offset, offset - 24 * 60].filter((value) => value >= -720 && value <= 840);
-}
-
-export function localDay(millis: number, utcOffsetMinutes: number): number {
-  return Math.floor((millis + utcOffsetMinutes * 60 * 1000) / dayMs);
+  return utcOffsetsAtLocalTime(scheduledAt, friendDigestLocalMinutes, friendDigestSlotMinutes);
 }
 
 /** Names up to three friends; larger groups show two and count the rest. */

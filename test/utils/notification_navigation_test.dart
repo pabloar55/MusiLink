@@ -31,6 +31,13 @@ void main() {
       );
     });
 
+    test('routes new releases to the releases section of the stats tab', () {
+      expect(
+        notificationLocationFromData(const {'type': 'new_release'}),
+        '/?tab=releases',
+      );
+    });
+
     test('builds a chat location from a message notification', () {
       expect(
         notificationLocationFromData(const {
