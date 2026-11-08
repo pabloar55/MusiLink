@@ -8,6 +8,7 @@ const {
   parseSpotifyReleases,
   parseStoredReleases,
   pendingReleases,
+  scheduledRunMillis,
   updateRecentReleases,
   wantsWeeklyReleaseNotification,
   weeklyReleaseNotification,
@@ -194,4 +195,12 @@ test('weeklyReleaseNotification headlines the newest release and names the other
 
 test('the weekly release notification opens the releases section', () => {
   assert.equal(notificationPath({ type: 'new_release' }), '/?tab=releases');
+});
+
+test('scheduledRunMillis never runs ahead of the current time', () => {
+  // A forced run from Cloud Scheduler carries the next scheduled time.
+  assert.equal(scheduledRunMillis('2026-11-09T03:20:00Z', now), now);
+  // A retry keeps its original slot.
+  assert.equal(scheduledRunMillis('2026-11-06T09:45:00Z', now), Date.parse('2026-11-06T09:45:00Z'));
+  assert.equal(scheduledRunMillis('not a date', now), now);
 });

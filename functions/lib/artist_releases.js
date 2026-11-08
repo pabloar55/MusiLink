@@ -7,6 +7,7 @@ exports.parseStoredReleases = parseStoredReleases;
 exports.isQuotaExceeded = isQuotaExceeded;
 exports.spotifyReleaseFetcher = spotifyReleaseFetcher;
 exports.checkDueArtistReleases = checkDueArtistReleases;
+exports.scheduledRunMillis = scheduledRunMillis;
 exports.followedSpotifyArtists = followedSpotifyArtists;
 exports.syncWatchedArtistsAt = syncWatchedArtistsAt;
 exports.weeklyReleaseOffsets = weeklyReleaseOffsets;
@@ -359,6 +360,15 @@ async function checkDueArtistReleases(firestore, nowMillis, fetchReleases) {
     }
     return summary;
 }
+/**
+ * Momento de la ejecución. Un reintento conserva su `scheduleTime`, pero una
+ * ejecución forzada desde Cloud Scheduler recibe la próxima hora programada,
+ * así que nunca se usa una hora futura.
+ */
+function scheduledRunMillis(scheduleTime, nowMillis = Date.now()) {
+    const scheduled = Date.parse(scheduleTime);
+    return Number.isFinite(scheduled) ? Math.min(scheduled, nowMillis) : nowMillis;
+}
 exports.checkArtistReleases = (0, scheduler_1.onSchedule)({
     schedule: '7 * * * *',
     // Cloud Scheduler is not available in europe-southwest1 (Madrid).
@@ -368,7 +378,7 @@ exports.checkArtistReleases = (0, scheduler_1.onSchedule)({
     retryCount: 1,
     secrets: [spotify_client_1.spotifyClientId, spotify_client_1.spotifyClientSecret],
 }, async (event) => {
-    const nowMillis = new Date(event.scheduleTime).getTime();
+    const nowMillis = scheduledRunMillis(event.scheduleTime);
     const token = await (0, spotify_client_1.getSpotifyToken)(spotify_client_1.spotifyClientId.value(), spotify_client_1.spotifyClientSecret.value());
     const result = await checkDueArtistReleases(firebase_1.db, nowMillis, spotifyReleaseFetcher(token));
     v2_1.logger.info('checkArtistReleases: cycle completed', result);
@@ -453,7 +463,7 @@ exports.syncWatchedArtists = (0, scheduler_1.onSchedule)({
     timeoutSeconds: 540,
     retryCount: 3,
 }, async (event) => {
-    const result = await syncWatchedArtistsAt(firebase_1.db, new Date(event.scheduleTime).getTime());
+    const result = await syncWatchedArtistsAt(firebase_1.db, scheduledRunMillis(event.scheduleTime));
     v2_1.logger.info('syncWatchedArtists: sync completed', result);
 });
 // ── Aviso semanal ─────────────────────────────────────────────────────────────
@@ -600,7 +610,7 @@ exports.sendWeeklyReleaseNotifications = (0, scheduler_1.onSchedule)({
     timeoutSeconds: 540,
     retryCount: 3,
 }, async (event) => {
-    const scheduledAt = new Date(event.scheduleTime);
+    const scheduledAt = new Date(scheduledRunMillis(event.scheduleTime));
     const result = await sendWeeklyReleaseNotificationsAt(firebase_1.db, scheduledAt);
     v2_1.logger.info('sendWeeklyReleaseNotifications: slot completed', {
         ...result,

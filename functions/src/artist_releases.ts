@@ -459,6 +459,16 @@ export async function checkDueArtistReleases(
   return summary;
 }
 
+/**
+ * Momento de la ejecución. Un reintento conserva su `scheduleTime`, pero una
+ * ejecución forzada desde Cloud Scheduler recibe la próxima hora programada,
+ * así que nunca se usa una hora futura.
+ */
+export function scheduledRunMillis(scheduleTime: string, nowMillis = Date.now()): number {
+  const scheduled = Date.parse(scheduleTime);
+  return Number.isFinite(scheduled) ? Math.min(scheduled, nowMillis) : nowMillis;
+}
+
 export const checkArtistReleases = onSchedule(
   {
     schedule: '7 * * * *',
@@ -470,7 +480,7 @@ export const checkArtistReleases = onSchedule(
     secrets: [spotifyClientId, spotifyClientSecret],
   },
   async (event) => {
-    const nowMillis = new Date(event.scheduleTime).getTime();
+    const nowMillis = scheduledRunMillis(event.scheduleTime);
     const token = await getSpotifyToken(spotifyClientId.value(), spotifyClientSecret.value());
     const result = await checkDueArtistReleases(db, nowMillis, spotifyReleaseFetcher(token));
     logger.info('checkArtistReleases: cycle completed', result);
@@ -566,7 +576,7 @@ export const syncWatchedArtists = onSchedule(
     retryCount: 3,
   },
   async (event) => {
-    const result = await syncWatchedArtistsAt(db, new Date(event.scheduleTime).getTime());
+    const result = await syncWatchedArtistsAt(db, scheduledRunMillis(event.scheduleTime));
     logger.info('syncWatchedArtists: sync completed', result);
   },
 );
@@ -771,7 +781,7 @@ export const sendWeeklyReleaseNotifications = onSchedule(
     retryCount: 3,
   },
   async (event) => {
-    const scheduledAt = new Date(event.scheduleTime);
+    const scheduledAt = new Date(scheduledRunMillis(event.scheduleTime));
     const result = await sendWeeklyReleaseNotificationsAt(db, scheduledAt);
     logger.info('sendWeeklyReleaseNotifications: slot completed', {
       ...result,
