@@ -35,7 +35,7 @@ No recarga la app ni modifica almacenamiento, sesión o service workers.
 
 ```bash
 npm run test:web-shell
-flutter build web --release --base-href /
+flutter build web --release --wasm --base-href /
 ```
 
 En el simulador, con el inspector remoto de Safari:

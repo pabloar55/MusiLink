@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -220,16 +218,13 @@ class _WebBottomNavigationSafeArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padding = MediaQuery.paddingOf(context);
-
+    // SafeArea consumes the insets it applies, so the tab bar does not add the
+    // bottom inset a second time (the web reports it since Flutter 3.50).
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: math.max(padding.left, 8),
-          right: math.max(padding.right, 8),
-          bottom: math.max(padding.bottom, 12),
-        ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(left: 8, right: 8, bottom: 12),
         child: child,
       ),
     );

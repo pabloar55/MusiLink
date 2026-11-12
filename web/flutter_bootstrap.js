@@ -13,6 +13,12 @@ function hideAppLoader() {
 }
 
 _flutter.loader.load({
+  config: {
+    // Only applies to `flutter build web --wasm`. Flutter keeps Safari on
+    // dart2js by default; Safari 26.2+ supports the required Wasm features and
+    // older versions still fall back to dart2js + CanvasKit automatically.
+    wasmAllowList: { blink: true, webkit: true },
+  },
   onEntrypointLoaded: async function (engineInitializer) {
     const appRunner = await engineInitializer.initializeEngine();
     await appRunner.runApp();

@@ -10,7 +10,7 @@ Desde la raíz del repositorio:
 
 ```bash
 flutter pub get
-flutter build web --release --base-href /
+flutter build web --release --wasm --base-href /
 firebase deploy --only hosting --project musi-link-e7759
 ```
 
@@ -28,6 +28,28 @@ firebase deploy --project musi-link-e7759
 El hook `predeploy` compila las funciones automáticamente. Remote Config se
 gestiona desde Firebase Console y está excluido de `firebase.json`; este comando
 no necesita una plantilla local ni modifica sus parámetros.
+
+## Cabeceras HTTP
+
+Las cabeceras de seguridad se declaran en `hosting.headers` de `firebase.json`;
+Firebase Hosting no lee ficheros `_headers`. `Cross-Origin-Opener-Policy` es
+`same-origin-allow-popups` porque `same-origin` rompe el popup de
+reautenticación de Google (`reauthenticateWithPopup`). Por ello la página no
+está aislada entre orígenes y la build Wasm se ejecuta en un solo hilo.
+
+## WebAssembly
+
+La web se compila con `--wasm`, que genera la variante Wasm (skwasm) y la
+dart2js (CanvasKit). `web/flutter_bootstrap.js` permite Wasm en Blink (Chrome,
+Edge y navegadores de Android) y WebKit (Safari y cualquier navegador de iOS,
+incluida la PWA) mediante `wasmAllowList`. Safari 26.1 o anterior, Firefox y
+los navegadores sin las funciones necesarias cargan la variante dart2js. En la
+pestaña Red del inspector, la descarga de `main.dart.wasm` (o de
+`main.dart.js`) indica qué variante se ejecuta.
+
+Si la variante Wasm falla en Safari, quitar `webkit: true` devuelve iOS a
+dart2js sin cambiar la build; si falla en general, se quita `--wasm` del paso
+`Build Flutter web` de `.github/workflows/deploy-firebase-hosting.yml`.
 
 ## Despliegue desde GitHub
 
